@@ -24,6 +24,18 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
+        // Get current time (added for save/load)
+        public float GetCurrentTime()
+        {
+            return timeOfDay;
+        }
+
+        // Set current time (added for save/load)
+        public void SetCurrentTime(float time)
+        {
+            timeOfDay = time;
+        }
+
         // Get current time as 0.0 to 1.0
         public float GetTimeOfDay()
         {

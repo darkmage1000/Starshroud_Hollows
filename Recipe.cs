@@ -20,14 +20,16 @@ namespace Claude4_5Terraria.Systems
         public ItemType Result { get; set; }
         public int ResultCount { get; set; }
         public List<RecipeIngredient> Ingredients { get; set; }
-        public bool RequiresCraftingBench { get; set; }
+        public bool RequiresWoodBench { get; set; }
+        public bool RequiresCopperBench { get; set; }
 
-        public Recipe(ItemType result, int resultCount, bool requiresBench = false)
+        public Recipe(ItemType result, int resultCount = 1, bool requiresWoodBench = false, bool requiresCopperBench = false)
         {
             Result = result;
             ResultCount = resultCount;
             Ingredients = new List<RecipeIngredient>();
-            RequiresCraftingBench = requiresBench;
+            RequiresWoodBench = requiresWoodBench;
+            RequiresCopperBench = requiresCopperBench;
         }
 
         public void AddIngredient(ItemType itemType, int count)
@@ -48,98 +50,128 @@ namespace Claude4_5Terraria.Systems
 
         private static void InitializeRecipes()
         {
-            // Sticks (2 wood = 4 sticks) - NO BENCH REQUIRED
-            Recipe stickRecipe = new Recipe(ItemType.Stick, 4, false);
-            stickRecipe.AddIngredient(ItemType.Wood, 2);
-            recipes.Add(stickRecipe);
+            // Basic recipes (no bench required)
+            Recipe stick = new Recipe(ItemType.Stick, 4);
+            stick.AddIngredient(ItemType.Wood, 1);
+            recipes.Add(stick);
 
-            // Wood Crafting Bench (10 wood) - NO BENCH REQUIRED
-            Recipe benchRecipe = new Recipe(ItemType.WoodCraftingBench, 1, false);
-            benchRecipe.AddIngredient(ItemType.Wood, 10);
-            recipes.Add(benchRecipe);
+            Recipe torch = new Recipe(ItemType.Torch, 3);
+            torch.AddIngredient(ItemType.Wood, 1);
+            torch.AddIngredient(ItemType.Coal, 1);
+            recipes.Add(torch);
 
-            // Torches (1 stick + 1 coal = 3 torches) - NO BENCH REQUIRED
-            Recipe torchRecipe = new Recipe(ItemType.Torch, 3, false);
-            torchRecipe.AddIngredient(ItemType.Stick, 1);
-            torchRecipe.AddIngredient(ItemType.Coal, 1);
-            recipes.Add(torchRecipe);
+            Recipe woodCraftingBench = new Recipe(ItemType.WoodCraftingBench, 1);
+            woodCraftingBench.AddIngredient(ItemType.Wood, 10);
+            recipes.Add(woodCraftingBench);
 
-            // Wood Sword (3 sticks + 7 wood) - REQUIRES CRAFTING BENCH
-            Recipe swordRecipe = new Recipe(ItemType.WoodSword, 1, true);
-            swordRecipe.AddIngredient(ItemType.Stick, 3);
-            swordRecipe.AddIngredient(ItemType.Wood, 7);
-            recipes.Add(swordRecipe);
+            // Wood bench recipes
+            Recipe woodSword = new Recipe(ItemType.WoodSword, 1, requiresWoodBench: true);
+            woodSword.AddIngredient(ItemType.Wood, 7);
+            recipes.Add(woodSword);
+
+            Recipe woodPickaxe = new Recipe(ItemType.WoodPickaxe, 1, requiresWoodBench: true);
+            woodPickaxe.AddIngredient(ItemType.Wood, 12);
+            woodPickaxe.AddIngredient(ItemType.Stick, 4);
+            recipes.Add(woodPickaxe);
+
+            Recipe stonePickaxe = new Recipe(ItemType.StonePickaxe, 1, requiresWoodBench: true);
+            stonePickaxe.AddIngredient(ItemType.Stone, 15);
+            stonePickaxe.AddIngredient(ItemType.Stick, 4);
+            recipes.Add(stonePickaxe);
+
+            // Smelting recipes (wood bench)
+            Recipe copperBar = new Recipe(ItemType.CopperBar, 1, requiresWoodBench: true);
+            copperBar.AddIngredient(ItemType.Copper, 3);
+            recipes.Add(copperBar);
+
+            Recipe silverBar = new Recipe(ItemType.SilverBar, 1, requiresWoodBench: true);
+            silverBar.AddIngredient(ItemType.Silver, 4);
+            recipes.Add(silverBar);
+
+            Recipe platinumBar = new Recipe(ItemType.PlatinumBar, 1, requiresWoodBench: true);
+            platinumBar.AddIngredient(ItemType.Platinum, 5);
+            recipes.Add(platinumBar);
+
+            // Copper bench
+            Recipe copperCraftingBench = new Recipe(ItemType.CopperCraftingBench, 1, requiresWoodBench: true);
+            copperCraftingBench.AddIngredient(ItemType.CopperBar, 10);
+            copperCraftingBench.AddIngredient(ItemType.Wood, 5);
+            recipes.Add(copperCraftingBench);
+
+            // Copper bench recipes
+            Recipe copperPickaxe = new Recipe(ItemType.CopperPickaxe, 1, requiresCopperBench: true);
+            copperPickaxe.AddIngredient(ItemType.CopperBar, 12);
+            copperPickaxe.AddIngredient(ItemType.Stick, 4);
+            recipes.Add(copperPickaxe);
+
+            Recipe silverPickaxe = new Recipe(ItemType.SilverPickaxe, 1, requiresCopperBench: true);
+            silverPickaxe.AddIngredient(ItemType.SilverBar, 12);
+            silverPickaxe.AddIngredient(ItemType.Stick, 4);
+            recipes.Add(silverPickaxe);
+
+            Recipe platinumPickaxe = new Recipe(ItemType.PlatinumPickaxe, 1, requiresCopperBench: true);
+            platinumPickaxe.AddIngredient(ItemType.PlatinumBar, 12);
+            platinumPickaxe.AddIngredient(ItemType.Stick, 4);
+            recipes.Add(platinumPickaxe);
         }
 
-        public static List<Recipe> GetAvailableRecipes(bool nearCraftingBench)
+        public static List<Recipe> GetAvailableRecipes(bool nearWoodBench, bool nearCopperBench)
         {
-            List<Recipe> available = new List<Recipe>();
-
-            Logger.Log($"[RECIPE] Getting recipes. Near bench: {nearCraftingBench}");
+            List<Recipe> availableRecipes = new List<Recipe>();
 
             foreach (Recipe recipe in recipes)
             {
-                // Include recipe if:
-                // - It doesn't require a bench, OR
-                // - Player is near a bench
-                if (!recipe.RequiresCraftingBench || nearCraftingBench)
-                {
-                    available.Add(recipe);
-                    Logger.Log($"[RECIPE] Added: {recipe.Result} (RequiresBench: {recipe.RequiresCraftingBench})");
-                }
-                else
-                {
-                    Logger.Log($"[RECIPE] Skipped: {recipe.Result} (requires bench, not near one)");
-                }
+                if (recipe.RequiresCopperBench && !nearCopperBench)
+                    continue;
+
+                if (recipe.RequiresWoodBench && !nearWoodBench && !nearCopperBench)
+                    continue;
+
+                availableRecipes.Add(recipe);
             }
 
-            Logger.Log($"[RECIPE] Total available: {available.Count}");
-            return available;
+            return availableRecipes;
         }
 
         public static bool CanCraft(Recipe recipe, Inventory inventory)
         {
             foreach (RecipeIngredient ingredient in recipe.Ingredients)
             {
-                if (!inventory.HasItem(ingredient.ItemType, ingredient.Count))
+                int totalCount = 0;
+
+                // Count items across all inventory slots
+                for (int i = 0; i < inventory.GetSlotCount(); i++)
+                {
+                    InventorySlot slot = inventory.GetSlot(i);
+                    if (slot != null && slot.ItemType == ingredient.ItemType)
+                    {
+                        totalCount += slot.Count;
+                    }
+                }
+
+                if (totalCount < ingredient.Count)
                 {
                     return false;
                 }
             }
-
             return true;
         }
 
         public static void CraftRecipe(Recipe recipe, Inventory inventory)
         {
-            // Verify we can still craft (double-check)
             if (!CanCraft(recipe, inventory))
             {
-                System.Console.WriteLine($"Cannot craft {recipe.Result} - missing ingredients");
+                Logger.Log($"[CRAFT] Cannot craft {recipe.Result} - missing ingredients");
                 return;
             }
 
-            // Remove ingredients
             foreach (RecipeIngredient ingredient in recipe.Ingredients)
             {
-                bool removed = inventory.RemoveItem(ingredient.ItemType, ingredient.Count);
-                if (!removed)
-                {
-                    System.Console.WriteLine($"ERROR: Failed to remove {ingredient.ItemType} x{ingredient.Count}");
-                    return;
-                }
+                inventory.RemoveItem(ingredient.ItemType, ingredient.Count);
             }
 
-            // Add result
-            bool added = inventory.AddItem(recipe.Result, recipe.ResultCount);
-            if (added)
-            {
-                System.Console.WriteLine($"Successfully crafted: {recipe.Result} x{recipe.ResultCount}");
-            }
-            else
-            {
-                System.Console.WriteLine($"ERROR: Inventory full, could not add {recipe.Result}");
-            }
+            inventory.AddItem(recipe.Result, recipe.ResultCount);
+            Logger.Log($"[CRAFT] Crafted {recipe.Result} x{recipe.ResultCount}");
         }
     }
 }

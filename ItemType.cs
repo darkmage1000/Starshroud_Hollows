@@ -2,7 +2,7 @@
 {
     public enum ItemType
     {
-        // Blocks (same as TileType for now)
+        // Blocks
         Dirt,
         Grass,
         Stone,
@@ -12,10 +12,27 @@
         Wood,
         Coal,
 
-        // Crafted Items
+        // Resources
         Stick,
+        CopperBar,
+        SilverBar,
+        PlatinumBar,
+
+        // Placeable
         Torch,
         WoodCraftingBench,
+        CopperCraftingBench,  // ✅ NEW
+        Acorn,
+
+        // Tools
+        None,
+        WoodPickaxe,
+        StonePickaxe,
+        CopperPickaxe,
+        SilverPickaxe,
+        PlatinumPickaxe,
+
+        // Weapons
         WoodSword
     }
 
@@ -33,7 +50,9 @@
                 case ItemType.Platinum: return TileType.Platinum;
                 case ItemType.Wood: return TileType.Wood;
                 case ItemType.Coal: return TileType.Coal;
-                case ItemType.WoodCraftingBench: return TileType.WoodCraftingBench;  // ADD THIS
+                case ItemType.Torch: return TileType.Torch;
+                case ItemType.WoodCraftingBench: return TileType.WoodCraftingBench;
+                case ItemType.CopperCraftingBench: return TileType.CopperCraftingBench;
                 default: return TileType.Air;
             }
         }
@@ -50,7 +69,9 @@
                 case TileType.Platinum: return ItemType.Platinum;
                 case TileType.Wood: return ItemType.Wood;
                 case TileType.Coal: return ItemType.Coal;
-                case TileType.WoodCraftingBench: return ItemType.WoodCraftingBench;  // ADD THIS
+                case TileType.Torch: return ItemType.Torch;
+                case TileType.WoodCraftingBench: return ItemType.WoodCraftingBench;
+                case TileType.CopperCraftingBench: return ItemType.CopperCraftingBench;  // ✅ NEW
                 default: return ItemType.Dirt;
             }
         }
@@ -63,7 +84,9 @@
                 case ItemType.Grass:
                 case ItemType.Stone:
                 case ItemType.Wood:
+                case ItemType.Torch:
                 case ItemType.WoodCraftingBench:
+                case ItemType.CopperCraftingBench:  // ✅ NEW
                     return true;
                 default:
                     return false;

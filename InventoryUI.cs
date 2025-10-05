@@ -1,8 +1,10 @@
-﻿using Microsoft.Xna.Framework;
+﻿using Claude4_5Terraria.Enums;
+using Claude4_5Terraria.Systems;
+using Claude4_5Terraria.World;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Claude4_5Terraria.Systems;
-using Claude4_5Terraria.Enums;
+using System;
 
 namespace Claude4_5Terraria.UI
 {
@@ -16,6 +18,7 @@ namespace Claude4_5Terraria.UI
         private const int SLOTS_PER_ROW = 10;
         private const int HOTBAR_SLOTS = 10;
         private const int PADDING = 4;
+        private const int HOTBAR_BOTTOM_PADDING = 30;
 
         private KeyboardState previousKeyState;
         private MouseState previousMouseState;
@@ -32,6 +35,9 @@ namespace Claude4_5Terraria.UI
         private int? hoveredSlotIndex;
         private Rectangle[] slotRectangles;
 
+        // Cached screen dimensions
+        private int cachedScreenHeight;
+
         public InventoryUI(Inventory inventory, MiningSystem miningSystem)
         {
             this.inventory = inventory;
@@ -44,6 +50,7 @@ namespace Claude4_5Terraria.UI
             draggedItem = null;
             hoveredSlotIndex = null;
             slotRectangles = new Rectangle[40];
+            cachedScreenHeight = 1080;
         }
 
         public bool IsInventoryOpen => isInventoryOpen;
@@ -54,8 +61,10 @@ namespace Claude4_5Terraria.UI
             font = spriteFont;
         }
 
-        public void Update(GameTime gameTime, Vector2 playerPosition, World.World world)
+        public void Update(GameTime gameTime, Vector2 playerPosition, World.World world, int screenHeight)
         {
+            cachedScreenHeight = screenHeight;
+
             KeyboardState currentKeyState = Keyboard.GetState();
             MouseState currentMouseState = Mouse.GetState();
 
@@ -214,17 +223,16 @@ namespace Claude4_5Terraria.UI
             // Different item - swap
             else
             {
-                InventorySlot sourceSlot = inventory.GetSlot(draggedSlotIndex.Value);
-
-                // Put target item in source slot
-                sourceSlot.ItemType = targetSlot.ItemType;
-                sourceSlot.Count = targetSlot.Count;
-
-                // Put dragged item in target slot
+                InventorySlot temp = new InventorySlot
+                {
+                    ItemType = targetSlot.ItemType,
+                    Count = targetSlot.Count
+                };
                 targetSlot.ItemType = draggedItem.ItemType;
                 targetSlot.Count = draggedItem.Count;
-
-                Logger.Log($"[INVENTORY] Swapped slots {draggedSlotIndex.Value} and {targetSlotIndex}");
+                inventory.GetSlot(draggedSlotIndex.Value).ItemType = temp.ItemType;
+                inventory.GetSlot(draggedSlotIndex.Value).Count = temp.Count;
+                Logger.Log($"[INVENTORY] Swapped {draggedItem.ItemType} with {temp.ItemType} between slots {draggedSlotIndex.Value} and {targetSlotIndex}");
             }
 
             draggedSlotIndex = null;
@@ -233,170 +241,71 @@ namespace Claude4_5Terraria.UI
 
         private void CancelDrag()
         {
-            if (!draggedSlotIndex.HasValue || draggedItem == null) return;
-
-            // Put item back in original slot
-            InventorySlot sourceSlot = inventory.GetSlot(draggedSlotIndex.Value);
-            if (sourceSlot != null)
+            if (draggedSlotIndex.HasValue)
             {
+                InventorySlot sourceSlot = inventory.GetSlot(draggedSlotIndex.Value);
                 sourceSlot.ItemType = draggedItem.ItemType;
                 sourceSlot.Count = draggedItem.Count;
+                Logger.Log($"[INVENTORY] Cancelled drag - returned {draggedItem.ItemType} to slot {draggedSlotIndex.Value}");
             }
-
-            Logger.Log($"[INVENTORY] Cancelled drag, returned item to slot {draggedSlotIndex.Value}");
-
             draggedSlotIndex = null;
             draggedItem = null;
         }
 
-        private void UpdateHoveredSlot(MouseState mouseState)
-        {
-            Point mousePoint = new Point(mouseState.X, mouseState.Y);
-            hoveredSlotIndex = null;
-
-            for (int i = 0; i < slotRectangles.Length; i++)
-            {
-                if (slotRectangles[i].Contains(mousePoint))
-                {
-                    InventorySlot slot = inventory.GetSlot(i);
-                    if (slot != null && !slot.IsEmpty())
-                    {
-                        hoveredSlotIndex = i;
-                    }
-                    break;
-                }
-            }
-        }
-
-        private void UpdateHotbarHover(MouseState mouseState)
-        {
-            Point mousePoint = new Point(mouseState.X, mouseState.Y);
-            hoveredSlotIndex = null;
-
-            // Only check first 10 slots (hotbar)
-            for (int i = 0; i < HOTBAR_SLOTS; i++)
-            {
-                if (slotRectangles[i].Contains(mousePoint))
-                {
-                    InventorySlot slot = inventory.GetSlot(i);
-                    if (slot != null && !slot.IsEmpty())
-                    {
-                        hoveredSlotIndex = i;
-                    }
-                    break;
-                }
-            }
-        }
-
         public void Draw(SpriteBatch spriteBatch, Texture2D pixel, SpriteFont spriteFont, int screenWidth, int screenHeight)
         {
-            if (pixel != null) pixelTexture = pixel;
-            if (spriteFont != null) font = spriteFont;
+            MouseState mouseState = Mouse.GetState();
 
-            if (isInventoryOpen)
-            {
-                DrawFullInventoryWithCrafting(spriteBatch, screenWidth, screenHeight);
-            }
-            else
-            {
-                DrawHotbar(spriteBatch, screenWidth, screenHeight);
-            }
-
-            // Draw dragged item following cursor
-            if (draggedSlotIndex.HasValue && draggedItem != null)
-            {
-                DrawDraggedItem(spriteBatch, Mouse.GetState());
-            }
-
-            // Draw tooltip
-            if (hoveredSlotIndex.HasValue && font != null)
-            {
-                DrawTooltip(spriteBatch, Mouse.GetState());
-            }
-        }
-
-        public void DrawHotbar(SpriteBatch spriteBatch, int screenWidth, int screenHeight)
-        {
-            if (pixelTexture == null) return;
-
-            int hotbarWidth = HOTBAR_SLOTS * (SLOT_SIZE + PADDING) + PADDING;
-            int startX = (screenWidth - hotbarWidth) / 2;
-            int startY = screenHeight - SLOT_SIZE - 20;
-
-            Rectangle bgRect = new Rectangle(startX - 5, startY - 5, hotbarWidth + 10, SLOT_SIZE + 10);
-            spriteBatch.Draw(pixelTexture, bgRect, Color.Black * 0.8f);
-
-            int selectedSlot = miningSystem.GetSelectedHotbarSlot();
-
-            for (int i = 0; i < HOTBAR_SLOTS; i++)
-            {
-                int slotX = startX + i * (SLOT_SIZE + PADDING);
-                int slotY = startY;
-
-                Rectangle slotRect = new Rectangle(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
-                slotRectangles[i] = slotRect; // Store for hover detection
-
-                if (i == selectedSlot)
-                {
-                    spriteBatch.Draw(pixelTexture, slotRect, Color.Yellow * 0.5f);
-                }
-                else
-                {
-                    spriteBatch.Draw(pixelTexture, slotRect, Color.DarkGray);
-                }
-
-                int borderThickness = (i == selectedSlot) ? 3 : 2;
-                Color borderColor = (i == selectedSlot) ? Color.Yellow : Color.Gray;
-                DrawBorder(spriteBatch, slotRect, borderThickness, borderColor);
-
-                InventorySlot slot = inventory.GetSlot(i);
-                if (slot != null && !slot.IsEmpty())
-                {
-                    DrawItemInSlot(spriteBatch, slotX, slotY, slot);
-                }
-            }
-        }
-
-        private void DrawFullInventoryWithCrafting(SpriteBatch spriteBatch, int screenWidth, int screenHeight)
-        {
-            if (pixelTexture == null) return;
-
-            Rectangle overlay = new Rectangle(0, 0, screenWidth, screenHeight);
-            spriteBatch.Draw(pixelTexture, overlay, Color.Black * 0.7f);
-
-            int inventoryWidth = SLOTS_PER_ROW * (SLOT_SIZE + PADDING) + PADDING * 2 + 20;
+            int inventoryWidth = SLOTS_PER_ROW * (SLOT_SIZE + PADDING) + 20;
             int craftingWidth = 400;
             int totalWidth = inventoryWidth + craftingWidth + 20;
-
             int inventoryHeight = 4 * (SLOT_SIZE + PADDING) + 80;
             int craftingHeight = 500;
-            int panelHeight = System.Math.Max(inventoryHeight, craftingHeight);
-
+            int panelHeight = Math.Max(inventoryHeight, craftingHeight);
             int startX = (screenWidth - totalWidth) / 2;
             int panelY = (screenHeight - panelHeight) / 2;
 
-            DrawInventoryPanel(spriteBatch, startX, panelY, inventoryWidth, panelHeight);
+            if (isInventoryOpen)
+            {
+                // Draw full inventory + crafting panels
+                DrawInventoryPanel(spriteBatch, startX, panelY, inventoryWidth, panelHeight);
+                int craftingX = startX + inventoryWidth + 20;
+                DrawCraftingPanel(spriteBatch, craftingX, panelY, craftingWidth, panelHeight);
+            }
+            else
+            {
+                // Draw just hotbar when closed
+                DrawHotbar(spriteBatch, screenWidth, screenHeight);
+            }
 
-            int craftingX = startX + inventoryWidth + 20;
-            DrawCraftingPanel(spriteBatch, craftingX, panelY, craftingWidth, panelHeight);
+            // Always draw dragged item and tooltip
+            DrawDraggedItem(spriteBatch, mouseState);
+            DrawTooltip(spriteBatch, mouseState);
         }
 
         private void DrawInventoryPanel(SpriteBatch spriteBatch, int panelX, int panelY, int panelWidth, int panelHeight)
         {
+            // Draw panel background
             Rectangle panelBg = new Rectangle(panelX, panelY, panelWidth, panelHeight);
-            spriteBatch.Draw(pixelTexture, panelBg, Color.DarkSlateGray);
+            spriteBatch.Draw(pixelTexture, panelBg, Color.DarkSlateGray * 0.8f);
             DrawBorder(spriteBatch, panelBg, 3, Color.White);
 
+            // Title
             if (font != null)
             {
-                string title = "INVENTORY";
+                string title = "Inventory";
                 Vector2 titleSize = font.MeasureString(title);
                 Vector2 titlePos = new Vector2(panelX + (panelWidth - titleSize.X) / 2, panelY + 10);
+                spriteBatch.DrawString(font, title, titlePos + new Vector2(1, 1), Color.Black);
                 spriteBatch.DrawString(font, title, titlePos, Color.White);
             }
 
-            int startX = panelX + 20;
+            int startX = panelX + 10;
             int startY = panelY + 50;
+
+            // Clear slot rectangles first
+            for (int i = 0; i < slotRectangles.Length; i++)
+                slotRectangles[i] = Rectangle.Empty;
 
             for (int row = 0; row < 4; row++)
             {
@@ -407,7 +316,7 @@ namespace Claude4_5Terraria.UI
                     int slotY = startY + row * (SLOT_SIZE + PADDING);
 
                     Rectangle slotRect = new Rectangle(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
-                    slotRectangles[slotIndex] = slotRect; // Store for click detection
+                    slotRectangles[slotIndex] = slotRect;
 
                     if (slotIndex < HOTBAR_SLOTS)
                     {
@@ -429,6 +338,32 @@ namespace Claude4_5Terraria.UI
                     {
                         DrawItemInSlot(spriteBatch, slotX, slotY, slot);
                     }
+                }
+            }
+        }
+
+        private void DrawHotbar(SpriteBatch spriteBatch, int screenWidth, int screenHeight)
+        {
+            int startX = 20;
+            int startY = screenHeight - SLOT_SIZE - HOTBAR_BOTTOM_PADDING;
+
+            int selected = miningSystem.GetSelectedHotbarSlot();
+            for (int i = 0; i < HOTBAR_SLOTS; i++)
+            {
+                int slotX = startX + i * (SLOT_SIZE + PADDING);
+                Rectangle slotRect = new Rectangle(slotX, startY, SLOT_SIZE, SLOT_SIZE);
+
+                Color bgColor = (i == selected) ? new Color(255, 255, 0) * 0.8f : Color.DarkGoldenrod * 0.5f;
+                spriteBatch.Draw(pixelTexture, slotRect, bgColor);
+
+                int borderThickness = (i == selected) ? 3 : 2;
+                Color borderColor = (i == selected) ? Color.Yellow : Color.Gray;
+                DrawBorder(spriteBatch, slotRect, borderThickness, borderColor);
+
+                InventorySlot slot = inventory.GetSlot(i);
+                if (slot != null && !slot.IsEmpty())
+                {
+                    DrawItemInSlot(spriteBatch, slotX, startY, slot);
                 }
             }
         }
@@ -467,7 +402,7 @@ namespace Claude4_5Terraria.UI
 
         private void DrawTooltip(SpriteBatch spriteBatch, MouseState mouseState)
         {
-            if (!hoveredSlotIndex.HasValue) return;
+            if (!hoveredSlotIndex.HasValue || font == null) return;
 
             InventorySlot slot = inventory.GetSlot(hoveredSlotIndex.Value);
             if (slot == null || slot.IsEmpty()) return;
@@ -490,6 +425,40 @@ namespace Claude4_5Terraria.UI
             DrawBorder(spriteBatch, tooltipBg, 2, GetItemColor(slot.ItemType));
 
             spriteBatch.DrawString(font, tooltipText, new Vector2(tooltipX, tooltipY), Color.White);
+        }
+
+        private void UpdateHoveredSlot(MouseState mouseState)
+        {
+            Point mousePoint = new Point(mouseState.X, mouseState.Y);
+            hoveredSlotIndex = null;
+
+            for (int i = 0; i < slotRectangles.Length; i++)
+            {
+                if (slotRectangles[i].Contains(mousePoint))
+                {
+                    hoveredSlotIndex = i;
+                    break;
+                }
+            }
+        }
+
+        private void UpdateHotbarHover(MouseState mouseState)
+        {
+            Point mousePoint = new Point(mouseState.X, mouseState.Y);
+            hoveredSlotIndex = null;
+
+            int hotbarY = cachedScreenHeight - SLOT_SIZE - HOTBAR_BOTTOM_PADDING;
+            int startX = 20;
+            for (int i = 0; i < HOTBAR_SLOTS; i++)
+            {
+                int slotX = startX + i * (SLOT_SIZE + PADDING);
+                Rectangle hotbarRect = new Rectangle(slotX, hotbarY, SLOT_SIZE, SLOT_SIZE);
+                if (hotbarRect.Contains(mousePoint))
+                {
+                    hoveredSlotIndex = i;
+                    break;
+                }
+            }
         }
 
         private void DrawItemInSlot(SpriteBatch spriteBatch, int slotX, int slotY, InventorySlot slot)
@@ -535,6 +504,15 @@ namespace Claude4_5Terraria.UI
                 case ItemType.Torch: return "Torch";
                 case ItemType.WoodCraftingBench: return "Crafting Bench";
                 case ItemType.WoodSword: return "Wood Sword";
+                case ItemType.WoodPickaxe: return "Wood Pickaxe";
+                case ItemType.StonePickaxe: return "Stone Pickaxe";
+                case ItemType.CopperPickaxe: return "Copper Pickaxe";
+                case ItemType.SilverPickaxe: return "Silver Pickaxe";
+                case ItemType.PlatinumPickaxe: return "Platinum Pickaxe";
+                case ItemType.CopperBar: return "Copper Bar";
+                case ItemType.SilverBar: return "Silver Bar";
+                case ItemType.PlatinumBar: return "Platinum Bar";
+                case ItemType.Acorn: return "Acorn";
                 default: return type.ToString();
             }
         }
@@ -555,6 +533,15 @@ namespace Claude4_5Terraria.UI
                 case ItemType.Torch: return new Color(255, 200, 100);
                 case ItemType.WoodCraftingBench: return new Color(120, 80, 40);
                 case ItemType.WoodSword: return new Color(180, 140, 100);
+                case ItemType.WoodPickaxe: return new Color(80, 50, 30);
+                case ItemType.StonePickaxe: return new Color(100, 100, 100);
+                case ItemType.CopperPickaxe: return new Color(200, 100, 0);
+                case ItemType.SilverPickaxe: return new Color(160, 160, 160);
+                case ItemType.PlatinumPickaxe: return new Color(120, 200, 120);
+                case ItemType.CopperBar: return new Color(255, 140, 0);
+                case ItemType.SilverBar: return new Color(192, 192, 192);
+                case ItemType.PlatinumBar: return new Color(229, 228, 226);
+                case ItemType.Acorn: return new Color(139, 90, 43);
                 default: return Color.White;
             }
         }

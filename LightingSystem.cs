@@ -10,40 +10,29 @@ namespace Claude4_5Terraria.Systems
         private World.World world;
         private TimeSystem timeSystem;
 
-        private const float SURFACE_DEPTH = 110f;
-        private const float DARKNESS_START_DEPTH = 130f;
-        private const float FULL_DARKNESS_DEPTH = 150f;
+        private const float TORCH_RADIUS = 10f;
+        private const float TORCH_BRIGHTNESS = 2.5f;
 
-        private const float TORCH_RADIUS = 8f;
-        private const float TORCH_BRIGHTNESS = 0.9f;
-
-        private Dictionary<Point, float> torchLightCache;
-        private int lastUpdateFrame;
+        private Dictionary<Point, float> lightMap;
+        private List<Point> torchPositions;
 
         public LightingSystem(World.World world, TimeSystem timeSystem)
         {
             this.world = world;
             this.timeSystem = timeSystem;
-            torchLightCache = new Dictionary<Point, float>();
-            lastUpdateFrame = 0;
+            lightMap = new Dictionary<Point, float>();
+            torchPositions = new List<Point>();
         }
 
         public void UpdateTorchCache(Vector2 cameraPosition)
         {
-            lastUpdateFrame++;
-
-            // Update torch cache every 10 frames
-            if (lastUpdateFrame % 10 != 0)
-                return;
-
-            torchLightCache.Clear();
+            torchPositions.Clear();
 
             int cameraTileX = (int)(cameraPosition.X / World.World.TILE_SIZE);
             int cameraTileY = (int)(cameraPosition.Y / World.World.TILE_SIZE);
 
-            int checkRadius = 20;
+            int checkRadius = 30;
 
-            // Find all torches near camera
             for (int dx = -checkRadius; dx <= checkRadius; dx++)
             {
                 for (int dy = -checkRadius; dy <= checkRadius; dy++)
@@ -54,84 +43,173 @@ namespace Claude4_5Terraria.Systems
                     World.Tile tile = world.GetTile(checkX, checkY);
                     if (tile != null && tile.IsActive && tile.Type == TileType.Torch)
                     {
-                        Point torchPos = new Point(checkX, checkY);
-
-                        // Calculate light for tiles around this torch
-                        for (int tx = -10; tx <= 10; tx++)
-                        {
-                            for (int ty = -10; ty <= 10; ty++)
-                            {
-                                int lightX = checkX + tx;
-                                int lightY = checkY + ty;
-                                Point lightPos = new Point(lightX, lightY);
-
-                                float distance = (float)Math.Sqrt(tx * tx + ty * ty);
-                                if (distance <= TORCH_RADIUS)
-                                {
-                                    float lightValue = TORCH_BRIGHTNESS * (1f - (distance / TORCH_RADIUS));
-
-                                    if (!torchLightCache.ContainsKey(lightPos))
-                                    {
-                                        torchLightCache[lightPos] = lightValue;
-                                    }
-                                    else
-                                    {
-                                        torchLightCache[lightPos] = Math.Max(torchLightCache[lightPos], lightValue);
-                                    }
-                                }
-                            }
-                        }
+                        torchPositions.Add(new Point(checkX, checkY));
                     }
                 }
             }
+
+            lightMap.Clear();
         }
 
         public float GetLightLevel(int tileX, int tileY)
         {
-            float depth = tileY;
-
-            // Surface lighting (based on time of day)
-            if (depth < SURFACE_DEPTH)
-            {
-                return 1f;
-            }
-
-            // Transition to darkness
-            if (depth < DARKNESS_START_DEPTH)
-            {
-                float t = (depth - SURFACE_DEPTH) / (DARKNESS_START_DEPTH - SURFACE_DEPTH);
-                return 1f - (t * 0.3f);
-            }
-
-            // Underground base darkness
-            float baseDarkness = 0.15f;
-            if (depth < FULL_DARKNESS_DEPTH)
-            {
-                float t = (depth - DARKNESS_START_DEPTH) / (FULL_DARKNESS_DEPTH - DARKNESS_START_DEPTH);
-                baseDarkness = 0.7f - (t * 0.55f);
-            }
-
-            // Add torch lighting
             Point tilePos = new Point(tileX, tileY);
-            if (torchLightCache.ContainsKey(tilePos))
+
+            if (lightMap.ContainsKey(tilePos))
             {
-                float torchLight = torchLightCache[tilePos];
-                return Math.Min(1f, baseDarkness + torchLight);
+                return lightMap[tilePos];
             }
 
-            return baseDarkness;
+            float finalLight = CalculateLighting(tileX, tileY);
+            lightMap[tilePos] = finalLight;
+
+            return finalLight;
         }
 
-        public Color ApplyLighting(Color baseColor, int tileX, int tileY)
+        private float CalculateLighting(int tileX, int tileY)
         {
-            float lightLevel = GetLightLevel(tileX, tileY);
+            float ambientLight = timeSystem.GetAmbientLight();
+            float sunlight = CalculateSunlight(tileX, tileY, ambientLight);
+            float torchLight = CalculateTorchLight(tileX, tileY);
 
-            return new Color(
-                (int)(baseColor.R * lightLevel),
-                (int)(baseColor.G * lightLevel),
-                (int)(baseColor.B * lightLevel),
-                baseColor.A
-            );
+            float finalLight = Math.Max(sunlight, torchLight);
+
+            return Math.Min(1.0f, finalLight);
+        }
+
+        private float CalculateSunlight(int tileX, int tileY, float ambientLight)
+        {
+            bool blockedBySolid = false;
+            bool underLeaves = false;
+            int airGapAbove = 0;
+
+            for (int y = tileY - 1; y >= 0; y--)
+            {
+                World.Tile tile = world.GetTile(tileX, y);
+
+                if (tile == null || !tile.IsActive)
+                {
+                    airGapAbove++;
+                    continue;
+                }
+
+                if (tile.Type == TileType.Leaves)
+                {
+                    underLeaves = true;
+                    continue;
+                }
+
+                if (tile.Type == TileType.Wood || tile.Type == TileType.Torch || tile.Type == TileType.Sapling)
+                {
+                    continue;
+                }
+
+                blockedBySolid = true;
+                break;
+            }
+
+            if (blockedBySolid)
+            {
+                bool explored = world.IsTileExplored(tileX, tileY);
+
+                if (explored)
+                {
+                    return 0.15f;
+                }
+
+                return 0.0f;
+            }
+
+            if (underLeaves)
+            {
+                return ambientLight * 0.7f;
+            }
+
+            return ambientLight;
+        }
+
+        private float CalculateTorchLight(int tileX, int tileY)
+        {
+            float maxTorchLight = 0f;
+
+            foreach (Point torchPos in torchPositions)
+            {
+                float distance = (float)Math.Sqrt(
+                    Math.Pow(tileX - torchPos.X, 2) +
+                    Math.Pow(tileY - torchPos.Y, 2)
+                );
+
+                if (distance > TORCH_RADIUS)
+                    continue;
+
+                if (IsLightPathBlocked(torchPos.X, torchPos.Y, tileX, tileY))
+                    continue;
+
+                // Linear falloff for more consistent lighting
+                float falloff = 1.0f - (distance / TORCH_RADIUS);
+                float lightStrength = TORCH_BRIGHTNESS * falloff;
+
+                // Less aggressive curve so distant blocks are still visible
+                lightStrength = (float)Math.Pow(lightStrength, 0.5);
+
+                maxTorchLight = Math.Max(maxTorchLight, lightStrength);
+            }
+
+            return maxTorchLight;
+        }
+
+        private bool IsLightPathBlocked(int fromX, int fromY, int toX, int toY)
+        {
+            if (fromX == toX && fromY == toY)
+                return false;
+
+            int dx = Math.Abs(toX - fromX);
+            int dy = Math.Abs(toY - fromY);
+            int x = fromX;
+            int y = fromY;
+            int n = 1 + dx + dy;
+            int x_inc = (toX > fromX) ? 1 : -1;
+            int y_inc = (toY > fromY) ? 1 : -1;
+            int error = dx - dy;
+            dx *= 2;
+            dy *= 2;
+
+            for (; n > 0; --n)
+            {
+                if (x != fromX || y != fromY)
+                {
+                    World.Tile tile = world.GetTile(x, y);
+
+                    if (tile != null && tile.IsActive)
+                    {
+                        if (tile.Type != TileType.Torch &&
+                            tile.Type != TileType.Leaves &&
+                            tile.Type != TileType.Wood &&
+                            tile.Type != TileType.Sapling)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                if (error > 0)
+                {
+                    x += x_inc;
+                    error -= dy;
+                }
+                else
+                {
+                    y += y_inc;
+                    error += dx;
+                }
+            }
+
+            return false;
+        }
+
+        public void ClearCache()
+        {
+            lightMap.Clear();
         }
     }
 }

@@ -2,7 +2,7 @@
 using Claude4_5Terraria.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-
+using System;
 
 namespace Claude4_5Terraria.UI
 {
@@ -10,6 +10,7 @@ namespace Claude4_5Terraria.UI
     {
         private World.World world;
         private MiningSystem miningSystem;
+        private const int MINING_RANGE = 4;
 
         public MiningOverlay(World.World world, MiningSystem miningSystem)
         {
@@ -22,31 +23,39 @@ namespace Claude4_5Terraria.UI
             if (!showOutlines) return;
 
             int tileSize = World.World.TILE_SIZE;
-            float maxDistance = 4 * tileSize; // 4 tile range
+            float maxDistance = MINING_RANGE * tileSize;
 
-            // Get visible area
-            Rectangle visibleArea = camera.GetVisibleArea(tileSize);
+            // Player tile position
+            int playerTileX = (int)(playerCenter.X / tileSize);
+            int playerTileY = (int)(playerCenter.Y / tileSize);
 
-            for (int x = visibleArea.Left; x < visibleArea.Right; x++)
+            // Loop around player in a small radius (efficient for small range)
+            for (int dx = -MINING_RANGE; dx <= MINING_RANGE; dx++)
             {
-                for (int y = visibleArea.Top; y < visibleArea.Bottom; y++)
+                for (int dy = -MINING_RANGE; dy <= MINING_RANGE; dy++)
                 {
-                    Tile tile = world.GetTile(x, y);
-                    if (tile != null && tile.IsActive)
+                    float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                    if (dist <= MINING_RANGE)
                     {
-                        // Check distance from player
-                        Vector2 tileCenter = new Vector2(
-                            x * tileSize + tileSize / 2,
-                            y * tileSize + tileSize / 2
-                        );
+                        int tileX = playerTileX + dx;
+                        int tileY = playerTileY + dy;
 
-                        float distance = Vector2.Distance(playerCenter, tileCenter);
-
-                        if (distance <= maxDistance)
+                        Tile tile = world.GetTile(tileX, tileY);
+                        if (tile != null && tile.IsActive)
                         {
-                            // Draw outline
-                            Rectangle tileRect = new Rectangle(x * tileSize, y * tileSize, tileSize, tileSize);
-                            DrawBorder(spriteBatch, pixelTexture, tileRect, 1, Color.Yellow * 0.5f);
+                            // Check exact distance from player center
+                            Vector2 tileCenter = new Vector2(
+                                tileX * tileSize + tileSize / 2,
+                                tileY * tileSize + tileSize / 2
+                            );
+                            float distance = Vector2.Distance(playerCenter, tileCenter);
+
+                            if (distance <= maxDistance)
+                            {
+                                // Draw outline
+                                Rectangle tileRect = new Rectangle(tileX * tileSize, tileY * tileSize, tileSize, tileSize);
+                                DrawBorder(spriteBatch, pixelTexture, tileRect, 2, Color.Yellow);  // Thicker and fully opaque for visibility
+                            }
                         }
                     }
                 }
@@ -141,17 +150,15 @@ namespace Claude4_5Terraria.UI
 
         private void DrawLine(SpriteBatch spriteBatch, Texture2D pixelTexture, Vector2 start, Vector2 end, int thickness, Color color)
         {
-            Vector2 edge = end - start;
-            float angle = (float)System.Math.Atan2(edge.Y, edge.X);
+            float length = Vector2.Distance(start, end);
+            if (length == 0f) return;
 
-            Rectangle lineRect = new Rectangle(
-                (int)start.X,
-                (int)start.Y,
-                (int)edge.Length(),
-                thickness
-            );
+            float angle = (float)Math.Atan2(end.Y - start.Y, end.X - start.X);
+            Vector2 origin = new Vector2(0.5f, 0.5f);  // Center of the 1x1 texture
+            Vector2 midPoint = (start + end) / 2f;
+            Vector2 scale = new Vector2(length, thickness);
 
-            spriteBatch.Draw(pixelTexture, lineRect, null, color, angle, Vector2.Zero, SpriteEffects.None, 0);
+            spriteBatch.Draw(pixelTexture, midPoint, null, color, angle, origin, scale, SpriteEffects.None, 0f);
         }
     }
 }

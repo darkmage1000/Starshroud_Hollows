@@ -1,276 +1,447 @@
-﻿using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
-using System;
-using Claude4_5Terraria.World;
+﻿using Claude4_5Terraria.Entities;
 using Claude4_5Terraria.Player;
 using Claude4_5Terraria.Systems;
 using Claude4_5Terraria.UI;
+using Claude4_5Terraria.World;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
+using Microsoft.Xna.Framework.Media;
+using System.Threading.Tasks;
 
 namespace Claude4_5Terraria
 {
     public class Game1 : Game
     {
-        private GraphicsDeviceManager _graphics;
-        private SpriteBatch _spriteBatch;
+        private GraphicsDeviceManager graphics;
+        private SpriteBatch spriteBatch;
 
-        // Core systems
         private World.World world;
-        private Player.Player player;
+        private Claude4_5Terraria.Player.Player player;
         private Camera camera;
-        private TimeSystem timeSystem;
-        private LightingSystem lightingSystem;
-
-        // Inventory and crafting
-        private Inventory inventory;
-        private InventoryUI inventoryUI;
-        private MiningSystem miningSystem;
-
-        // Rendering
         private Texture2D pixelTexture;
-        private SpriteFont defaultFont;
+        private SpriteFont font;
+        private Texture2D menuBackgroundTexture;
 
-        // UI
-        private HUD hud;
+        private Inventory inventory;
+        private MiningSystem miningSystem;
+        private LightingSystem lightingSystem;
+        private TimeSystem timeSystem;
+        private WorldGenerator worldGenerator;
+
+        private InventoryUI inventoryUI;
         private PauseMenu pauseMenu;
         private MiningOverlay miningOverlay;
+        private StartMenu startMenu;
+        private SaveMenu saveMenu;
 
-        // Input tracking
         private KeyboardState previousKeyboardState;
 
-        // Screen settings
-        private const int SCREEN_WIDTH = 1280;
-        private const int SCREEN_HEIGHT = 720;
+        private Song backgroundMusic;
+        private float musicVolume = 0.1f;
+        private bool isMusicMuted = false;
+        private bool showMiningOutlines = false;
+
+        private bool worldGenerated = false;
+        private int currentWorldSeed;
+        private float totalPlayTime;
 
         public Game1()
         {
-            _graphics = new GraphicsDeviceManager(this);
+            graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
 
-            _graphics.PreferredBackBufferWidth = SCREEN_WIDTH;
-            _graphics.PreferredBackBufferHeight = SCREEN_HEIGHT;
+            graphics.PreferredBackBufferWidth = 1920;
+            graphics.PreferredBackBufferHeight = 1080;
+            graphics.IsFullScreen = false;
+            graphics.ApplyChanges();
         }
 
         protected override void Initialize()
         {
+            previousKeyboardState = Keyboard.GetState();
+            totalPlayTime = 0f;
             base.Initialize();
         }
 
         protected override void LoadContent()
         {
-            _spriteBatch = new SpriteBatch(GraphicsDevice);
+            spriteBatch = new SpriteBatch(GraphicsDevice);
 
-            // Initialize logger FIRST
-            Logger.Initialize();
-            Logger.Log("=== GAME STARTING ===");
-
-            // Create pixel texture
             pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
             pixelTexture.SetData(new[] { Color.White });
 
-            // Load font
-            defaultFont = Content.Load<SpriteFont>("DefaultFont");
+            font = Content.Load<SpriteFont>("Font");
+            menuBackgroundTexture = Content.Load<Texture2D>("MenuBackground");
 
-            // Initialize world
-            Logger.LogWorld("Creating world with full terrain generation...");
-            world = new World.World();
-            WorldGenerator generator = new WorldGenerator(world);
-            generator.Generate();
+            backgroundMusic = Content.Load<Song>("CozyBackground");
+            MediaPlayer.IsRepeating = true;
+            MediaPlayer.Volume = musicVolume;
+            MediaPlayer.Play(backgroundMusic);
 
-            // Initialize time and lighting
-            timeSystem = new TimeSystem();
-            lightingSystem = new LightingSystem(world, timeSystem);
-
-            // Spawn player
-            int spawnX = World.World.WORLD_WIDTH / 2;
-            int groundTileY = world.GetSurfaceHeight(spawnX);
-            Vector2 spawnPosition = new Vector2(
-                spawnX * World.World.TILE_SIZE,
-                groundTileY * World.World.TILE_SIZE - 48
-            );
-            player = new Player.Player(world, spawnPosition);
-            Logger.Log($"Player spawned at: {spawnPosition}");
-
-            // Initialize camera
-            camera = new Camera(GraphicsDevice.Viewport);
-            camera.Position = player.GetCenterPosition();
-
-            // Initialize inventory and mining
-            inventory = new Inventory();
-            miningSystem = new MiningSystem(world, inventory);
-
-            // Initialize UI
-            hud = new HUD();
-            pauseMenu = new PauseMenu();
-            miningOverlay = new MiningOverlay(world, miningSystem);
-            inventoryUI = new InventoryUI(inventory, miningSystem);
-            inventoryUI.Initialize(pixelTexture, defaultFont);
-
-            // Give player starting items for testing
-            inventory.AddItem(Enums.ItemType.Wood, 50);
-            inventory.AddItem(Enums.ItemType.Coal, 20);
-            Logger.LogInventory("STARTING ITEMS", "Wood", 50);
-            Logger.LogInventory("STARTING ITEMS", "Coal", 20);
-
-            Logger.Log("=== ALL SYSTEMS LOADED ===");
-
-            previousKeyboardState = Keyboard.GetState();
-        }
-
-        protected override void Update(GameTime gameTime)
-        {
-            KeyboardState currentKeyboard = Keyboard.GetState();
-
-            // Pause menu handles its own ESC key toggle
-            pauseMenu.Update();
-
-            if (pauseMenu.IsPaused)
+            startMenu = new StartMenu(musicVolume, (newVolume) =>
             {
-                previousKeyboardState = currentKeyboard;
-                base.Update(gameTime);
-                return;
-            }
+                musicVolume = newVolume;
+                MediaPlayer.Volume = isMusicMuted ? 0f : musicVolume;
+            }, menuBackgroundTexture);
 
-            // Toggle block outlines
-            if (currentKeyboard.IsKeyDown(Keys.T) && !previousKeyboardState.IsKeyDown(Keys.T))
-            {
-                hud.ToggleBlockOutlines();
-            }
-
-            float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
-
-            // Update systems
-            timeSystem.Update(deltaTime);
-            player.Update(gameTime);
-            camera.Follow(player.GetCenterPosition(), 0.1f);
-
-            // Update inventory UI (pass player position and world for crafting bench detection)
-            inventoryUI.Update(gameTime, player.Position, world);
-
-            // Update mining only if inventory is closed
-            if (!inventoryUI.IsInventoryOpen)
-            {
-                miningSystem.Update(gameTime, player.GetCenterPosition(), camera, player.Position, 24, 48);
-            }
-
-            world.UpdateLoadedChunks(camera);
-
-            previousKeyboardState = currentKeyboard;
-            base.Update(gameTime);
-        }
-
-        protected override void Draw(GameTime gameTime)
-        {
-            Color backgroundColor = GetBackgroundColor(camera.Position.Y);
-            GraphicsDevice.Clear(backgroundColor);
-
-            // Draw world with camera transform
-            _spriteBatch.Begin(
-                SpriteSortMode.Deferred,
-                BlendState.AlphaBlend,
-                SamplerState.PointClamp,
-                null,
-                null,
-                null,
-                camera.GetTransformMatrix()
-            );
-
-            world.Draw(_spriteBatch, camera, pixelTexture, lightingSystem);
-            player.Draw(_spriteBatch, pixelTexture);
-            miningSystem.DrawItems(_spriteBatch, pixelTexture);
-
-            miningOverlay.DrawBlockOutlines(_spriteBatch, pixelTexture, camera, player.GetCenterPosition(), hud.ShowBlockOutlines);
-
-            Point? targeted = miningSystem.GetTargetedTile();
-            if (targeted.HasValue)
-            {
-                Rectangle cursorRect = new Rectangle(
-                    targeted.Value.X * World.World.TILE_SIZE,
-                    targeted.Value.Y * World.World.TILE_SIZE,
-                    World.World.TILE_SIZE,
-                    World.World.TILE_SIZE
-                );
-                DrawBorder(cursorRect, 2, Color.White);
-            }
-
-            miningOverlay.DrawMiningProgress(_spriteBatch, pixelTexture);
-
-            _spriteBatch.End();
-
-            // Draw UI without camera transform
-            _spriteBatch.Begin(
-                SpriteSortMode.Deferred,
-                BlendState.AlphaBlend,
-                SamplerState.PointClamp
-            );
-
-            hud.Draw(_spriteBatch, pixelTexture, defaultFont, SCREEN_WIDTH, SCREEN_HEIGHT);
-            inventoryUI.Draw(_spriteBatch, pixelTexture, defaultFont, SCREEN_WIDTH, SCREEN_HEIGHT);
-            pauseMenu.Draw(_spriteBatch, pixelTexture, defaultFont, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-            _spriteBatch.End();
-
-            base.Draw(gameTime);
+            Logger.Log("[GAME] Content loaded successfully");
         }
 
         protected override void UnloadContent()
         {
-            Logger.Log("=== GAME CLOSING ===");
-            Logger.Close();
+            MediaPlayer.Stop();
             base.UnloadContent();
         }
 
-        private void DrawBorder(Rectangle rect, int thickness, Color color)
+        protected override void Update(GameTime gameTime)
         {
-            _spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, rect.Width, thickness), color);
-            _spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
-            _spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
-            _spriteBatch.Draw(pixelTexture, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
+            KeyboardState keyboardState = Keyboard.GetState();
+
+            if (startMenu.GetState() == MenuState.MainMenu ||
+                startMenu.GetState() == MenuState.Options ||
+                startMenu.GetState() == MenuState.LoadMenu)
+            {
+                startMenu.Update(GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+
+                if (startMenu.GetState() == MenuState.Loading && !worldGenerated)
+                {
+                    Task.Run(() => GenerateWorld());
+                }
+
+                previousKeyboardState = keyboardState;
+                base.Update(gameTime);
+                return;
+            }
+
+            if (startMenu.GetState() == MenuState.Loading)
+            {
+                if (worldGenerated)
+                {
+                    startMenu.SetState(MenuState.Playing);
+                }
+
+                previousKeyboardState = keyboardState;
+                base.Update(gameTime);
+                return;
+            }
+
+            float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+            // Update save menu if open
+            if (saveMenu != null && saveMenu.IsOpen)
+            {
+                saveMenu.Update(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+                previousKeyboardState = keyboardState;
+                base.Update(gameTime);
+                return;
+            }
+
+            pauseMenu.Update();
+
+            if (pauseMenu.IsPaused)
+            {
+                if (keyboardState.IsKeyDown(Keys.OemPlus) || keyboardState.IsKeyDown(Keys.Add))
+                {
+                    musicVolume = MathHelper.Clamp(musicVolume + 0.01f, 0f, 1f);
+                    if (!isMusicMuted)
+                        MediaPlayer.Volume = musicVolume;
+                    startMenu.SetMusicVolume(musicVolume);
+                }
+                if (keyboardState.IsKeyDown(Keys.OemMinus) || keyboardState.IsKeyDown(Keys.Subtract))
+                {
+                    musicVolume = MathHelper.Clamp(musicVolume - 0.01f, 0f, 1f);
+                    if (!isMusicMuted)
+                        MediaPlayer.Volume = musicVolume;
+                    startMenu.SetMusicVolume(musicVolume);
+                }
+
+                if (keyboardState.IsKeyDown(Keys.M) && !previousKeyboardState.IsKeyDown(Keys.M))
+                {
+                    isMusicMuted = !isMusicMuted;
+                    MediaPlayer.Volume = isMusicMuted ? 0f : musicVolume;
+                    Logger.Log($"[AUDIO] Music {(isMusicMuted ? "muted" : "unmuted")}");
+                }
+
+                previousKeyboardState = keyboardState;
+                base.Update(gameTime);
+                return;
+            }
+
+            totalPlayTime += deltaTime;
+
+            timeSystem.Update(deltaTime);
+
+            for (int i = 0; i < 10; i++)
+            {
+                Keys key = Keys.D1 + i;
+                if (keyboardState.IsKeyDown(key) && !previousKeyboardState.IsKeyDown(key))
+                {
+                    miningSystem.SetSelectedHotbarSlot(i);
+                    Logger.Log($"[INPUT] Selected hotbar slot {i}");
+                }
+            }
+
+            if (keyboardState.IsKeyDown(Keys.T) && !previousKeyboardState.IsKeyDown(Keys.T))
+            {
+                showMiningOutlines = !showMiningOutlines;
+                Logger.Log($"[INPUT] Mining outlines {(showMiningOutlines ? "enabled" : "disabled")}");
+            }
+
+            player.Update(gameTime);
+
+            camera.Position = player.Position;
+
+            Vector2 playerCenter = new Vector2(
+                player.Position.X + Claude4_5Terraria.Player.Player.PLAYER_WIDTH / 2,
+                player.Position.Y + Claude4_5Terraria.Player.Player.PLAYER_HEIGHT / 2
+            );
+
+            world.UpdateLoadedChunks(camera);
+            world.Update(deltaTime, worldGenerator);
+            world.MarkAreaAsExplored(playerCenter);
+
+            miningSystem.Update(
+                gameTime,
+                playerCenter,
+                camera,
+                player.Position,
+                Claude4_5Terraria.Player.Player.PLAYER_WIDTH,
+                Claude4_5Terraria.Player.Player.PLAYER_HEIGHT
+            );
+
+            inventoryUI.Update(gameTime, player.Position, world, GraphicsDevice.Viewport.Height);
+
+            previousKeyboardState = keyboardState;
+
+            base.Update(gameTime);
         }
 
-        private Color GetBackgroundColor(float cameraY)
+        private void OpenSaveMenu()
         {
-            float tileDepth = cameraY / World.World.TILE_SIZE;
+            if (saveMenu != null)
+            {
+                saveMenu.Open();
+            }
+        }
+
+        private void SaveGame(int slotIndex)
+        {
+            SaveData data = new SaveData
+            {
+                SaveName = $"Starshroud Save {slotIndex + 1}",
+                WorldSeed = currentWorldSeed,
+                PlayerPosition = player.Position,
+                GameTime = timeSystem.GetCurrentTime(),
+                WorldWidth = World.World.WORLD_WIDTH,
+                WorldHeight = World.World.WORLD_HEIGHT,
+                PlayTimeSeconds = (int)totalPlayTime
+            };
+
+            for (int i = 0; i < inventory.GetSlotCount(); i++)
+            {
+                var slot = inventory.GetSlot(i);
+                if (slot != null && !slot.IsEmpty())
+                {
+                    data.InventorySlots.Add(new InventorySlotData
+                    {
+                        ItemType = (int)slot.ItemType,
+                        Count = slot.Count
+                    });
+                }
+                else
+                {
+                    data.InventorySlots.Add(new InventorySlotData
+                    {
+                        ItemType = 0,
+                        Count = 0
+                    });
+                }
+            }
+
+            SaveSystem.SaveGame(data, slotIndex);
+            Logger.Log($"[GAME] Game saved to slot {slotIndex + 1}");
+        }
+
+        private void LoadGameFromSave(SaveData data)
+        {
+            currentWorldSeed = data.WorldSeed;
+            totalPlayTime = data.PlayTimeSeconds;
+
+            world = new World.World();
+            timeSystem = new TimeSystem();
+            timeSystem.SetCurrentTime(data.GameTime);
+            lightingSystem = new LightingSystem(world, timeSystem);
+
+            worldGenerator = new WorldGenerator(world, data.WorldSeed);
+
+            worldGenerator.OnProgressUpdate = (progress, message) =>
+            {
+                startMenu.SetLoadingProgress(progress, message);
+            };
+
+            worldGenerator.Generate();
+            world.EnableChunkUnloading();
+
+            player = new Claude4_5Terraria.Player.Player(world, data.PlayerPosition);
+
+            camera = new Camera(GraphicsDevice.Viewport);
+            camera.Position = player.Position;
+
+            inventory = new Inventory();
+
+            for (int i = 0; i < data.InventorySlots.Count && i < inventory.GetSlotCount(); i++)
+            {
+                var slotData = data.InventorySlots[i];
+                var slot = inventory.GetSlot(i);
+                if (slot != null && slotData.Count > 0)
+                {
+                    slot.ItemType = (Enums.ItemType)slotData.ItemType;
+                    slot.Count = slotData.Count;
+                }
+            }
+
+            miningSystem = new MiningSystem(world, inventory);
+            inventoryUI = new InventoryUI(inventory, miningSystem);
+            pauseMenu = new PauseMenu(OpenSaveMenu);
+            saveMenu = new SaveMenu(SaveGame);
+            miningOverlay = new MiningOverlay(world, miningSystem);
+
+            inventoryUI.Initialize(pixelTexture, font);
+
+            worldGenerated = true;
+            Logger.Log("[GAME] Game loaded successfully");
+        }
+
+        private void GenerateWorld()
+        {
+            if (startMenu.IsLoadingSavedGame())
+            {
+                int slotIndex = startMenu.GetLoadingSlotIndex();
+                SaveData saveData = SaveSystem.LoadGame(slotIndex);
+                if (saveData != null)
+                {
+                    LoadGameFromSave(saveData);
+                    return;
+                }
+                else
+                {
+                    Logger.Log("[GAME] Failed to load save, starting new game");
+                }
+            }
+
+            currentWorldSeed = System.Environment.TickCount;
+            totalPlayTime = 0f;
+
+            world = new World.World();
+            timeSystem = new TimeSystem();
+            lightingSystem = new LightingSystem(world, timeSystem);
+
+            worldGenerator = new WorldGenerator(world, currentWorldSeed);
+
+            worldGenerator.OnProgressUpdate = (progress, message) =>
+            {
+                startMenu.SetLoadingProgress(progress, message);
+            };
+
+            worldGenerator.Generate();
+            world.EnableChunkUnloading();
+
+            Vector2 spawnPosition = worldGenerator.GetSpawnPosition(64);
+            player = new Claude4_5Terraria.Player.Player(world, spawnPosition);
+
+            camera = new Camera(GraphicsDevice.Viewport);
+            camera.Position = player.Position;
+
+            inventory = new Inventory();
+            miningSystem = new MiningSystem(world, inventory);
+            inventoryUI = new InventoryUI(inventory, miningSystem);
+            pauseMenu = new PauseMenu(OpenSaveMenu);
+            saveMenu = new SaveMenu(SaveGame);
+            miningOverlay = new MiningOverlay(world, miningSystem);
+
+            inventoryUI.Initialize(pixelTexture, font);
+
+            worldGenerated = true;
+        }
+
+        protected override void Draw(GameTime gameTime)
+        {
+            GraphicsDevice.Clear(Color.Black);
+
+            spriteBatch.Begin(
+                    sortMode: SpriteSortMode.Deferred,
+                    blendState: BlendState.AlphaBlend,
+                    samplerState: SamplerState.PointClamp
+                );
+
+            if (startMenu.GetState() != MenuState.Playing)
+            {
+                startMenu.Draw(spriteBatch, pixelTexture, font,
+                    GraphicsDevice.Viewport.Width,
+                    GraphicsDevice.Viewport.Height);
+                spriteBatch.End();
+                base.Draw(gameTime);
+                return;
+            }
+
+            spriteBatch.End();
 
             Color skyColor = timeSystem.GetSkyColor();
-            Color lightDirtBrown = new Color(150, 110, 75);
-            Color mediumGray = new Color(80, 80, 85);
-            Color darkGray = new Color(40, 40, 45);
-            Color veryDarkGray = new Color(20, 20, 22);
+            GraphicsDevice.Clear(skyColor);
 
-            if (tileDepth < 110)
+            Matrix transformMatrix = camera.GetTransformMatrix();
+
+            spriteBatch.Begin(
+                sortMode: SpriteSortMode.Deferred,
+                blendState: BlendState.AlphaBlend,
+                samplerState: SamplerState.PointClamp,
+                transformMatrix: transformMatrix
+            );
+
+            world.Draw(spriteBatch, camera, pixelTexture, lightingSystem, miningSystem);
+            miningSystem.DrawItems(spriteBatch, pixelTexture);
+            player.Draw(spriteBatch, pixelTexture);
+
+            Vector2 playerCenter = new Vector2(
+                player.Position.X + Claude4_5Terraria.Player.Player.PLAYER_WIDTH / 2,
+                player.Position.Y + Claude4_5Terraria.Player.Player.PLAYER_HEIGHT / 2
+            );
+            miningOverlay.DrawBlockOutlines(spriteBatch, pixelTexture, camera, playerCenter, showMiningOutlines);
+            miningOverlay.DrawMiningProgress(spriteBatch, pixelTexture);
+
+            spriteBatch.End();
+
+            spriteBatch.Begin(
+                sortMode: SpriteSortMode.Deferred,
+                blendState: BlendState.AlphaBlend,
+                samplerState: SamplerState.PointClamp
+            );
+
+            inventoryUI.Draw(
+                spriteBatch,
+                pixelTexture,
+                font,
+                GraphicsDevice.Viewport.Width,
+                GraphicsDevice.Viewport.Height
+            );
+
+            pauseMenu.Draw(spriteBatch, pixelTexture, font,
+                GraphicsDevice.Viewport.Width,
+                GraphicsDevice.Viewport.Height);
+
+            // Draw save menu on top of everything
+            if (saveMenu != null)
             {
-                return skyColor;
+                saveMenu.Draw(spriteBatch, pixelTexture, font,
+                    GraphicsDevice.Viewport.Width,
+                    GraphicsDevice.Viewport.Height);
             }
-            else if (tileDepth < 120)
-            {
-                float t = (tileDepth - 110) / 10f;
-                return Color.Lerp(skyColor, lightDirtBrown, t);
-            }
-            else if (tileDepth < 130)
-            {
-                return lightDirtBrown;
-            }
-            else if (tileDepth < 200)
-            {
-                float t = (tileDepth - 130) / 70f;
-                return Color.Lerp(lightDirtBrown, mediumGray, t);
-            }
-            else if (tileDepth < 450)
-            {
-                float t = (tileDepth - 200) / 250f;
-                return Color.Lerp(mediumGray, darkGray, t);
-            }
-            else if (tileDepth < 750)
-            {
-                float t = (tileDepth - 450) / 300f;
-                return Color.Lerp(darkGray, veryDarkGray, t);
-            }
-            else
-            {
-                return veryDarkGray;
-            }
+
+            spriteBatch.End();
+
+            base.Draw(gameTime);
         }
     }
 }

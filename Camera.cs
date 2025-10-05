@@ -32,23 +32,26 @@ namespace Claude4_5Terraria
             Position = Vector2.Lerp(Position, targetPosition, smoothing);
         }
 
+        // ✅ FIXED: Returns world coordinates in PIXELS, not tiles
         public Rectangle GetVisibleArea(int tileSize)
         {
-            // Calculate world bounds that are visible
-            // Camera position is the CENTER of the view
+            // Camera position is the CENTER of the view in world pixels
             float halfScreenWidth = (viewport.Width / Zoom) * 0.5f;
             float halfScreenHeight = (viewport.Height / Zoom) * 0.5f;
 
-            // Calculate visible world coordinates
-            int leftTile = (int)((Position.X - halfScreenWidth) / tileSize) - 2;
-            int topTile = (int)((Position.Y - halfScreenHeight) / tileSize) - 2;
-            int rightTile = (int)((Position.X + halfScreenWidth) / tileSize) + 2;
-            int bottomTile = (int)((Position.Y + halfScreenHeight) / tileSize) + 2;
+            // Calculate visible world coordinates IN PIXELS with buffer
+            int bufferPixels = tileSize * 2;  // 2-tile buffer on each side
 
-            int visibleWidth = rightTile - leftTile;
-            int visibleHeight = bottomTile - topTile;
+            int left = (int)(Position.X - halfScreenWidth) - bufferPixels;
+            int top = (int)(Position.Y - halfScreenHeight) - bufferPixels;
+            int right = (int)(Position.X + halfScreenWidth) + bufferPixels;
+            int bottom = (int)(Position.Y + halfScreenHeight) + bufferPixels;
 
-            return new Rectangle(leftTile, topTile, visibleWidth, visibleHeight);
+            int width = right - left;
+            int height = bottom - top;
+
+            // ✅ Return rectangle in WORLD PIXEL coordinates
+            return new Rectangle(left, top, width, height);
         }
     }
 }

@@ -10,8 +10,8 @@ namespace Claude4_5Terraria.Player
         public Vector2 Position { get; set; }  // Make sure this is public
         public Vector2 Velocity { get; set; }
 
-        private const int PLAYER_WIDTH = 24;
-        private const int PLAYER_HEIGHT = 48;
+        public const int PLAYER_WIDTH = 24;
+        public const int PLAYER_HEIGHT = 48;
 
         private const float GRAVITY = 0.5f;
         private const float MAX_FALL_SPEED = 15f;

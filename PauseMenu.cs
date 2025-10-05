@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using System;
 
 namespace Claude4_5Terraria.UI
 {
@@ -8,11 +9,18 @@ namespace Claude4_5Terraria.UI
     {
         private bool isPaused;
         private KeyboardState previousKeyState;
+        private MouseState previousMouseState;
+        private Action onOpenSaveMenu;
 
-        public PauseMenu()
+        private Rectangle saveButton;
+        private bool saveButtonHovered;
+
+        public PauseMenu(Action onOpenSaveMenu = null)
         {
             isPaused = false;
             previousKeyState = Keyboard.GetState();
+            previousMouseState = Mouse.GetState();
+            this.onOpenSaveMenu = onOpenSaveMenu;
         }
 
         public bool IsPaused => isPaused;
@@ -20,85 +28,123 @@ namespace Claude4_5Terraria.UI
         public void Update()
         {
             KeyboardState currentKeyState = Keyboard.GetState();
+            MouseState currentMouseState = Mouse.GetState();
 
             if (currentKeyState.IsKeyDown(Keys.Escape) && previousKeyState.IsKeyUp(Keys.Escape))
             {
                 isPaused = !isPaused;
             }
 
+            if (isPaused)
+            {
+                Point mousePoint = new Point(currentMouseState.X, currentMouseState.Y);
+                saveButtonHovered = saveButton.Contains(mousePoint);
+
+                if (currentMouseState.LeftButton == ButtonState.Pressed &&
+                    previousMouseState.LeftButton == ButtonState.Released)
+                {
+                    if (saveButtonHovered)
+                    {
+                        onOpenSaveMenu?.Invoke();
+                    }
+                }
+            }
+
             previousKeyState = currentKeyState;
+            previousMouseState = currentMouseState;
         }
 
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight)
         {
             if (!isPaused) return;
 
-            // Dark overlay
-            Rectangle overlay = new Rectangle(0, 0, screenWidth, screenHeight);
-            spriteBatch.Draw(pixelTexture, overlay, Color.Black * 0.7f);
+            spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, screenWidth, screenHeight), Color.Black * 0.5f);
 
-            // Menu background
-            int menuWidth = 500;
-            int menuHeight = 550;
+            int menuWidth = 600;
+            int menuHeight = 500;
             Rectangle menuBg = new Rectangle(
                 (screenWidth - menuWidth) / 2,
                 (screenHeight - menuHeight) / 2,
                 menuWidth,
                 menuHeight
             );
-            spriteBatch.Draw(pixelTexture, menuBg, Color.DarkSlateGray);
-            DrawBorder(spriteBatch, pixelTexture, menuBg, 3, Color.White);
 
-            if (font == null) return;
+            spriteBatch.Draw(pixelTexture, menuBg, new Color(20, 20, 30));
+            DrawBorder(spriteBatch, pixelTexture, menuBg, 4, Color.White);
 
-            // Title
             string title = "PAUSED";
             Vector2 titleSize = font.MeasureString(title);
             Vector2 titlePos = new Vector2(
                 menuBg.X + (menuWidth - titleSize.X) / 2,
                 menuBg.Y + 30
             );
-            spriteBatch.DrawString(font, title, titlePos, Color.White);
+            spriteBatch.DrawString(font, title, titlePos + new Vector2(2, 2), Color.Black);
+            spriteBatch.DrawString(font, title, titlePos, Color.Yellow);
 
-            // Controls text
             int yPos = menuBg.Y + 100;
             int lineHeight = 30;
 
-            DrawTextLine(spriteBatch, font, menuBg.X + 40, yPos, "MOVEMENT", Color.Yellow);
+            DrawTextLine(spriteBatch, font, menuBg.X + 40, yPos, "CONTROLS", Color.Cyan);
+            yPos += lineHeight + 10;
+            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "A/D - Move Left/Right", Color.White);
             yPos += lineHeight;
-            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "W - Jump", Color.White);
+            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "SPACE - Jump", Color.White);
             yPos += lineHeight;
-            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "A - Move Left", Color.White);
+            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "Left Click - Mine", Color.White);
             yPos += lineHeight;
-            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "D - Move Right", Color.White);
+            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "Right Click - Place", Color.White);
             yPos += lineHeight;
-            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "S - Fast Fall", Color.White);
-            yPos += lineHeight + 15;
+            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "E - Open Inventory", Color.White);
+            yPos += lineHeight;
+            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "1-9 - Select Hotbar", Color.White);
+            yPos += lineHeight;
+            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "T - Toggle Mining Outlines", Color.White);
+            yPos += lineHeight + 20;
 
-            DrawTextLine(spriteBatch, font, menuBg.X + 40, yPos, "MINING & BUILDING", Color.Yellow);
+            DrawTextLine(spriteBatch, font, menuBg.X + 40, yPos, "MUSIC", Color.Cyan);
             yPos += lineHeight;
-            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "Left Mouse - Mine Block", Color.White);
+            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "+/- Keys - Volume", Color.White);
             yPos += lineHeight;
-            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "Right Mouse - Place Block", Color.White);
-            yPos += lineHeight;
-            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "T - Toggle Block Outlines", Color.White);
-            yPos += lineHeight;
-            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "1-0 - Select Hotbar Slot", Color.White);
-            yPos += lineHeight + 15;
+            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "M - Mute/Unmute", Color.White);
+            yPos += lineHeight + 30;
 
-            DrawTextLine(spriteBatch, font, menuBg.X + 40, yPos, "MENU", Color.Yellow);
-            yPos += lineHeight;
-            DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "ESC - Pause Menu", Color.White);
-
-            // Footer
-            yPos = menuBg.Bottom - 50;
-            string footerText = "Press ESC to resume";
-            Vector2 footerSize = font.MeasureString(footerText);
-            Vector2 footerPos = new Vector2(
-                menuBg.X + (menuWidth - footerSize.X) / 2,
-                yPos
+            // Save Game button
+            int buttonWidth = 200;
+            int buttonHeight = 50;
+            saveButton = new Rectangle(
+                menuBg.X + (menuWidth - buttonWidth) / 2,
+                yPos,
+                buttonWidth,
+                buttonHeight
             );
-            spriteBatch.DrawString(font, footerText, footerPos, Color.LightGray);
+
+            Color buttonColor = saveButtonHovered ? Color.DarkGreen : Color.DarkSlateGray;
+            spriteBatch.Draw(pixelTexture, saveButton, buttonColor);
+            DrawBorder(spriteBatch, pixelTexture, saveButton, 3, saveButtonHovered ? Color.Lime : Color.Gray);
+
+            string buttonText = "SAVE GAME";
+            Vector2 buttonTextSize = font.MeasureString(buttonText);
+            Vector2 buttonTextPos = new Vector2(
+                saveButton.X + (saveButton.Width - buttonTextSize.X) / 2,
+                saveButton.Y + (saveButton.Height - buttonTextSize.Y) / 2
+            );
+            spriteBatch.DrawString(font, buttonText, buttonTextPos + new Vector2(1, 1), Color.Black);
+            spriteBatch.DrawString(font, buttonText, buttonTextPos, Color.White);
+
+            string escText = "Press ESC to Resume";
+            Vector2 escSize = font.MeasureString(escText);
+            Vector2 escPos = new Vector2(
+                menuBg.X + (menuWidth - escSize.X) / 2,
+                menuBg.Bottom - 50
+            );
+            spriteBatch.DrawString(font, escText, escPos, Color.Gray);
+        }
+
+        private void DrawTextLine(SpriteBatch spriteBatch, SpriteFont font, int x, int y, string text, Color color)
+        {
+            Vector2 pos = new Vector2(x, y);
+            spriteBatch.DrawString(font, text, pos + new Vector2(1, 1), Color.Black);
+            spriteBatch.DrawString(font, text, pos, color);
         }
 
         private void DrawBorder(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle rect, int thickness, Color color)
@@ -107,11 +153,6 @@ namespace Claude4_5Terraria.UI
             spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
             spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
             spriteBatch.Draw(pixelTexture, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
-        }
-
-        private void DrawTextLine(SpriteBatch spriteBatch, SpriteFont font, int x, int y, string text, Color color)
-        {
-            spriteBatch.DrawString(font, text, new Vector2(x, y), color);
         }
     }
 }

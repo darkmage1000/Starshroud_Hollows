@@ -32,6 +32,10 @@ namespace Claude4_5Terraria.Systems
             {
                 slots[i] = new InventorySlot();
             }
+
+            // Give starter items
+            AddItem(ItemType.PlatinumPickaxe, 1);
+            AddItem(ItemType.Torch, 50);
         }
 
         public bool AddItem(ItemType itemType, int amount = 1)
@@ -57,7 +61,7 @@ namespace Claude4_5Terraria.Systems
                 }
             }
 
-            return false; // Inventory full
+            return false;
         }
 
         public bool HasItem(ItemType itemType, int amount)

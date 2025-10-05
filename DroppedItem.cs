@@ -109,7 +109,10 @@ namespace Claude4_5Terraria.Entities
         {
             return lifetime >= DESPAWN_TIME;
         }
-
+        public Rectangle GetBounds()
+        {
+            return new Rectangle((int)Position.X - 8, (int)Position.Y - 8, 16, 16);
+        }
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
         {
             Color itemColor = GetItemColor(ItemType);
@@ -145,6 +148,8 @@ namespace Claude4_5Terraria.Entities
                     return new Color(101, 67, 33);
                 case ItemType.Coal:
                     return new Color(40, 40, 40);  // Dark gray/black
+                case ItemType.Acorn:
+                    return new Color(139, 90, 43);  // Brown acorn color
                 default:
                     return Color.White;
             }

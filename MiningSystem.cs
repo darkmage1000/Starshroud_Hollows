@@ -7,7 +7,6 @@ using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
 
-
 namespace Claude4_5Terraria.Systems
 {
     public class MiningSystem
@@ -27,11 +26,10 @@ namespace Claude4_5Terraria.Systems
         private List<DroppedItem> droppedItems;
         private const float MAGNET_RANGE = 64f;
 
-        // Continuous placement
         private float placementCooldown;
         private const float PLACEMENT_DELAY = 0.15f;
 
-        private Random random; //added line recently
+        private Random random;
 
         public MiningSystem(World.World world, Inventory inventory)
         {
@@ -44,7 +42,7 @@ namespace Claude4_5Terraria.Systems
             droppedItems = new List<DroppedItem>();
             selectedHotbarSlot = 0;
             placementCooldown = 0f;
-            random = new Random(); // Add this line
+            random = new Random();
         }
 
         public Point? GetTargetedTile()
@@ -79,7 +77,6 @@ namespace Claude4_5Terraria.Systems
         {
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
-            // Update placement cooldown
             if (placementCooldown > 0)
             {
                 placementCooldown -= deltaTime;
@@ -111,7 +108,7 @@ namespace Claude4_5Terraria.Systems
                 miningProgress = 0f;
             }
 
-            // Mining (left-click)
+            // ===== MINING (LEFT CLICK) =====
             if (mouseState.LeftButton == ButtonState.Pressed && targetedTile.HasValue)
             {
                 if (currentlyMiningTile == null || currentlyMiningTile.Value != targetedTile.Value)
@@ -124,140 +121,222 @@ namespace Claude4_5Terraria.Systems
 
                 if (tile != null)
                 {
-                    float miningTime = GetMiningTime(tile.Type);
-                    miningProgress += deltaTime / miningTime;
-
-                    if (miningProgress >= 1f)
+                    InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
+                    ItemType currentTool;
+                    if (selectedSlot != null && !selectedSlot.IsEmpty())
                     {
-                        BreakBlock(targetedTile.Value.X, targetedTile.Value.Y);
+                        currentTool = selectedSlot.ItemType;
+                    }
+                    else
+                    {
+                        currentTool = ItemType.None;
+                    }
+
+                    bool canMine = ToolProperties.CanMine(currentTool, tile.Type);
+
+                    if (!canMine)
+                    {
+                        if (miningProgress == 0f)
+                        {
+                            Logger.Log($"[MINING] Cannot mine {tile.Type} with {currentTool} - need better tool");
+                        }
                         miningProgress = 0f;
-                        currentlyMiningTile = null;
+                    }
+                    else
+                    {
+                        float baseMiningTime = GetMiningTime(tile.Type);
+                        float miningSpeed = ToolProperties.GetMiningSpeed(currentTool);
+                        float adjustedMiningTime = baseMiningTime / miningSpeed;
+                        miningProgress += deltaTime / adjustedMiningTime;
+
+                        if (miningProgress >= 1f)
+                        {
+                            BreakBlock(targetedTile.Value.X, targetedTile.Value.Y);
+                            miningProgress = 0f;
+                            currentlyMiningTile = null;
+                            Logger.Log($"[MINING] Mined {tile.Type} with {currentTool} at ({targetedTile.Value.X}, {targetedTile.Value.Y})");
+                        }
                     }
                 }
             }
-            else
+            else if (mouseState.LeftButton == ButtonState.Released)
             {
-                if (mouseState.LeftButton == ButtonState.Released)
+                currentlyMiningTile = null;
+                miningProgress = 0f;
+            }
+
+            // ===== PLACEMENT (RIGHT CLICK) =====
+            if (mouseState.RightButton == ButtonState.Pressed && placementCooldown <= 0)
+            {
+                if (distanceToTile <= PLACEMENT_RANGE * World.World.TILE_SIZE)
                 {
-                    currentlyMiningTile = null;
-                    miningProgress = 0f;
+                    int placeX = targetX;
+                    int placeY = targetY;
+
+                    InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
+
+                    // ACORN PLANTING
+                    if (selectedSlot != null && !selectedSlot.IsEmpty() && selectedSlot.ItemType == ItemType.Acorn)
+                    {
+                        if (CanPlantAcorn(placeX, placeY))
+                        {
+                            world.AddSapling(placeX, placeY);
+                            selectedSlot.Count--;
+                            if (selectedSlot.Count <= 0)
+                            {
+                                selectedSlot.ItemType = ItemType.Dirt;
+                                selectedSlot.Count = 0;
+                            }
+                            placementCooldown = PLACEMENT_DELAY;
+                            Logger.Log($"[PLACE] Planted acorn at ({placeX}, {placeY})");
+                        }
+                        else
+                        {
+                            Logger.Log($"[PLACE] Cannot plant acorn - need grass/dirt with 3 tiles of space above");
+                            placementCooldown = PLACEMENT_DELAY;
+                        }
+                    }
+                    // REGULAR BLOCK PLACEMENT
+                    else
+                    {
+                        Tile placeTile = world.GetTile(placeX, placeY);
+
+                        if (placeTile != null && !placeTile.IsActive)
+                        {
+                            Rectangle blockRect = new Rectangle(
+                                placeX * World.World.TILE_SIZE,
+                                placeY * World.World.TILE_SIZE,
+                                World.World.TILE_SIZE,
+                                World.World.TILE_SIZE
+                            );
+
+                            Rectangle playerRect = new Rectangle(
+                                (int)playerPosition.X,
+                                (int)playerPosition.Y,
+                                playerWidth,
+                                playerHeight
+                            );
+
+                            if (!blockRect.Intersects(playerRect))
+                            {
+                                if (selectedSlot != null && !selectedSlot.IsEmpty())
+                                {
+                                    ItemType itemType = selectedSlot.ItemType;
+                                    TileType blockType = ItemTypeExtensions.ToTileType(itemType);
+
+                                    if (IsPlaceable(blockType))
+                                    {
+                                        // TORCH PLACEMENT
+                                        if (blockType == TileType.Torch)
+                                        {
+                                            // Check if underground
+                                            bool isUnderground = false;
+                                            for (int checkY = placeY - 1; checkY >= 0; checkY--)
+                                            {
+                                                Tile checkTile = world.GetTile(placeX, checkY);
+                                                if (checkTile != null && checkTile.IsActive &&
+                                                    checkTile.Type != TileType.Leaves &&
+                                                    checkTile.Type != TileType.Wood &&
+                                                    checkTile.Type != TileType.Sapling)
+                                                {
+                                                    isUnderground = true;
+                                                    break;
+                                                }
+                                            }
+
+                                            // Underground: allow floating torches
+                                            // Surface: require adjacent block
+                                            if (!isUnderground && !HasAdjacentSolidBlock(placeX, placeY))
+                                            {
+                                                Logger.Log($"[PLACE] Torch requires adjacent wall or surface");
+                                                placementCooldown = PLACEMENT_DELAY;
+                                            }
+                                            else
+                                            {
+                                                world.SetTile(placeX, placeY, new Tile(blockType));
+                                                Logger.Log($"[PLACE] Placed {blockType} at ({placeX}, {placeY})");
+
+                                                selectedSlot.Count--;
+                                                if (selectedSlot.Count <= 0)
+                                                {
+                                                    selectedSlot.ItemType = ItemType.Dirt;
+                                                    selectedSlot.Count = 0;
+                                                }
+
+                                                placementCooldown = PLACEMENT_DELAY;
+                                            }
+                                        }
+                                        // ALL OTHER BLOCKS
+                                        else
+                                        {
+                                            world.SetTile(placeX, placeY, new Tile(blockType));
+                                            Logger.Log($"[PLACE] Placed {blockType} at ({placeX}, {placeY})");
+
+                                            selectedSlot.Count--;
+                                            if (selectedSlot.Count <= 0)
+                                            {
+                                                selectedSlot.ItemType = ItemType.Dirt;
+                                                selectedSlot.Count = 0;
+                                            }
+
+                                            placementCooldown = PLACEMENT_DELAY;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            // Continuous block placement (right-click held)
-            if (mouseState.RightButton == ButtonState.Pressed && placementCooldown <= 0f)
+            // ===== UPDATE DROPPED ITEMS =====
+            foreach (DroppedItem item in droppedItems)
             {
-                if (TryPlaceBlock(targetX, targetY, distanceToTile, playerPosition, playerWidth, playerHeight))
-                {
-                    placementCooldown = PLACEMENT_DELAY;
-                }
-            }
-
-            // Update dropped items
-            for (int i = droppedItems.Count - 1; i >= 0; i--)
-            {
-                DroppedItem item = droppedItems[i];
                 item.Update(deltaTime, world);
                 item.ApplyMagnetism(playerCenter, MAGNET_RANGE);
+            }
 
-                if (item.CanCollect(playerPosition, playerWidth, playerHeight))
+            // ===== AUTO-PICKUP ITEMS =====
+            List<DroppedItem> itemsToRemove = new List<DroppedItem>();
+            Rectangle playerRect2 = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
+            foreach (DroppedItem item in droppedItems)
+            {
+                if (playerRect2.Intersects(item.GetBounds()))
                 {
                     inventory.AddItem(item.ItemType, 1);
-                    droppedItems.RemoveAt(i);
-                    continue;
+                    itemsToRemove.Add(item);
+                    Logger.Log($"[MINING] Picked up {item.ItemType}");
                 }
-
-                if (item.ShouldDespawn())
-                {
-                    droppedItems.RemoveAt(i);
-                }
+            }
+            foreach (DroppedItem item in itemsToRemove)
+            {
+                droppedItems.Remove(item);
             }
 
             previousMouseState = mouseState;
         }
 
-        private bool TryPlaceBlock(int targetX, int targetY, float distance, Vector2 playerPosition, int playerWidth, int playerHeight)
-        {
-            if (distance > PLACEMENT_RANGE * World.World.TILE_SIZE)
-                return false;
-
-            Tile targetTile = world.GetTile(targetX, targetY);
-            if (targetTile == null || targetTile.IsActive)
-                return false;
-
-            InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
-            if (selectedSlot == null || selectedSlot.IsEmpty())
-                return false;
-
-            ItemType blockItemType = selectedSlot.ItemType;
-            if (!blockItemType.IsPlaceable())
-                return false;
-
-            // Torches need a solid block adjacent to attach to
-            if (blockItemType == ItemType.Torch)
-            {
-                if (!HasAdjacentSolidBlock(targetX, targetY))
-                {
-                    Logger.Log("[MINING] Cannot place torch - no adjacent solid block");
-                    return false;
-                }
-            }
-            else
-            {
-                // Regular blocks can't be placed inside player
-                Rectangle blockRect = new Rectangle(
-                    targetX * World.World.TILE_SIZE,
-                    targetY * World.World.TILE_SIZE,
-                    World.World.TILE_SIZE,
-                    World.World.TILE_SIZE
-                );
-
-                Rectangle playerRect = new Rectangle(
-                    (int)playerPosition.X,
-                    (int)playerPosition.Y,
-                    playerWidth,
-                    playerHeight
-                );
-
-                if (blockRect.Intersects(playerRect))
-                {
-                    return false;
-                }
-            }
-
-            world.SetTile(targetX, targetY, new Tile(blockItemType.ToTileType()));
-
-            selectedSlot.Count--;
-            if (selectedSlot.Count <= 0)
-            {
-                selectedSlot.ItemType = ItemType.Dirt;
-                selectedSlot.Count = 0;
-            }
-
-            Logger.Log($"[MINING] Placed {blockItemType} at ({targetX}, {targetY})");
-
-            return true;
-        }
-
         private bool HasAdjacentSolidBlock(int x, int y)
         {
-            // Check all 4 adjacent tiles
-            if (world.IsSolidAtPosition(x - 1, y)) return true;
-            if (world.IsSolidAtPosition(x + 1, y)) return true;
-            if (world.IsSolidAtPosition(x, y - 1)) return true;
-            if (world.IsSolidAtPosition(x, y + 1)) return true;
-            return false;
+            bool left = world.IsSolidAtPosition(x - 1, y);
+            bool right = world.IsSolidAtPosition(x + 1, y);
+            bool up = world.IsSolidAtPosition(x, y - 1);
+            bool down = world.IsSolidAtPosition(x, y + 1);
+
+            return left || right || up || down;
         }
 
         private bool IsPlaceable(TileType type)
         {
-            // Only allow placement of solid blocks (not ores, not air, not leaves)
             switch (type)
             {
                 case TileType.Dirt:
                 case TileType.Grass:
                 case TileType.Stone:
                 case TileType.Wood:
+                case TileType.WoodCraftingBench:
+                case TileType.CopperCraftingBench:
+                case TileType.Torch:
                     return true;
                 default:
                     return false;
@@ -298,6 +377,13 @@ namespace Claude4_5Terraria.Systems
                 case TileType.Wood:
                 case TileType.Leaves:
                     return 0.8f;
+                case TileType.Coal:
+                    return 0.7f;
+                case TileType.Torch:
+                case TileType.WoodCraftingBench:
+                case TileType.CopperCraftingBench:
+                case TileType.Sapling:
+                    return 0.3f;
                 default:
                     return 1.0f;
             }
@@ -331,11 +417,25 @@ namespace Claude4_5Terraria.Systems
                 {
                     dropCount = 5;
                 }
+
+                Vector2 acornPosition = new Vector2(
+                    x * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8,
+                    y * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8
+                );
+                int acornCount = random.Next(1, 3);
+                for (int i = 0; i < acornCount; i++)
+                {
+                    Vector2 pos = acornPosition + new Vector2(
+                        (float)(random.NextDouble() - 0.5) * 20,
+                        (float)(random.NextDouble() - 0.5) * 20
+                    );
+                    droppedItems.Add(new DroppedItem(pos, ItemType.Acorn));
+                }
             }
             else
             {
                 world.SetTile(x, y, new Tile(TileType.Air));
-                droppedItemType = ItemTypeExtensions.FromTileType(tileType);  // Convert TileType to ItemType
+                droppedItemType = ItemTypeExtensions.FromTileType(tileType);
                 dropCount = 1;
             }
 
@@ -356,10 +456,6 @@ namespace Claude4_5Terraria.Systems
 
         private int CountTreeWoodBlocks(int x, int y)
         {
-            // Find which tree this belongs to and count its wood blocks
-            Point tilePos = new Point(x, y);
-
-            // Simple approximation: check tiles in a 3x20 area around hit point
             int woodCount = 0;
             for (int dx = -1; dx <= 1; dx++)
             {
@@ -374,6 +470,32 @@ namespace Claude4_5Terraria.Systems
             }
 
             return woodCount;
+        }
+
+        private bool CanPlantAcorn(int x, int y)
+        {
+            // Check if the planting spot is empty
+            Tile targetTile = world.GetTile(x, y);
+            if (targetTile != null && targetTile.IsActive)
+                return false; // Can't plant if there's already a block here (including another sapling)
+
+            // Check if there's grass or dirt BELOW
+            Tile groundTile = world.GetTile(x, y + 1);
+            if (groundTile == null || !groundTile.IsActive)
+                return false;
+
+            if (groundTile.Type != TileType.Grass && groundTile.Type != TileType.Dirt)
+                return false;
+
+            // Check if there's space above (2 more tiles of air)
+            for (int checkY = y - 1; checkY >= y - 2; checkY--)
+            {
+                Tile checkTile = world.GetTile(x, checkY);
+                if (checkTile != null && checkTile.IsActive)
+                    return false;
+            }
+
+            return true;
         }
     }
 }

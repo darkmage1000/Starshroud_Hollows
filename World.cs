@@ -5,22 +5,28 @@ using Microsoft.Xna.Framework.Graphics;
 using Claude4_5Terraria.Enums;
 using Claude4_5Terraria.Systems;
 
-
 namespace Claude4_5Terraria.World
 {
     public class World
     {
-        public const int WORLD_WIDTH = 500;
-        public const int WORLD_HEIGHT = 1000;
+        public const int WORLD_WIDTH = 1500;
+        public const int WORLD_HEIGHT = 3000;
         public const int TILE_SIZE = 32;
 
-        private Dictionary<Point, Chunk> loadedChunks;
+        public Dictionary<Point, Chunk> loadedChunks;
+
         private int chunksWide;
         private int chunksHigh;
 
-        // Tree tracking
         private List<Tree> trees;
         private Dictionary<Point, Tree> tileToTreeMap;
+        private List<Sapling> saplings;
+
+        private Random random;
+
+        private bool allowChunkUnloading = false;
+
+        private HashSet<Point> exploredTiles;
 
         public World()
         {
@@ -30,6 +36,16 @@ namespace Claude4_5Terraria.World
 
             trees = new List<Tree>();
             tileToTreeMap = new Dictionary<Point, Tree>();
+            saplings = new List<Sapling>();
+            exploredTiles = new HashSet<Point>();
+
+            random = new Random();
+        }
+
+        public void EnableChunkUnloading()
+        {
+            allowChunkUnloading = true;
+            Logger.Log("[WORLD] Chunk unloading enabled - world generation complete");
         }
 
         public void AddTree(Tree tree)
@@ -38,7 +54,10 @@ namespace Claude4_5Terraria.World
 
             foreach (Point pos in tree.TilePositions)
             {
-                tileToTreeMap[pos] = tree;
+                if (!tileToTreeMap.ContainsKey(pos))
+                    tileToTreeMap[pos] = tree;
+                else
+                    Logger.Log($"[WORLD] Warning: overlapping tree tile at {pos}");
             }
         }
 
@@ -60,19 +79,103 @@ namespace Claude4_5Terraria.World
             }
         }
 
+        public void AddSapling(int x, int y)
+        {
+            saplings.Add(new Sapling(x, y));
+            SetTile(x, y, new Tile(TileType.Sapling));
+            Logger.Log($"[WORLD] Planted sapling at ({x}, {y})");
+        }
+
+        public void Update(float deltaTime, WorldGenerator worldGenerator)
+        {
+            List<Sapling> grownSaplings = new List<Sapling>();
+
+            foreach (Sapling sapling in saplings)
+            {
+                sapling.Update(deltaTime);
+
+                if (sapling.IsReadyToGrow())
+                {
+                    grownSaplings.Add(sapling);
+                }
+            }
+
+            foreach (Sapling sapling in grownSaplings)
+            {
+                GrowSaplingIntoTree(sapling.Position.X, sapling.Position.Y);
+                saplings.Remove(sapling);
+            }
+        }
+
+        private void GrowSaplingIntoTree(int x, int y)
+        {
+            SetTile(x, y, new Tile(TileType.Air));
+
+            Logger.Log($"[WORLD] Sapling grew into tree at ({x}, {y})");
+
+            int trunkHeight = random.Next(8, 15);
+            var tree = new Tree(x, y + 1, trunkHeight);
+
+            for (int dy = 0; dy < trunkHeight; dy++)
+            {
+                int treeY = y - dy;
+                SetTile(x, treeY, new Tile(TileType.Wood, true));
+                tree.AddTile(x, treeY);
+            }
+
+            int canopyY = y - trunkHeight;
+            int canopyRadius = random.Next(2, 4);
+
+            for (int dx = -canopyRadius; dx <= canopyRadius; dx++)
+            {
+                for (int dy = -canopyRadius; dy <= canopyRadius; dy++)
+                {
+                    if (dx * dx + dy * dy <= canopyRadius * canopyRadius + 2)
+                    {
+                        int leafX = x + dx;
+                        int leafY = canopyY + dy;
+
+                        var existingTile = GetTile(leafX, leafY);
+                        if (existingTile == null || !existingTile.IsActive || existingTile.Type != TileType.Wood)
+                        {
+                            SetTile(leafX, leafY, new Tile(TileType.Leaves, true));
+                            tree.AddTile(leafX, leafY);
+                        }
+                    }
+                }
+            }
+
+            AddTree(tree);
+        }
+
         public void UpdateLoadedChunks(Camera camera)
         {
             Rectangle visibleArea = camera.GetVisibleArea(TILE_SIZE);
 
-            int startChunkX = visibleArea.Left / Chunk.CHUNK_SIZE;
-            int startChunkY = visibleArea.Top / Chunk.CHUNK_SIZE;
-            int endChunkX = (visibleArea.Right + Chunk.CHUNK_SIZE - 1) / Chunk.CHUNK_SIZE;
-            int endChunkY = (visibleArea.Bottom + Chunk.CHUNK_SIZE - 1) / Chunk.CHUNK_SIZE;
+            int preload = 1;
+            int pixelsPerChunk = TILE_SIZE * Chunk.CHUNK_SIZE;
 
-            startChunkX = MathHelper.Clamp(startChunkX, 0, chunksWide - 1);
-            startChunkY = MathHelper.Clamp(startChunkY, 0, chunksHigh - 1);
-            endChunkX = MathHelper.Clamp(endChunkX, 0, chunksWide - 1);
-            endChunkY = MathHelper.Clamp(endChunkY, 0, chunksHigh - 1);
+            int startChunkX = Math.Max(0, visibleArea.Left / pixelsPerChunk - preload);
+            int startChunkY = Math.Max(0, visibleArea.Top / pixelsPerChunk - preload);
+            int endChunkX = Math.Min(chunksWide - 1, (visibleArea.Right + pixelsPerChunk - 1) / pixelsPerChunk + preload);
+            int endChunkY = Math.Min(chunksHigh - 1, (visibleArea.Bottom + pixelsPerChunk - 1) / pixelsPerChunk + preload);
+
+            if (allowChunkUnloading)
+            {
+                List<Point> toUnload = new List<Point>();
+                foreach (var kvp in loadedChunks)
+                {
+                    Point pos = kvp.Key;
+                    if (pos.X < startChunkX || pos.X > endChunkX || pos.Y < startChunkY || pos.Y > endChunkY)
+                    {
+                        toUnload.Add(pos);
+                    }
+                }
+                foreach (var pos in toUnload)
+                {
+                    loadedChunks.Remove(pos);
+                }
+            }
 
             for (int cx = startChunkX; cx <= endChunkX; cx++)
             {
@@ -87,6 +190,30 @@ namespace Claude4_5Terraria.World
                     }
                 }
             }
+        }
+
+        public void SetTile(int worldX, int worldY, Tile tile)
+        {
+            if (worldX < 0 || worldX >= WORLD_WIDTH || worldY < 0 || worldY >= WORLD_HEIGHT)
+                return;
+
+            tile.IsActive = (tile.Type != TileType.Air);
+
+            int chunkX = worldX / Chunk.CHUNK_SIZE;
+            int chunkY = worldY / Chunk.CHUNK_SIZE;
+            int localX = worldX % Chunk.CHUNK_SIZE;
+            int localY = worldY % Chunk.CHUNK_SIZE;
+
+            Point chunkPos = new Point(chunkX, chunkY);
+
+            if (!loadedChunks.ContainsKey(chunkPos))
+            {
+                Chunk chunk = new Chunk(chunkX, chunkY);
+                chunk.IsLoaded = true;
+                loadedChunks[chunkPos] = chunk;
+            }
+
+            loadedChunks[chunkPos].SetTile(localX, localY, tile);
         }
 
         public Tile GetTile(int worldX, int worldY)
@@ -108,66 +235,159 @@ namespace Claude4_5Terraria.World
             return null;
         }
 
-        public void SetTile(int worldX, int worldY, Tile tile)
+        public void MarkAreaAsExplored(Vector2 playerCenter)
         {
-            if (worldX < 0 || worldX >= WORLD_WIDTH || worldY < 0 || worldY >= WORLD_HEIGHT)
-                return;
+            int centerTileX = (int)(playerCenter.X / TILE_SIZE);
+            int centerTileY = (int)(playerCenter.Y / TILE_SIZE);
+            int radius = 2; // Changed from 10 to 2 - only 2 tiles around player
 
-            int chunkX = worldX / Chunk.CHUNK_SIZE;
-            int chunkY = worldY / Chunk.CHUNK_SIZE;
-            int localX = worldX % Chunk.CHUNK_SIZE;
-            int localY = worldY % Chunk.CHUNK_SIZE;
-
-            Point chunkPos = new Point(chunkX, chunkY);
-
-            if (!loadedChunks.ContainsKey(chunkPos))
+            for (int dx = -radius; dx <= radius; dx++)
             {
-                Chunk chunk = new Chunk(chunkX, chunkY);
-                chunk.IsLoaded = true;
-                loadedChunks[chunkPos] = chunk;
+                for (int dy = -radius; dy <= radius; dy++)
+                {
+                    if (dx * dx + dy * dy <= radius * radius)
+                    {
+                        exploredTiles.Add(new Point(centerTileX + dx, centerTileY + dy));
+                    }
+                }
             }
-
-            loadedChunks[chunkPos].SetTile(localX, localY, tile);
         }
 
-        public void Draw(SpriteBatch spriteBatch, Camera camera, Texture2D pixelTexture, LightingSystem lightingSystem)
+        public bool IsTileExplored(int x, int y)
         {
-            // Use camera's GetVisibleArea which properly handles centered camera
+            return exploredTiles.Contains(new Point(x, y));
+        }
+
+        public void Draw(SpriteBatch spriteBatch, Camera camera, Texture2D pixelTexture, LightingSystem lightingSystem, MiningSystem miningSystem)
+        {
+            lightingSystem.UpdateTorchCache(camera.Position);
+
             Rectangle visibleArea = camera.GetVisibleArea(TILE_SIZE);
+            int startTileX = Math.Max(0, (int)(visibleArea.Left / TILE_SIZE));
+            int endTileX = Math.Min(WORLD_WIDTH - 1, (int)(visibleArea.Right / TILE_SIZE));
+            int startTileY = Math.Max(0, (int)(visibleArea.Top / TILE_SIZE));
+            int endTileY = Math.Min(WORLD_HEIGHT - 1, (int)(visibleArea.Bottom / TILE_SIZE));
 
-            int startTileX = Math.Max(0, visibleArea.Left);
-            int endTileX = Math.Min(WORLD_WIDTH - 1, visibleArea.Right);
-            int startTileY = Math.Max(0, visibleArea.Top);
-            int endTileY = Math.Min(WORLD_HEIGHT - 1, visibleArea.Bottom);
-
-            // Update torch lighting cache
-            if (lightingSystem != null)
+            for (int x = startTileX; x <= endTileX; x++)
             {
-                lightingSystem.UpdateTorchCache(camera.Position);
+                for (int y = startTileY; y <= endTileY; y++)
+                {
+                    bool hasBlocksAbove = false;
+                    for (int checkY = y - 1; checkY >= 0; checkY--)
+                    {
+                        Tile checkTile = GetTile(x, checkY);
+                        if (checkTile != null && checkTile.IsActive)
+                        {
+                            if (checkTile.Type != TileType.Leaves && checkTile.Type != TileType.Wood &&
+                                checkTile.Type != TileType.Torch && checkTile.Type != TileType.Sapling)
+                            {
+                                hasBlocksAbove = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (hasBlocksAbove)
+                    {
+                        Rectangle destRect = new Rectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                        Color bgColor;
+                        if (y < 210)
+                        {
+                            bgColor = new Color(101, 67, 33);
+                        }
+                        else
+                        {
+                            bgColor = new Color(64, 64, 64);
+                        }
+
+                        float lightLevel = lightingSystem.GetLightLevel(x, y);
+                        bgColor = new Color(
+                            (byte)(bgColor.R * lightLevel),
+                            (byte)(bgColor.G * lightLevel),
+                            (byte)(bgColor.B * lightLevel),
+                            (byte)255
+                        );
+
+                        spriteBatch.Draw(pixelTexture, destRect, bgColor);
+                    }
+                }
             }
 
-            // Draw all visible tiles
             for (int x = startTileX; x <= endTileX; x++)
             {
                 for (int y = startTileY; y <= endTileY; y++)
                 {
                     Tile tile = GetTile(x, y);
+
                     if (tile == null || !tile.IsActive)
                         continue;
 
-                    Rectangle destRect = new Rectangle(
-                        x * TILE_SIZE,
-                        y * TILE_SIZE,
-                        TILE_SIZE,
-                        TILE_SIZE
-                    );
+                    Rectangle destRect = new Rectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
                     Color tileColor = GetTileColor(tile.Type);
+                    tileColor.A = 255;
 
-                    // Apply lighting
-                    if (lightingSystem != null)
+                    float lightLevel = lightingSystem.GetLightLevel(x, y);
+                    tileColor = new Color(
+                        (byte)(tileColor.R * lightLevel),
+                        (byte)(tileColor.G * lightLevel),
+                        (byte)(tileColor.B * lightLevel),
+                        (byte)255
+                    );
+
+                    if (miningSystem != null && miningSystem.GetTargetedTile().HasValue)
                     {
-                        tileColor = lightingSystem.ApplyLighting(tileColor, x, y);
+                        Point? targeted = miningSystem.GetTargetedTile();
+                        if (targeted.HasValue && x == targeted.Value.X && y == targeted.Value.Y)
+                        {
+                            float progress = miningSystem.GetMiningProgress();
+
+                            Rectangle barBg = new Rectangle(x * TILE_SIZE, (y - 1) * TILE_SIZE - 4, TILE_SIZE, 8);
+                            spriteBatch.Draw(pixelTexture, barBg, Color.Black * 0.8f);
+
+                            Rectangle barFill = new Rectangle(x * TILE_SIZE + 2, (y - 1) * TILE_SIZE - 2,
+                                (int)((TILE_SIZE - 4) * (1f - progress)), 4);
+                            Color barColor = progress < 0.3f ? Color.Green : (progress < 0.7f ? Color.Yellow : Color.Red);
+                            spriteBatch.Draw(pixelTexture, barFill, barColor);
+                            DrawBorder(spriteBatch, pixelTexture, barBg, 1, Color.White * 0.5f);
+
+                            Color crackColor = Color.Black * 0.6f;
+                            int crackStage = (int)(progress * 3f);
+                            if (crackStage >= 1)
+                            {
+                                for (int c = 0; c < 3; c++)
+                                {
+                                    int startX = (int)(random.NextDouble() * TILE_SIZE);
+                                    int startY = (int)(random.NextDouble() * TILE_SIZE);
+                                    int length = (int)(TILE_SIZE * 0.3f);
+                                    int endX = startX + (int)(random.NextDouble() * length - length / 2);
+                                    int endY = startY + (int)(random.NextDouble() * length - length / 2);
+                                    DrawLine(spriteBatch, pixelTexture,
+                                        new Vector2(x * TILE_SIZE + startX, y * TILE_SIZE + startY),
+                                        new Vector2(x * TILE_SIZE + endX, y * TILE_SIZE + endY),
+                                        crackColor, 2);
+                                }
+                            }
+                            if (crackStage >= 2)
+                            {
+                                for (int c = 0; c < 5; c++)
+                                {
+                                    int startX = (int)(random.NextDouble() * TILE_SIZE);
+                                    int startY = (int)(random.NextDouble() * TILE_SIZE);
+                                    int length = (int)(TILE_SIZE * 0.5f);
+                                    int endX = startX + (int)(random.NextDouble() * length - length / 2);
+                                    int endY = startY + (int)(random.NextDouble() * length - length / 2);
+                                    DrawLine(spriteBatch, pixelTexture,
+                                        new Vector2(x * TILE_SIZE + startX, y * TILE_SIZE + startY),
+                                        new Vector2(x * TILE_SIZE + endX, y * TILE_SIZE + endY),
+                                        crackColor, 2);
+                                }
+                                Rectangle centerCrack = new Rectangle(x * TILE_SIZE + TILE_SIZE / 3,
+                                    y * TILE_SIZE + TILE_SIZE / 3, TILE_SIZE / 3, TILE_SIZE / 3);
+                                spriteBatch.Draw(pixelTexture, centerCrack, crackColor * 0.3f);
+                            }
+                        }
                     }
 
                     spriteBatch.Draw(pixelTexture, destRect, tileColor);
@@ -179,73 +399,65 @@ namespace Claude4_5Terraria.World
         {
             switch (type)
             {
-                case TileType.Grass:
-                    return new Color(34, 139, 34);  // Forest green (same as leaves for now)
-                case TileType.Dirt:
-                    return new Color(150, 75, 0);
-                case TileType.Stone:
-                    return new Color(128, 128, 128);
-                case TileType.Copper:
-                    return new Color(255, 140, 0);
-                case TileType.Silver:
-                    return new Color(192, 192, 192);
-                case TileType.Platinum:
-                    return new Color(144, 238, 144);
-                case TileType.Wood:
-                    return new Color(101, 67, 33);
-                case TileType.Leaves:
-                    return new Color(34, 139, 34);
-                case TileType.Coal:
-                    return new Color(40, 40, 40);  // Dark gray/black
-                case TileType.WoodCraftingBench:
-                    return new Color(120, 80, 40);
-                case TileType.Torch:
-                    return new Color(255, 200, 100);  // Bright yellow-orange
-                default:
-                    return Color.White;
+                case TileType.Grass: return new Color(34, 139, 34);
+                case TileType.Dirt: return new Color(150, 75, 0);
+                case TileType.Stone: return new Color(128, 128, 128);
+                case TileType.Copper: return new Color(255, 140, 0);
+                case TileType.Silver: return new Color(192, 192, 192);
+                case TileType.Platinum: return new Color(144, 238, 144);
+                case TileType.Wood: return new Color(101, 67, 33);
+                case TileType.Leaves: return new Color(34, 139, 34);
+                case TileType.Coal: return new Color(40, 40, 40);
+                case TileType.WoodCraftingBench: return new Color(120, 80, 40);
+                case TileType.CopperCraftingBench: return new Color(200, 100, 20);
+                case TileType.Torch: return new Color(255, 200, 100);
+                case TileType.Sapling: return new Color(100, 200, 100);
+                default: return Color.White;
             }
         }
 
         public int GetSurfaceHeight(int x)
         {
-            // Start from a known surface area and go down to find ground
             for (int y = 50; y < WORLD_HEIGHT; y++)
             {
                 Tile tile = GetTile(x, y);
-                if (tile != null && tile.IsActive && (tile.Type == TileType.Dirt || tile.Type == TileType.Grass || tile.Type == TileType.Stone))
+                if (tile != null && tile.IsActive &&
+                    (tile.Type == TileType.Dirt || tile.Type == TileType.Grass || tile.Type == TileType.Stone))
                 {
                     return y;
                 }
             }
             return 100;
         }
+
         public bool IsSolidAtPosition(int x, int y)
         {
-            // Check world borders
-            if (x <= 0 || x >= WORLD_WIDTH - 1)
-            {
-                return true;
-            }
+            // World borders - solid walls at edges
+            if (x <= 0 || x >= WORLD_WIDTH - 1) return true;
+            if (y <= 0 || y >= WORLD_HEIGHT - 1) return true; // Also add top border
 
-            if (y >= WORLD_HEIGHT - 1)
-            {
-                return true;
-            }
-
-            // Check tile
             Tile tile = GetTile(x, y);
-            if (tile == null || !tile.IsActive)
-            {
-                return false;
-            }
-
-            // Tree parts and torches are walk-through
-            if (tile.IsPartOfTree || tile.Type == TileType.Torch)
-            {
-                return false;
-            }
+            if (tile == null || !tile.IsActive) return false;
+            if (tile.IsPartOfTree || tile.Type == TileType.Torch || tile.Type == TileType.Sapling) return false;
 
             return true;
+        }
+
+        private void DrawLine(SpriteBatch spriteBatch, Texture2D pixel, Vector2 start, Vector2 end, Color color, int thickness)
+        {
+            Vector2 edge = end - start;
+            float angle = (float)Math.Atan2(edge.Y, edge.X);
+            spriteBatch.Draw(pixel,
+                new Rectangle((int)start.X, (int)start.Y, (int)edge.Length(), thickness),
+                null, color, angle, Vector2.Zero, SpriteEffects.None, 0);
+        }
+
+        private void DrawBorder(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle rect, int thickness, Color color)
+        {
+            spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, rect.Width, thickness), color);
+            spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
+            spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
+            spriteBatch.Draw(pixelTexture, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
         }
     }
 }

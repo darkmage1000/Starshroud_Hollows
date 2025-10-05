@@ -4,15 +4,17 @@
     {
         Air,
         Dirt,
-        Grass,      
+        Grass,
         Stone,
         Copper,
         Silver,
         Platinum,
         Wood,
         Leaves,
-        Coal, // new
-        WoodCraftingBench,  // ADD THIS
-        Torch
+        Coal,
+        Torch,
+        WoodCraftingBench,
+        CopperCraftingBench,  // ✅ NEW
+        Sapling
     }
 }
