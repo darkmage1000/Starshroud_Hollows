@@ -369,6 +369,8 @@ namespace Claude4_5Terraria.Systems
             int spawnX = Claude4_5Terraria.World.World.WORLD_WIDTH / 2;
             int surfaceY = world.GetSurfaceHeight(spawnX);
 
+            Logger.Log($"[SPAWN] Initial spawn X: {spawnX}, Surface tile Y: {surfaceY}");
+
             Claude4_5Terraria.World.Tile groundTile = world.GetTile(spawnX, surfaceY);
             if (groundTile == null || !groundTile.IsActive)
             {
@@ -386,6 +388,7 @@ namespace Claude4_5Terraria.Systems
                             spawnX = checkX;
                             surfaceY = checkY;
                             groundTile = checkGround;
+                            Logger.Log($"[SPAWN] Found valid ground at X: {spawnX}, Surface tile Y: {surfaceY}");
                             goto SpawnFound;
                         }
                     }
@@ -395,13 +398,20 @@ namespace Claude4_5Terraria.Systems
                 if (groundTile == null || !groundTile.IsActive)
                 {
                     surfaceY = SURFACE_LEVEL;
+                    Logger.Log($"[SPAWN] No ground found, using default surface level: {surfaceY}");
                 }
             }
 
-            int spawnTileY = surfaceY - 3;
-            int spawnPixelY = spawnTileY * Claude4_5Terraria.World.World.TILE_SIZE;
+            // Place player so bottom edge sits exactly on top of surface tile
+            // Add +1 to make player overlap slightly with ground (removes visual gap)
+            int surfacePixelY = surfaceY * Claude4_5Terraria.World.World.TILE_SIZE;
+            int spawnPixelY = surfacePixelY - playerPixelHeight + 1; // +1 for overlap
+            int spawnPixelX = spawnX * Claude4_5Terraria.World.World.TILE_SIZE;
 
-            Vector2 spawnPos = new Vector2(spawnX * Claude4_5Terraria.World.World.TILE_SIZE, spawnPixelY);
+            Vector2 spawnPos = new Vector2(spawnPixelX, spawnPixelY);
+
+            Logger.Log($"[SPAWN] Final spawn position: {spawnPos}");
+            Logger.Log($"[SPAWN] Player bottom: {spawnPixelY + playerPixelHeight}, Surface top: {surfacePixelY}");
 
             return spawnPos;
         }
