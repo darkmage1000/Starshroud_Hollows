@@ -34,6 +34,7 @@ namespace Claude4_5Terraria
         private MiningOverlay miningOverlay;
         private StartMenu startMenu;
         private SaveMenu saveMenu;
+        private LoadMenu loadMenu;
 
         private KeyboardState previousKeyboardState;
 
@@ -107,6 +108,9 @@ namespace Claude4_5Terraria
 
                 if (startMenu.GetState() == MenuState.Loading && !worldGenerated)
                 {
+                    Logger.Log($"[GAME] Menu transitioned to Loading state");
+                    Logger.Log($"[GAME] IsLoadingSavedGame: {startMenu.IsLoadingSavedGame()}");
+                    Logger.Log($"[GAME] LoadingSlotIndex: {startMenu.GetLoadingSlotIndex()}");
                     Task.Run(() => GenerateWorld());
                 }
 
@@ -226,8 +230,37 @@ namespace Claude4_5Terraria
             }
         }
 
+        private void QuitToMenu()
+        {
+            Logger.Log("[GAME] Quitting to main menu");
+
+            // Reset game state flags
+            worldGenerated = false;
+
+            // Clear game objects (they'll be recreated when starting/loading a new game)
+            world = null;
+            player = null;
+            camera = null;
+            inventory = null;
+            miningSystem = null;
+            lightingSystem = null;
+            timeSystem = null;
+            worldGenerator = null;
+            inventoryUI = null;
+            pauseMenu = null;
+            saveMenu = null;
+            miningOverlay = null;
+
+            // Return to main menu
+            startMenu.SetState(MenuState.MainMenu);
+
+            Logger.Log("[GAME] Returned to main menu");
+        }
+
         private void SaveGame(int slotIndex)
         {
+            Logger.Log($"[GAME] Saving game - Player position before save: {player.Position}");
+
             SaveData data = new SaveData
             {
                 SaveName = $"Starshroud Save {slotIndex + 1}",
@@ -236,8 +269,11 @@ namespace Claude4_5Terraria
                 GameTime = timeSystem.GetCurrentTime(),
                 WorldWidth = World.World.WORLD_WIDTH,
                 WorldHeight = World.World.WORLD_HEIGHT,
-                PlayTimeSeconds = (int)totalPlayTime
+                PlayTimeSeconds = (int)totalPlayTime,
+                TileChanges = world.GetModifiedTiles()
             };
+
+            Logger.Log($"[GAME] SaveData.PlayerPosition = {data.PlayerPosition}");
 
             for (int i = 0; i < inventory.GetSlotCount(); i++)
             {
@@ -283,8 +319,12 @@ namespace Claude4_5Terraria
 
             worldGenerator.Generate();
             world.EnableChunkUnloading();
+            world.EnableTileChangeTracking();  // CRITICAL FIX: Enable tracking BEFORE applying changes
 
             player = new Claude4_5Terraria.Player.Player(world, data.PlayerPosition);
+
+            // APPLY SAVED TILE CHANGES after world generation
+            world.ApplyTileChanges(data.TileChanges);
 
             camera = new Camera(GraphicsDevice.Viewport);
             camera.Position = player.Position;
@@ -304,7 +344,7 @@ namespace Claude4_5Terraria
 
             miningSystem = new MiningSystem(world, inventory);
             inventoryUI = new InventoryUI(inventory, miningSystem);
-            pauseMenu = new PauseMenu(OpenSaveMenu);
+            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu);  // UPDATED: Added QuitToMenu callback
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
 
@@ -318,17 +358,29 @@ namespace Claude4_5Terraria
         {
             if (startMenu.IsLoadingSavedGame())
             {
+                Logger.Log("[GAME] ===== LOADING SAVED GAME =====");
                 int slotIndex = startMenu.GetLoadingSlotIndex();
+                Logger.Log($"[GAME] Attempting to load from slot: {slotIndex}");
+
                 SaveData saveData = SaveSystem.LoadGame(slotIndex);
                 if (saveData != null)
                 {
+                    Logger.Log($"[GAME] Save data loaded successfully!");
+                    Logger.Log($"[GAME] Save name: {saveData.SaveName}");
+                    Logger.Log($"[GAME] Player position: {saveData.PlayerPosition}");
+                    Logger.Log($"[GAME] World seed: {saveData.WorldSeed}");
                     LoadGameFromSave(saveData);
                     return;
                 }
                 else
                 {
-                    Logger.Log("[GAME] Failed to load save, starting new game");
+                    Logger.Log("[GAME] ERROR: Failed to load save data - saveData is NULL");
+                    Logger.Log("[GAME] Starting new game instead");
                 }
+            }
+            else
+            {
+                Logger.Log("[GAME] ===== STARTING NEW GAME =====");
             }
 
             currentWorldSeed = System.Environment.TickCount;
@@ -347,6 +399,7 @@ namespace Claude4_5Terraria
 
             worldGenerator.Generate();
             world.EnableChunkUnloading();
+            world.EnableTileChangeTracking();  // CRITICAL FIX: Enable tracking for new games
 
             Vector2 spawnPosition = worldGenerator.GetSpawnPosition(64);
             player = new Claude4_5Terraria.Player.Player(world, spawnPosition);
@@ -357,7 +410,7 @@ namespace Claude4_5Terraria
             inventory = new Inventory();
             miningSystem = new MiningSystem(world, inventory);
             inventoryUI = new InventoryUI(inventory, miningSystem);
-            pauseMenu = new PauseMenu(OpenSaveMenu);
+            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu);  // UPDATED: Added QuitToMenu callback
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
 
