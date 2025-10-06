@@ -11,16 +11,20 @@ namespace Claude4_5Terraria.UI
         private KeyboardState previousKeyState;
         private MouseState previousMouseState;
         private Action onOpenSaveMenu;
+        private Action onQuitToMenu;
 
         private Rectangle saveButton;
+        private Rectangle quitButton;
         private bool saveButtonHovered;
+        private bool quitButtonHovered;
 
-        public PauseMenu(Action onOpenSaveMenu = null)
+        public PauseMenu(Action onOpenSaveMenu = null, Action onQuitToMenu = null)
         {
             isPaused = false;
             previousKeyState = Keyboard.GetState();
             previousMouseState = Mouse.GetState();
             this.onOpenSaveMenu = onOpenSaveMenu;
+            this.onQuitToMenu = onQuitToMenu;
         }
 
         public bool IsPaused => isPaused;
@@ -39,6 +43,7 @@ namespace Claude4_5Terraria.UI
             {
                 Point mousePoint = new Point(currentMouseState.X, currentMouseState.Y);
                 saveButtonHovered = saveButton.Contains(mousePoint);
+                quitButtonHovered = quitButton.Contains(mousePoint);
 
                 if (currentMouseState.LeftButton == ButtonState.Pressed &&
                     previousMouseState.LeftButton == ButtonState.Released)
@@ -46,6 +51,10 @@ namespace Claude4_5Terraria.UI
                     if (saveButtonHovered)
                     {
                         onOpenSaveMenu?.Invoke();
+                    }
+                    else if (quitButtonHovered)
+                    {
+                        onQuitToMenu?.Invoke();
                     }
                 }
             }
@@ -61,7 +70,7 @@ namespace Claude4_5Terraria.UI
             spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, screenWidth, screenHeight), Color.Black * 0.5f);
 
             int menuWidth = 600;
-            int menuHeight = 500;
+            int menuHeight = 550;
             Rectangle menuBg = new Rectangle(
                 (screenWidth - menuWidth) / 2,
                 (screenHeight - menuHeight) / 2,
@@ -108,9 +117,12 @@ namespace Claude4_5Terraria.UI
             DrawTextLine(spriteBatch, font, menuBg.X + 60, yPos, "M - Mute/Unmute", Color.White);
             yPos += lineHeight + 30;
 
-            // Save Game button
+            // Button dimensions
             int buttonWidth = 200;
             int buttonHeight = 50;
+            int buttonSpacing = 20;
+
+            // Save Game button
             saveButton = new Rectangle(
                 menuBg.X + (menuWidth - buttonWidth) / 2,
                 yPos,
@@ -118,18 +130,40 @@ namespace Claude4_5Terraria.UI
                 buttonHeight
             );
 
-            Color buttonColor = saveButtonHovered ? Color.DarkGreen : Color.DarkSlateGray;
-            spriteBatch.Draw(pixelTexture, saveButton, buttonColor);
+            Color saveButtonColor = saveButtonHovered ? Color.DarkGreen : Color.DarkSlateGray;
+            spriteBatch.Draw(pixelTexture, saveButton, saveButtonColor);
             DrawBorder(spriteBatch, pixelTexture, saveButton, 3, saveButtonHovered ? Color.Lime : Color.Gray);
 
-            string buttonText = "SAVE GAME";
-            Vector2 buttonTextSize = font.MeasureString(buttonText);
-            Vector2 buttonTextPos = new Vector2(
-                saveButton.X + (saveButton.Width - buttonTextSize.X) / 2,
-                saveButton.Y + (saveButton.Height - buttonTextSize.Y) / 2
+            string saveText = "SAVE GAME";
+            Vector2 saveTextSize = font.MeasureString(saveText);
+            Vector2 saveTextPos = new Vector2(
+                saveButton.X + (saveButton.Width - saveTextSize.X) / 2,
+                saveButton.Y + (saveButton.Height - saveTextSize.Y) / 2
             );
-            spriteBatch.DrawString(font, buttonText, buttonTextPos + new Vector2(1, 1), Color.Black);
-            spriteBatch.DrawString(font, buttonText, buttonTextPos, Color.White);
+            spriteBatch.DrawString(font, saveText, saveTextPos + new Vector2(1, 1), Color.Black);
+            spriteBatch.DrawString(font, saveText, saveTextPos, Color.White);
+
+            // Quit to Menu button
+            yPos += buttonHeight + buttonSpacing;
+            quitButton = new Rectangle(
+                menuBg.X + (menuWidth - buttonWidth) / 2,
+                yPos,
+                buttonWidth,
+                buttonHeight
+            );
+
+            Color quitButtonColor = quitButtonHovered ? Color.DarkRed : Color.DarkSlateGray;
+            spriteBatch.Draw(pixelTexture, quitButton, quitButtonColor);
+            DrawBorder(spriteBatch, pixelTexture, quitButton, 3, quitButtonHovered ? Color.Red : Color.Gray);
+
+            string quitText = "QUIT TO MENU";
+            Vector2 quitTextSize = font.MeasureString(quitText);
+            Vector2 quitTextPos = new Vector2(
+                quitButton.X + (quitButton.Width - quitTextSize.X) / 2,
+                quitButton.Y + (quitButton.Height - quitTextSize.Y) / 2
+            );
+            spriteBatch.DrawString(font, quitText, quitTextPos + new Vector2(1, 1), Color.Black);
+            spriteBatch.DrawString(font, quitText, quitTextPos, Color.White);
 
             string escText = "Press ESC to Resume";
             Vector2 escSize = font.MeasureString(escText);

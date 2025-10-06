@@ -61,7 +61,8 @@ namespace Claude4_5Terraria.UI
             loadingSavedGame = true;
             loadingSlotIndex = slotIndex;
             currentState = MenuState.Loading;
-            Logger.Log($"[MENU] Loading game from slot {slotIndex + 1}");
+            Logger.Log($"[MENU] Load slot {slotIndex + 1} selected - transitioning to Loading state");
+            Logger.Log($"[MENU] loadingSavedGame flag is now: {loadingSavedGame}");
         }
 
         public void SetLoadingProgress(float progress, string message)
@@ -77,6 +78,11 @@ namespace Claude4_5Terraria.UI
 
         public void Update(int screenWidth, int screenHeight)
         {
+            if (currentState == MenuState.Loading)
+            {
+                return;
+            }
+
             if (currentState == MenuState.Options)
             {
                 optionsMenu.Update(screenWidth, screenHeight);
@@ -92,7 +98,7 @@ namespace Claude4_5Terraria.UI
             {
                 loadMenu.Update(screenWidth, screenHeight);
 
-                if (!loadMenu.IsOpen)
+                if (!loadMenu.IsOpen && currentState != MenuState.Loading)
                 {
                     currentState = MenuState.MainMenu;
                 }
@@ -130,9 +136,10 @@ namespace Claude4_5Terraria.UI
                     loadingSlotIndex = -1;
                     currentState = MenuState.Loading;
                     Logger.Log("[MENU] Starting new game");
+                    Logger.Log($"[MENU] loadingSavedGame flag is: {loadingSavedGame}");
                     break;
                 case MENU_OPTION_LOAD:
-                    if (Systems.SaveSystem.AnySaveExists())
+                    if (SaveSystem.AnySaveExists())
                     {
                         currentState = MenuState.LoadMenu;
                         loadMenu.Open();
@@ -185,10 +192,46 @@ namespace Claude4_5Terraria.UI
                 spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, screenWidth, screenHeight), Color.Black * 0.9f);
             }
 
+            string title = "STARSHROUD HOLLOWS";
+            Vector2 titleSize = font.MeasureString(title);
+            float titleScale = 2.0f;
+            Vector2 titlePos = new Vector2(
+                (screenWidth - titleSize.X * titleScale) / 2,
+                screenHeight * 0.45f
+            );
+
+            spriteBatch.DrawString(font, title, titlePos + new Vector2(3, 3), Color.Black, 0f, Vector2.Zero, titleScale, SpriteEffects.None, 0f);
+            spriteBatch.DrawString(font, title, titlePos, Color.Gold, 0f, Vector2.Zero, titleScale, SpriteEffects.None, 0f);
+
             int startY = (int)(screenHeight * 0.58f);
             int spacing = 65;
 
-            DrawMenuOption(spriteBatch, font, "Play", startY, selectedOption == MENU_OPTION_PLAY, screenWidth);
+            if (loadingSavedGame && loadingSlotIndex >= 0)
+            {
+                string saveInfo = $"Ready to load: Slot {loadingSlotIndex + 1}";
+
+                Vector2 infoSize = font.MeasureString(saveInfo);
+
+                int infoY = startY - 100;
+                Vector2 infoPos = new Vector2((screenWidth - infoSize.X) / 2, infoY);
+
+                int padding = 20;
+                int boxWidth = (int)infoSize.X + padding * 2;
+                int boxHeight = 60;
+                Rectangle infoBox = new Rectangle(
+                    (screenWidth - boxWidth) / 2,
+                    infoY - padding,
+                    boxWidth,
+                    boxHeight
+                );
+                spriteBatch.Draw(pixelTexture, infoBox, Color.Black * 0.7f);
+                DrawBorder(spriteBatch, pixelTexture, infoBox, 2, Color.Yellow);
+
+                spriteBatch.DrawString(font, saveInfo, infoPos + new Vector2(1, 1), Color.Black);
+                spriteBatch.DrawString(font, saveInfo, infoPos, Color.Cyan);
+            }
+
+            DrawMenuOption(spriteBatch, font, loadingSavedGame ? "Play (Load Save)" : "Play", startY, selectedOption == MENU_OPTION_PLAY, screenWidth);
             DrawMenuOption(spriteBatch, font, "Load", startY + spacing, selectedOption == MENU_OPTION_LOAD, screenWidth);
             DrawMenuOption(spriteBatch, font, "Options", startY + spacing * 2, selectedOption == MENU_OPTION_OPTIONS, screenWidth);
 
@@ -202,7 +245,7 @@ namespace Claude4_5Terraria.UI
         private void DrawMenuOption(SpriteBatch spriteBatch, SpriteFont font, string text, int y, bool selected, int screenWidth)
         {
             bool isDisabled = false;
-            if (text == "Load" && !Systems.SaveSystem.AnySaveExists())
+            if (text == "Load" && !SaveSystem.AnySaveExists())
             {
                 isDisabled = true;
                 text = "Load (No Saves Found)";

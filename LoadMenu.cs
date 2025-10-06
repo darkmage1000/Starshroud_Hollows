@@ -18,6 +18,9 @@ namespace Claude4_5Terraria.UI
 
         private Action<int> onLoadSlot;
 
+        // CACHED save info - only load once when menu opens
+        private Systems.SaveSlotInfo[] cachedSaveInfo;
+
         public LoadMenu(Action<int> onLoadSlot)
         {
             this.onLoadSlot = onLoadSlot;
@@ -25,6 +28,7 @@ namespace Claude4_5Terraria.UI
             previousMouseState = Mouse.GetState();
             previousKeyState = Keyboard.GetState();
             slotButtons = new Rectangle[3];
+            cachedSaveInfo = new Systems.SaveSlotInfo[3];
             hoveredSlot = -1;
             selectedSlot = -1;
         }
@@ -36,6 +40,12 @@ namespace Claude4_5Terraria.UI
         {
             isOpen = true;
             selectedSlot = -1;
+
+            // LOAD save info ONCE when opening menu
+            for (int i = 0; i < 3; i++)
+            {
+                cachedSaveInfo[i] = Systems.SaveSystem.GetSaveSlotInfo(i);
+            }
         }
 
         public void Close()
@@ -95,7 +105,7 @@ namespace Claude4_5Terraria.UI
                 {
                     Close();
                 }
-                else if (hoveredSlot >= 0 && Systems.SaveSystem.SaveExists(hoveredSlot))
+                else if (hoveredSlot >= 0 && cachedSaveInfo[hoveredSlot].HasSave)
                 {
                     selectedSlot = hoveredSlot;
                     onLoadSlot?.Invoke(selectedSlot);
@@ -141,7 +151,9 @@ namespace Claude4_5Terraria.UI
             for (int i = 0; i < 3; i++)
             {
                 Rectangle slotRect = slotButtons[i];
-                Systems.SaveSlotInfo slotInfo = Systems.SaveSystem.GetSaveSlotInfo(i);
+
+                // USE CACHED save info instead of loading from disk every frame!
+                Systems.SaveSlotInfo slotInfo = cachedSaveInfo[i];
 
                 bool canLoad = slotInfo.HasSave;
                 Color slotColor = canLoad ? (hoveredSlot == i ? Color.Gray : Color.DarkGray) : Color.Black;
