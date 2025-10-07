@@ -9,8 +9,23 @@ namespace Claude4_5Terraria.Systems
     {
         public string SaveName { get; set; }
         public int WorldSeed { get; set; }
-        public Vector2 PlayerPosition { get; set; }
+
+        public float PlayerPositionX { get; set; }
+        public float PlayerPositionY { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public Vector2 PlayerPosition
+        {
+            get => new Vector2(PlayerPositionX, PlayerPositionY);
+            set
+            {
+                PlayerPositionX = value.X;
+                PlayerPositionY = value.Y;
+            }
+        }
+
         public List<InventorySlotData> InventorySlots { get; set; }
+        public List<TileChangeData> TileChanges { get; set; }  // NEW: Track tile changes
         public float GameTime { get; set; }
         public string SaveDate { get; set; }
         public int WorldWidth { get; set; }
@@ -20,8 +35,11 @@ namespace Claude4_5Terraria.Systems
         public SaveData()
         {
             InventorySlots = new List<InventorySlotData>();
+            TileChanges = new List<TileChangeData>();
             SaveDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             SaveName = "Unnamed Save";
+            PlayerPositionX = 0;
+            PlayerPositionY = 0;
         }
     }
 
@@ -30,6 +48,15 @@ namespace Claude4_5Terraria.Systems
     {
         public int ItemType { get; set; }
         public int Count { get; set; }
+    }
+
+    [Serializable]
+    public class TileChangeData
+    {
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int TileType { get; set; }
+        public bool IsActive { get; set; }
     }
 
     [Serializable]

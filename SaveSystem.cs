@@ -47,6 +47,7 @@ namespace Claude4_5Terraria.Systems
             return false;
         }
 
+        // This method is called by UI to check slot status - DON'T log here!
         public static SaveSlotInfo GetSaveSlotInfo(int slotIndex)
         {
             if (!SaveExists(slotIndex))
@@ -107,6 +108,7 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
+        // This method is for ACTUAL loading attempts - log only here
         public static SaveData LoadGame(int slotIndex)
         {
             if (slotIndex < 0 || slotIndex >= MAX_SAVE_SLOTS)
@@ -121,6 +123,7 @@ namespace Claude4_5Terraria.Systems
 
                 if (!File.Exists(savePath))
                 {
+                    // Only log when actually trying to load, not during UI checks
                     Logger.Log($"[SAVE] No save file found in slot {slotIndex + 1}");
                     return null;
                 }

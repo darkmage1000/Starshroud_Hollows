@@ -2,203 +2,153 @@
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
+using Claude4_5Terraria.Systems;
 
 namespace Claude4_5Terraria.UI
 {
     public class SaveMenu
     {
-        private bool isOpen;
-        private MouseState previousMouseState;
+        public bool IsOpen { get; private set; }
+
+        private int selectedSlot;
+        private const int TOTAL_SLOTS = 3;
         private KeyboardState previousKeyState;
+        private Action<int> onSaveCallback;
 
-        private Rectangle[] slotButtons;
-        private Rectangle closeButton;
-        private int hoveredSlot;
+        // CACHED save info - only check once when menu opens
+        private SaveSlotInfo[] cachedSlotInfo;
 
-        private Action<int> onSaveToSlot;
-        private string statusMessage;
-        private float statusMessageTimer;
-
-        public SaveMenu(Action<int> onSaveToSlot)
+        public SaveMenu(Action<int> onSaveCallback)
         {
-            this.onSaveToSlot = onSaveToSlot;
-            isOpen = false;
-            previousMouseState = Mouse.GetState();
+            this.onSaveCallback = onSaveCallback;
+            IsOpen = false;
+            selectedSlot = 0;
             previousKeyState = Keyboard.GetState();
-            slotButtons = new Rectangle[3];
-            hoveredSlot = -1;
-            statusMessage = "";
-            statusMessageTimer = 0f;
+            cachedSlotInfo = new SaveSlotInfo[TOTAL_SLOTS];
         }
-
-        public bool IsOpen => isOpen;
 
         public void Open()
         {
-            isOpen = true;
-            statusMessage = "";
+            IsOpen = true;
+            selectedSlot = 0;
+
+            // Cache save slot info ONCE when menu opens, not every frame!
+            for (int i = 0; i < TOTAL_SLOTS; i++)
+            {
+                cachedSlotInfo[i] = SaveSystem.GetSaveSlotInfo(i);
+            }
         }
 
         public void Close()
         {
-            isOpen = false;
-        }
-
-        public void SetStatusMessage(string message)
-        {
-            statusMessage = message;
-            statusMessageTimer = 3f;
+            IsOpen = false;
         }
 
         public void Update(float deltaTime, int screenWidth, int screenHeight)
         {
-            if (!isOpen) return;
-
-            if (statusMessageTimer > 0)
-            {
-                statusMessageTimer -= deltaTime;
-            }
+            if (!IsOpen) return;
 
             KeyboardState keyState = Keyboard.GetState();
-            MouseState mouseState = Mouse.GetState();
+
+            if (keyState.IsKeyDown(Keys.Down) && !previousKeyState.IsKeyDown(Keys.Down))
+            {
+                selectedSlot = (selectedSlot + 1) % TOTAL_SLOTS;
+            }
+
+            if (keyState.IsKeyDown(Keys.Up) && !previousKeyState.IsKeyDown(Keys.Up))
+            {
+                selectedSlot = (selectedSlot - 1 + TOTAL_SLOTS) % TOTAL_SLOTS;
+            }
+
+            if (keyState.IsKeyDown(Keys.Enter) && !previousKeyState.IsKeyDown(Keys.Enter))
+            {
+                onSaveCallback?.Invoke(selectedSlot);
+                Close();
+            }
 
             if (keyState.IsKeyDown(Keys.Escape) && !previousKeyState.IsKeyDown(Keys.Escape))
             {
                 Close();
             }
 
-            int panelWidth = 700;
-            int panelHeight = 500;
-            int panelX = (screenWidth - panelWidth) / 2;
-            int panelY = (screenHeight - panelHeight) / 2;
-
-            int slotHeight = 80;
-            int slotSpacing = 20;
-            int startY = panelY + 100;
-
-            for (int i = 0; i < 3; i++)
-            {
-                slotButtons[i] = new Rectangle(
-                    panelX + 50,
-                    startY + i * (slotHeight + slotSpacing),
-                    panelWidth - 100,
-                    slotHeight
-                );
-            }
-
-            closeButton = new Rectangle(panelX + panelWidth - 120, panelY + 20, 100, 40);
-
-            Point mousePoint = new Point(mouseState.X, mouseState.Y);
-            hoveredSlot = -1;
-
-            for (int i = 0; i < 3; i++)
-            {
-                if (slotButtons[i].Contains(mousePoint))
-                {
-                    hoveredSlot = i;
-                    break;
-                }
-            }
-
-            if (mouseState.LeftButton == ButtonState.Pressed &&
-                previousMouseState.LeftButton == ButtonState.Released)
-            {
-                if (closeButton.Contains(mousePoint))
-                {
-                    Close();
-                }
-                else if (hoveredSlot >= 0)
-                {
-                    onSaveToSlot?.Invoke(hoveredSlot);
-                    SetStatusMessage($"Game saved to Slot {hoveredSlot + 1}!");
-                }
-            }
-
-            previousMouseState = mouseState;
             previousKeyState = keyState;
         }
 
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight)
         {
-            if (!isOpen) return;
+            if (!IsOpen) return;
 
-            spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, screenWidth, screenHeight), Color.Black * 0.7f);
+            spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, screenWidth, screenHeight), Color.Black * 0.8f);
 
-            int panelWidth = 700;
-            int panelHeight = 500;
-            int panelX = (screenWidth - panelWidth) / 2;
-            int panelY = (screenHeight - panelHeight) / 2;
+            int menuWidth = 600;
+            int menuHeight = 400;
+            int menuX = (screenWidth - menuWidth) / 2;
+            int menuY = (screenHeight - menuHeight) / 2;
 
-            Rectangle panelBg = new Rectangle(panelX, panelY, panelWidth, panelHeight);
-            spriteBatch.Draw(pixelTexture, panelBg, Color.DarkSlateGray);
-            DrawBorder(spriteBatch, pixelTexture, panelBg, 3, Color.White);
+            Rectangle menuBg = new Rectangle(menuX, menuY, menuWidth, menuHeight);
+            spriteBatch.Draw(pixelTexture, menuBg, Color.Black * 0.9f);
+            DrawBorder(spriteBatch, pixelTexture, menuBg, 3, Color.White);
 
-            string title = "SAVE GAME";
+            string title = "Save Game";
             Vector2 titleSize = font.MeasureString(title);
-            Vector2 titlePos = new Vector2(panelX + (panelWidth - titleSize.X) / 2, panelY + 30);
+            Vector2 titlePos = new Vector2((screenWidth - titleSize.X) / 2, menuY + 30);
             spriteBatch.DrawString(font, title, titlePos + new Vector2(1, 1), Color.Black);
-            spriteBatch.DrawString(font, title, titlePos, Color.White);
+            spriteBatch.DrawString(font, title, titlePos, Color.Gold);
 
-            spriteBatch.Draw(pixelTexture, closeButton, hoveredSlot == -2 ? Color.Red : Color.DarkRed);
-            DrawBorder(spriteBatch, pixelTexture, closeButton, 2, Color.White);
-            string closeText = "Close";
-            Vector2 closeTextSize = font.MeasureString(closeText);
-            Vector2 closeTextPos = new Vector2(
-                closeButton.X + (closeButton.Width - closeTextSize.X) / 2,
-                closeButton.Y + (closeButton.Height - closeTextSize.Y) / 2
-            );
-            spriteBatch.DrawString(font, closeText, closeTextPos, Color.White);
+            int slotStartY = menuY + 100;
+            int slotSpacing = 80;
 
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < TOTAL_SLOTS; i++)
             {
-                Rectangle slotRect = slotButtons[i];
-                Systems.SaveSlotInfo slotInfo = Systems.SaveSystem.GetSaveSlotInfo(i);
-
-                Color slotColor = hoveredSlot == i ? Color.Gray : Color.DarkGray;
-                spriteBatch.Draw(pixelTexture, slotRect, slotColor);
-                DrawBorder(spriteBatch, pixelTexture, slotRect, 3, hoveredSlot == i ? Color.Yellow : Color.Gray);
-
-                string slotText = $"Slot {i + 1}";
-                Vector2 slotTextPos = new Vector2(slotRect.X + 20, slotRect.Y + 10);
-                spriteBatch.DrawString(font, slotText, slotTextPos + new Vector2(1, 1), Color.Black);
-                spriteBatch.DrawString(font, slotText, slotTextPos, Color.Cyan);
-
-                if (slotInfo.HasSave)
-                {
-                    string nameText = slotInfo.SaveName;
-                    Vector2 nameTextPos = new Vector2(slotRect.X + 20, slotRect.Y + 35);
-                    spriteBatch.DrawString(font, nameText, nameTextPos, Color.White);
-
-                    string dateText = slotInfo.SaveDate;
-                    Vector2 dateTextPos = new Vector2(slotRect.X + 20, slotRect.Y + 55);
-                    spriteBatch.DrawString(font, dateText, dateTextPos, Color.LightGray);
-                }
-                else
-                {
-                    string emptyText = "Empty Slot";
-                    Vector2 emptyTextPos = new Vector2(slotRect.X + 20, slotRect.Y + 45);
-                    spriteBatch.DrawString(font, emptyText, emptyTextPos, Color.DarkGray);
-                }
+                DrawSaveSlot(spriteBatch, pixelTexture, font, i, slotStartY + (i * slotSpacing),
+                    i == selectedSlot, screenWidth, menuWidth);
             }
 
-            if (statusMessageTimer > 0)
-            {
-                Vector2 statusSize = font.MeasureString(statusMessage);
-                Vector2 statusPos = new Vector2(
-                    panelX + (panelWidth - statusSize.X) / 2,
-                    panelY + panelHeight - 60
-                );
-                spriteBatch.DrawString(font, statusMessage, statusPos + new Vector2(1, 1), Color.Black);
-                spriteBatch.DrawString(font, statusMessage, statusPos, Color.Lime);
-            }
-
-            string instructions = "Click a slot to save | ESC to close";
+            string instructions = "Arrow Keys: Navigate | Enter: Save | Escape: Cancel";
             Vector2 instructSize = font.MeasureString(instructions);
-            Vector2 instructPos = new Vector2(
-                panelX + (panelWidth - instructSize.X) / 2,
-                panelY + panelHeight - 30
-            );
-            spriteBatch.DrawString(font, instructions, instructPos, Color.Gray);
+            Vector2 instructPos = new Vector2((screenWidth - instructSize.X) / 2, menuY + menuHeight - 40);
+            spriteBatch.DrawString(font, instructions, instructPos + new Vector2(1, 1), Color.Black);
+            spriteBatch.DrawString(font, instructions, instructPos, Color.LightGray);
+        }
+
+        private void DrawSaveSlot(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font,
+            int slotIndex, int y, bool selected, int screenWidth, int menuWidth)
+        {
+            string slotText = $"Slot {slotIndex + 1}";
+
+            // USE CACHED slot info instead of calling LoadGame every frame!
+            SaveSlotInfo slotInfo = cachedSlotInfo[slotIndex];
+
+            if (slotInfo.HasSave)
+            {
+                slotText += $" - {slotInfo.SaveName}";
+            }
+            else
+            {
+                slotText += " - Empty";
+            }
+
+            Vector2 textSize = font.MeasureString(slotText);
+            Vector2 textPos = new Vector2((screenWidth - textSize.X) / 2, y);
+
+            Color textColor = selected ? Color.Yellow : Color.White;
+
+            if (selected)
+            {
+                int slotBgWidth = (int)textSize.X + 40;
+                int slotBgHeight = (int)textSize.Y + 20;
+                Rectangle slotBg = new Rectangle(
+                    (int)textPos.X - 20,
+                    (int)textPos.Y - 10,
+                    slotBgWidth,
+                    slotBgHeight
+                );
+                spriteBatch.Draw(pixelTexture, slotBg, Color.Yellow * 0.2f);
+                DrawBorder(spriteBatch, pixelTexture, slotBg, 2, Color.Yellow);
+            }
+
+            spriteBatch.DrawString(font, slotText, textPos + new Vector2(1, 1), Color.Black);
+            spriteBatch.DrawString(font, slotText, textPos, textColor);
         }
 
         private void DrawBorder(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle rect, int thickness, Color color)

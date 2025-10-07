@@ -1,9 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Claude4_5Terraria.Enums;
+using Claude4_5Terraria.Player;
+using Claude4_5Terraria.Systems;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.Enums;
-using Claude4_5Terraria.Systems;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Claude4_5Terraria.World
 {
@@ -20,11 +22,13 @@ namespace Claude4_5Terraria.World
 
         private List<Tree> trees;
         private Dictionary<Point, Tree> tileToTreeMap;
+        private Dictionary<Point, Tile> modifiedTiles;
         private List<Sapling> saplings;
 
         private Random random;
 
         private bool allowChunkUnloading = false;
+        private bool trackTileChanges = false;
 
         private HashSet<Point> exploredTiles;
 
@@ -38,6 +42,8 @@ namespace Claude4_5Terraria.World
             tileToTreeMap = new Dictionary<Point, Tree>();
             saplings = new List<Sapling>();
             exploredTiles = new HashSet<Point>();
+            modifiedTiles = new Dictionary<Point, Tile>();
+            trackTileChanges = false;
 
             random = new Random();
         }
@@ -46,6 +52,13 @@ namespace Claude4_5Terraria.World
         {
             allowChunkUnloading = true;
             Logger.Log("[WORLD] Chunk unloading enabled - world generation complete");
+        }
+
+        public void EnableTileChangeTracking()
+        {
+            trackTileChanges = true;
+            modifiedTiles.Clear();
+            Logger.Log("[WORLD] Tile change tracking enabled - now tracking player changes only");
         }
 
         public void AddTree(Tree tree)
@@ -151,10 +164,8 @@ namespace Claude4_5Terraria.World
         public void UpdateLoadedChunks(Camera camera)
         {
             Rectangle visibleArea = camera.GetVisibleArea(TILE_SIZE);
-
             int preload = 1;
             int pixelsPerChunk = TILE_SIZE * Chunk.CHUNK_SIZE;
-
             int startChunkX = Math.Max(0, visibleArea.Left / pixelsPerChunk - preload);
             int startChunkY = Math.Max(0, visibleArea.Top / pixelsPerChunk - preload);
             int endChunkX = Math.Min(chunksWide - 1, (visibleArea.Right + pixelsPerChunk - 1) / pixelsPerChunk + preload);
@@ -199,6 +210,12 @@ namespace Claude4_5Terraria.World
 
             tile.IsActive = (tile.Type != TileType.Air);
 
+            // DEBUG: Log when player mines/ places
+            if (trackTileChanges && tile.Type == TileType.Air)
+            {
+                Logger.Log($"[WORLD] Player mined tile at ({worldX}, {worldY})");
+            }
+
             int chunkX = worldX / Chunk.CHUNK_SIZE;
             int chunkY = worldY / Chunk.CHUNK_SIZE;
             int localX = worldX % Chunk.CHUNK_SIZE;
@@ -214,6 +231,12 @@ namespace Claude4_5Terraria.World
             }
 
             loadedChunks[chunkPos].SetTile(localX, localY, tile);
+
+            if (trackTileChanges)
+            {
+                Point tilePos = new Point(worldX, worldY);
+                modifiedTiles[tilePos] = tile;
+            }
         }
 
         public Tile GetTile(int worldX, int worldY)
@@ -235,11 +258,56 @@ namespace Claude4_5Terraria.World
             return null;
         }
 
+        public List<TileChangeData> GetModifiedTiles()
+        {
+            List<TileChangeData> changes = new List<TileChangeData>();
+
+            foreach (var kvp in modifiedTiles)
+            {
+                changes.Add(new TileChangeData
+                {
+                    X = kvp.Key.X,
+                    Y = kvp.Key.Y,
+                    TileType = (int)kvp.Value.Type,
+                    IsActive = kvp.Value.IsActive
+                });
+            }
+
+            Logger.Log($"[WORLD] Saving {changes.Count} modified tiles");
+            return changes;
+        }
+
+        public void ApplyTileChanges(List<TileChangeData> changes)
+        {
+            if (changes == null || changes.Count == 0)
+            {
+                Logger.Log("[WORLD] No tile changes to apply");
+                return;
+            }
+
+            Logger.Log($"[WORLD] Applying {changes.Count} tile changes from save file");
+
+            // CRITICAL FIX: Temporarily disable tracking while applying saved changes
+            bool wasTracking = trackTileChanges;
+            trackTileChanges = false;
+
+            foreach (var change in changes)
+            {
+                Tile tile = new Tile((TileType)change.TileType, change.IsActive);
+                SetTile(change.X, change.Y, tile);
+            }
+
+            // Re-enable tracking if it was enabled
+            trackTileChanges = wasTracking;
+
+            Logger.Log("[WORLD] Tile changes applied successfully");
+        }
+
         public void MarkAreaAsExplored(Vector2 playerCenter)
         {
             int centerTileX = (int)(playerCenter.X / TILE_SIZE);
             int centerTileY = (int)(playerCenter.Y / TILE_SIZE);
-            int radius = 2; // Changed from 10 to 2 - only 2 tiles around player
+            int radius = 2;
 
             for (int dx = -radius; dx <= radius; dx++)
             {
@@ -432,9 +500,8 @@ namespace Claude4_5Terraria.World
 
         public bool IsSolidAtPosition(int x, int y)
         {
-            // World borders - solid walls at edges
             if (x <= 0 || x >= WORLD_WIDTH - 1) return true;
-            if (y <= 0 || y >= WORLD_HEIGHT - 1) return true; // Also add top border
+            if (y <= 0 || y >= WORLD_HEIGHT - 1) return true;
 
             Tile tile = GetTile(x, y);
             if (tile == null || !tile.IsActive) return false;
