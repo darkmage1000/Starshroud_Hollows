@@ -20,6 +20,7 @@ namespace Claude4_5Terraria.UI
         private MenuState currentState;
         private int selectedOption;
         private KeyboardState previousKeyState;
+        private MouseState previousMouseState;
 
         private float loadingProgress;
         private string loadingMessage;
@@ -34,16 +35,24 @@ namespace Claude4_5Terraria.UI
         private const int MENU_OPTION_PLAY = 0;
         private const int MENU_OPTION_LOAD = 1;
         private const int MENU_OPTION_OPTIONS = 2;
-        private const int MENU_OPTIONS_COUNT = 3;
+        private const int MENU_OPTION_QUIT = 3;
+        private const int MENU_OPTIONS_COUNT = 4;
+        
+        // Button rectangles for click detection
+        private Rectangle playButton;
+        private Rectangle loadButton;
+        private Rectangle optionsButton;
+        private Rectangle quitButton;
 
-        public StartMenu(float initialMusicVolume, Action<float> onMusicVolumeChanged, Texture2D backgroundTexture = null)
+        public StartMenu(float initialMusicVolume, Action<float> onMusicVolumeChanged, Action onToggleFullscreen, Texture2D backgroundTexture = null)
         {
             currentState = MenuState.MainMenu;
             selectedOption = 0;
             previousKeyState = Keyboard.GetState();
+            previousMouseState = Mouse.GetState();
             loadingProgress = 0f;
             loadingMessage = "Generating world...";
-            optionsMenu = new OptionsMenu(initialMusicVolume, onMusicVolumeChanged);
+            optionsMenu = new OptionsMenu(initialMusicVolume, onMusicVolumeChanged, onToggleFullscreen);
             loadMenu = new LoadMenu(OnLoadSlotSelected);
             this.backgroundTexture = backgroundTexture;
             loadingSavedGame = false;
@@ -108,7 +117,45 @@ namespace Claude4_5Terraria.UI
             if (currentState != MenuState.MainMenu) return;
 
             KeyboardState keyState = Keyboard.GetState();
+            MouseState mouseState = Mouse.GetState();
+            Point mousePoint = new Point(mouseState.X, mouseState.Y);
 
+            // Check mouse hover for visual feedback
+            if (playButton.Contains(mousePoint))
+                selectedOption = MENU_OPTION_PLAY;
+            else if (loadButton.Contains(mousePoint))
+                selectedOption = MENU_OPTION_LOAD;
+            else if (optionsButton.Contains(mousePoint))
+                selectedOption = MENU_OPTION_OPTIONS;
+            else if (quitButton.Contains(mousePoint))
+                selectedOption = MENU_OPTION_QUIT;
+
+            // Mouse click handling
+            if (mouseState.LeftButton == ButtonState.Pressed && previousMouseState.LeftButton == ButtonState.Released)
+            {
+                if (playButton.Contains(mousePoint))
+                {
+                    selectedOption = MENU_OPTION_PLAY;
+                    HandleMenuSelection();
+                }
+                else if (loadButton.Contains(mousePoint))
+                {
+                    selectedOption = MENU_OPTION_LOAD;
+                    HandleMenuSelection();
+                }
+                else if (optionsButton.Contains(mousePoint))
+                {
+                    selectedOption = MENU_OPTION_OPTIONS;
+                    HandleMenuSelection();
+                }
+                else if (quitButton.Contains(mousePoint))
+                {
+                    selectedOption = MENU_OPTION_QUIT;
+                    HandleMenuSelection();
+                }
+            }
+
+            // Keyboard navigation (still works)
             if (keyState.IsKeyDown(Keys.Down) && !previousKeyState.IsKeyDown(Keys.Down))
             {
                 selectedOption = (selectedOption + 1) % MENU_OPTIONS_COUNT;
@@ -125,6 +172,7 @@ namespace Claude4_5Terraria.UI
             }
 
             previousKeyState = keyState;
+            previousMouseState = mouseState;
         }
 
         private void HandleMenuSelection()
@@ -154,6 +202,10 @@ namespace Claude4_5Terraria.UI
                     currentState = MenuState.Options;
                     optionsMenu.Open();
                     Logger.Log("[MENU] Opening options");
+                    break;
+                case MENU_OPTION_QUIT:
+                    Logger.Log("[MENU] Quitting game");
+                    Environment.Exit(0);
                     break;
             }
         }
@@ -205,6 +257,8 @@ namespace Claude4_5Terraria.UI
 
             int startY = (int)(screenHeight * 0.58f);
             int spacing = 65;
+            int buttonWidth = 300;
+            int buttonHeight = 55;
 
             if (loadingSavedGame && loadingSlotIndex >= 0)
             {
@@ -231,47 +285,52 @@ namespace Claude4_5Terraria.UI
                 spriteBatch.DrawString(font, saveInfo, infoPos, Color.Cyan);
             }
 
-            DrawMenuOption(spriteBatch, font, loadingSavedGame ? "Play (Load Save)" : "Play", startY, selectedOption == MENU_OPTION_PLAY, screenWidth);
-            DrawMenuOption(spriteBatch, font, "Load", startY + spacing, selectedOption == MENU_OPTION_LOAD, screenWidth);
-            DrawMenuOption(spriteBatch, font, "Options", startY + spacing * 2, selectedOption == MENU_OPTION_OPTIONS, screenWidth);
+            // Create button rectangles
+            playButton = new Rectangle((screenWidth - buttonWidth) / 2, startY, buttonWidth, buttonHeight);
+            loadButton = new Rectangle((screenWidth - buttonWidth) / 2, startY + spacing, buttonWidth, buttonHeight);
+            optionsButton = new Rectangle((screenWidth - buttonWidth) / 2, startY + spacing * 2, buttonWidth, buttonHeight);
+            quitButton = new Rectangle((screenWidth - buttonWidth) / 2, startY + spacing * 3, buttonWidth, buttonHeight);
 
-            string instructions = "Arrow Keys to Navigate | Enter to Select";
+            DrawMenuButton(spriteBatch, pixelTexture, font, playButton, loadingSavedGame ? "Play (Load Save)" : "Play", selectedOption == MENU_OPTION_PLAY, screenWidth);
+            DrawMenuButton(spriteBatch, pixelTexture, font, loadButton, "Load", selectedOption == MENU_OPTION_LOAD, screenWidth, !SaveSystem.AnySaveExists());
+            DrawMenuButton(spriteBatch, pixelTexture, font, optionsButton, "Options", selectedOption == MENU_OPTION_OPTIONS, screenWidth);
+            DrawMenuButton(spriteBatch, pixelTexture, font, quitButton, "Quit", selectedOption == MENU_OPTION_QUIT, screenWidth);
+
+            string instructions = "Click buttons or use Arrow Keys + Enter";
             Vector2 instructSize = font.MeasureString(instructions);
             Vector2 instructPos = new Vector2((screenWidth - instructSize.X) / 2, screenHeight - 80);
             spriteBatch.DrawString(font, instructions, instructPos + new Vector2(1, 1), Color.Black);
             spriteBatch.DrawString(font, instructions, instructPos, Color.LightGray);
         }
 
-        private void DrawMenuOption(SpriteBatch spriteBatch, SpriteFont font, string text, int y, bool selected, int screenWidth)
+        private void DrawMenuButton(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, Rectangle buttonRect, string text, bool isSelected, int screenWidth, bool isDisabled = false)
         {
-            bool isDisabled = false;
-            if (text == "Load" && !SaveSystem.AnySaveExists())
+            if (isDisabled && text == "Load")
             {
-                isDisabled = true;
                 text = "Load (No Saves Found)";
             }
 
+            // Button background
+            Color bgColor = isDisabled ? Color.DarkGray * 0.5f : (isSelected ? Color.Yellow * 0.3f : Color.Black * 0.6f);
+            spriteBatch.Draw(pixelTexture, buttonRect, bgColor);
+
+            // Button border
+            Color borderColor = isDisabled ? Color.DarkGray : (isSelected ? Color.Yellow : Color.White);
+            int borderThickness = isSelected ? 3 : 2;
+            DrawBorder(spriteBatch, pixelTexture, buttonRect, borderThickness, borderColor);
+
+            // Button text
             Vector2 textSize = font.MeasureString(text);
-            Vector2 textPos = new Vector2((screenWidth - textSize.X) / 2, y);
+            Vector2 textPos = new Vector2(
+                buttonRect.X + (buttonRect.Width - textSize.X) / 2,
+                buttonRect.Y + (buttonRect.Height - textSize.Y) / 2
+            );
 
-            Color textColor;
-            if (isDisabled)
-            {
-                textColor = Color.DarkGray;
-            }
-            else
-            {
-                textColor = selected ? Color.Yellow : Color.White;
-            }
-
-            if (selected && !isDisabled)
-            {
-                string arrow = "> ";
-                Vector2 arrowPos = new Vector2(textPos.X - 40, y);
-                spriteBatch.DrawString(font, arrow, arrowPos, Color.Yellow);
-            }
-
-            spriteBatch.DrawString(font, text, textPos + new Vector2(1, 1), Color.Black);
+            Color textColor = isDisabled ? Color.DarkGray : (isSelected ? Color.Yellow : Color.White);
+            
+            // Text shadow
+            spriteBatch.DrawString(font, text, textPos + new Vector2(2, 2), Color.Black);
+            // Text
             spriteBatch.DrawString(font, text, textPos, textColor);
         }
 

@@ -10,8 +10,8 @@ namespace Claude4_5Terraria.Systems
         private World.World world;
         private TimeSystem timeSystem;
 
-        private const float TORCH_RADIUS = 10f;
-        private const float TORCH_BRIGHTNESS = 2.5f;
+        private const float TORCH_RADIUS = 12f;  // Increased radius
+        private const float TORCH_BRIGHTNESS = 3.5f;  // Increased brightness
 
         private Dictionary<Point, float> lightMap;
         private List<Point> torchPositions;
@@ -71,8 +71,9 @@ namespace Claude4_5Terraria.Systems
             float ambientLight = timeSystem.GetAmbientLight();
             float sunlight = CalculateSunlight(tileX, tileY, ambientLight);
             float torchLight = CalculateTorchLight(tileX, tileY);
+            float exploredLight = world.IsTileExplored(tileX, tileY) ? 0.15f : 0f; // Slight glow for explored areas
 
-            float finalLight = Math.Max(sunlight, torchLight);
+            float finalLight = Math.Max(Math.Max(sunlight, torchLight), exploredLight);
 
             return Math.Min(1.0f, finalLight);
         }
@@ -110,14 +111,8 @@ namespace Claude4_5Terraria.Systems
 
             if (blockedBySolid)
             {
-                bool explored = world.IsTileExplored(tileX, tileY);
-
-                if (explored)
-                {
-                    return 0.15f;
-                }
-
-                return 0.0f;
+                // Underground ambient light - very dim
+                return 0.05f;
             }
 
             if (underLeaves)
@@ -176,7 +171,8 @@ namespace Claude4_5Terraria.Systems
 
             for (; n > 0; --n)
             {
-                if (x != fromX || y != fromY)
+                // Don't check the starting torch position or the target position
+                if ((x != fromX || y != fromY) && (x != toX || y != toY))
                 {
                     World.Tile tile = world.GetTile(x, y);
 
@@ -187,6 +183,7 @@ namespace Claude4_5Terraria.Systems
                             tile.Type != TileType.Wood &&
                             tile.Type != TileType.Sapling)
                         {
+                            // Found a blocking tile before reaching target
                             return true;
                         }
                     }

@@ -371,6 +371,22 @@ namespace Claude4_5Terraria.Systems
 
             Logger.Log($"[SPAWN] Initial spawn X: {spawnX}, Surface tile Y: {surfaceY}");
 
+            // Clear any trees at spawn point (5 tile radius)
+            for (int dx = -5; dx <= 5; dx++)
+            {
+                for (int dy = -15; dy <= 1; dy++)
+                {
+                    int clearX = spawnX + dx;
+                    int clearY = surfaceY + dy;
+                    var tile = world.GetTile(clearX, clearY);
+                    if (tile != null && (tile.Type == TileType.Wood || tile.Type == TileType.Leaves))
+                    {
+                        world.RemoveTree(clearX, clearY);
+                        Logger.Log($"[SPAWN] Cleared tree at spawn area: ({clearX}, {clearY})");
+                    }
+                }
+            }
+
             Claude4_5Terraria.World.Tile groundTile = world.GetTile(spawnX, surfaceY);
             if (groundTile == null || !groundTile.IsActive)
             {
@@ -403,9 +419,9 @@ namespace Claude4_5Terraria.Systems
             }
 
             // Place player so bottom edge sits exactly on top of surface tile
-            // Add +1 to make player overlap slightly with ground (removes visual gap)
+            // Subtract 2 pixels to ensure player is clearly above ground and not stuck
             int surfacePixelY = surfaceY * Claude4_5Terraria.World.World.TILE_SIZE;
-            int spawnPixelY = surfacePixelY - playerPixelHeight + 1; // +1 for overlap
+            int spawnPixelY = surfacePixelY - playerPixelHeight - 2; // -2 to ensure clearance
             int spawnPixelX = spawnX * Claude4_5Terraria.World.World.TILE_SIZE;
 
             Vector2 spawnPos = new Vector2(spawnPixelX, spawnPixelY);

@@ -17,15 +17,20 @@ namespace Claude4_5Terraria.UI
 
         private float musicVolume;
         private Action<float> onMusicVolumeChanged;
+        private Action onToggleFullscreen;
+        
+        private Rectangle fullscreenButton;
+        private bool fullscreenButtonHovered;
 
         private const int SLIDER_WIDTH = 400;
         private const int SLIDER_HEIGHT = 20;
         private const int HANDLE_WIDTH = 10;
 
-        public OptionsMenu(float initialMusicVolume, Action<float> onMusicVolumeChanged)
+        public OptionsMenu(float initialMusicVolume, Action<float> onMusicVolumeChanged, Action onToggleFullscreen = null)
         {
             this.musicVolume = initialMusicVolume;
             this.onMusicVolumeChanged = onMusicVolumeChanged;
+            this.onToggleFullscreen = onToggleFullscreen;
             isOpen = false;
             previousKeyState = Keyboard.GetState();
             previousMouseState = Mouse.GetState();
@@ -69,12 +74,31 @@ namespace Claude4_5Terraria.UI
 
             int handleX = sliderX + (int)(musicVolume * (SLIDER_WIDTH - HANDLE_WIDTH));
             musicSliderHandle = new Rectangle(handleX, sliderY - 5, HANDLE_WIDTH, SLIDER_HEIGHT + 10);
+            
+            // Fullscreen button
+            fullscreenButton = new Rectangle(
+                (screenWidth - 250) / 2,
+                sliderY + 80,
+                250,
+                50
+            );
+            
+            Point mousePoint = new Point(mouseState.X, mouseState.Y);
+            fullscreenButtonHovered = fullscreenButton.Contains(mousePoint);
 
+            // Handle fullscreen button click
+            if (mouseState.LeftButton == ButtonState.Pressed &&
+                previousMouseState.LeftButton == ButtonState.Released)
+            {
+                if (fullscreenButtonHovered)
+                {
+                    onToggleFullscreen?.Invoke();
+                }
+            }
+            
             // Handle mouse dragging
             if (mouseState.LeftButton == ButtonState.Pressed)
             {
-                Point mousePoint = new Point(mouseState.X, mouseState.Y);
-
                 // Start dragging if clicked on handle or track
                 if (musicSliderHandle.Contains(mousePoint) || musicSliderTrack.Contains(mousePoint))
                 {
@@ -174,6 +198,21 @@ namespace Claude4_5Terraria.UI
 
             Color volumeColor = musicVolume == 0 ? Color.Red : Color.White;
             spriteBatch.DrawString(font, volumeText, volumeTextPos, volumeColor);
+            
+            // Fullscreen button
+            Color buttonBg = fullscreenButtonHovered ? Color.DarkBlue : Color.DarkSlateGray;
+            Color buttonBorder = fullscreenButtonHovered ? Color.Cyan : Color.Gray;
+            spriteBatch.Draw(pixelTexture, fullscreenButton, buttonBg);
+            DrawBorder(spriteBatch, pixelTexture, fullscreenButton, 3, buttonBorder);
+            
+            string fullscreenText = "TOGGLE FULLSCREEN";
+            Vector2 fullscreenTextSize = font.MeasureString(fullscreenText);
+            Vector2 fullscreenTextPos = new Vector2(
+                fullscreenButton.X + (fullscreenButton.Width - fullscreenTextSize.X) / 2,
+                fullscreenButton.Y + (fullscreenButton.Height - fullscreenTextSize.Y) / 2
+            );
+            spriteBatch.DrawString(font, fullscreenText, fullscreenTextPos + new Vector2(1, 1), Color.Black);
+            spriteBatch.DrawString(font, fullscreenText, fullscreenTextPos, Color.White);
 
             // Instructions
             string instructions = "Drag slider to adjust | ESC to close";

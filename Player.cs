@@ -10,8 +10,8 @@ namespace Claude4_5Terraria.Player
         public Vector2 Position { get; set; }
         public Vector2 Velocity { get; set; }
 
-        public const int PLAYER_WIDTH = 32;   // Made slightly bigger
-        public const int PLAYER_HEIGHT = 64;  // Made taller for better visibility
+        public const int PLAYER_WIDTH = 32;   // 1 block wide
+        public const int PLAYER_HEIGHT = 64;  // 2 blocks tall (32 * 2)
 
         private const float GRAVITY = 0.5f;
         private const float MAX_FALL_SPEED = 15f;
@@ -151,6 +151,7 @@ namespace Claude4_5Terraria.Player
 
         private void ApplyPhysics()
         {
+            // Horizontal movement
             Vector2 newPosition = new Vector2(Position.X + Velocity.X, Position.Y);
             if (!CheckCollision(newPosition))
             {
@@ -158,9 +159,11 @@ namespace Claude4_5Terraria.Player
             }
             else
             {
+                // Only stop horizontal velocity if there's actually a collision
                 Velocity = new Vector2(0, Velocity.Y);
             }
 
+            // Vertical movement
             newPosition = new Vector2(Position.X, Position.Y + Velocity.Y);
             if (!CheckCollision(newPosition))
             {
@@ -169,11 +172,19 @@ namespace Claude4_5Terraria.Player
             }
             else
             {
+                // Land on ground
                 if (Velocity.Y > 0)
                 {
                     isOnGround = true;
                 }
                 Velocity = new Vector2(Velocity.X, 0);
+            }
+            
+            // Always check if we're actually on ground (even when stationary)
+            Vector2 groundCheckPos = new Vector2(Position.X, Position.Y + 1);
+            if (CheckCollision(groundCheckPos))
+            {
+                isOnGround = true;
             }
         }
 
@@ -181,16 +192,18 @@ namespace Claude4_5Terraria.Player
         {
             int tileSize = World.World.TILE_SIZE;
 
+            // Check points with small margin from edges to allow 2-block passage
+            // Top points are 2 pixels down, bottom points are 1 pixel up
             Vector2[] checkPoints = new Vector2[]
             {
-                new Vector2(position.X, position.Y),
-                new Vector2(position.X + PLAYER_WIDTH, position.Y),
-                new Vector2(position.X, position.Y + PLAYER_HEIGHT),
-                new Vector2(position.X + PLAYER_WIDTH, position.Y + PLAYER_HEIGHT),
-                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y),
-                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + PLAYER_HEIGHT),
-                new Vector2(position.X, position.Y + PLAYER_HEIGHT / 2),
-                new Vector2(position.X + PLAYER_WIDTH, position.Y + PLAYER_HEIGHT / 2)
+                new Vector2(position.X + 1, position.Y + 2),  // Top-left (with margin)
+                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + 2),  // Top-right (with margin)
+                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT - 1),  // Bottom-left
+                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT - 1),  // Bottom-right
+                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + 2),  // Top-center (with margin)
+                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + PLAYER_HEIGHT - 1),  // Bottom-center
+                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT / 2),  // Left-center
+                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT / 2)  // Right-center
             };
 
             foreach (Vector2 point in checkPoints)
@@ -211,10 +224,10 @@ namespace Claude4_5Terraria.Player
 
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
         {
-            // Draw player 1 pixel lower than actual position to remove floating appearance
+            // Draw player at actual position
             Rectangle playerRect = new Rectangle(
                 (int)Position.X,
-                (int)Position.Y + 1,  // +1 pixel lower for visual
+                (int)Position.Y,
                 PLAYER_WIDTH,
                 PLAYER_HEIGHT
             );

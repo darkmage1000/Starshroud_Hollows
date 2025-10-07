@@ -85,7 +85,7 @@ namespace Claude4_5Terraria
             {
                 musicVolume = newVolume;
                 MediaPlayer.Volume = isMusicMuted ? 0f : musicVolume;
-            }, menuBackgroundTexture);
+            }, ToggleFullscreen, menuBackgroundTexture);
 
             Logger.Log("[GAME] Content loaded successfully");
         }
@@ -142,9 +142,13 @@ namespace Claude4_5Terraria
                 return;
             }
 
-            pauseMenu.Update();
+            // Only update pause menu if it exists (after world is generated)
+            if (pauseMenu != null)
+            {
+                pauseMenu.Update();
+            }
 
-            if (pauseMenu.IsPaused)
+            if (pauseMenu != null && pauseMenu.IsPaused)
             {
                 if (keyboardState.IsKeyDown(Keys.OemPlus) || keyboardState.IsKeyDown(Keys.Add))
                 {
@@ -168,6 +172,14 @@ namespace Claude4_5Terraria
                     Logger.Log($"[AUDIO] Music {(isMusicMuted ? "muted" : "unmuted")}");
                 }
 
+                previousKeyboardState = keyboardState;
+                base.Update(gameTime);
+                return;
+            }
+
+            // Check if game objects still exist (not quit to menu)
+            if (timeSystem == null || player == null || world == null)
+            {
                 previousKeyboardState = keyboardState;
                 base.Update(gameTime);
                 return;
@@ -228,6 +240,27 @@ namespace Claude4_5Terraria
             {
                 saveMenu.Open();
             }
+        }
+
+        private void ToggleFullscreen()
+        {
+            graphics.IsFullScreen = !graphics.IsFullScreen;
+            
+            if (graphics.IsFullScreen)
+            {
+                // Going to fullscreen - use native resolution
+                graphics.PreferredBackBufferWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
+                graphics.PreferredBackBufferHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
+            }
+            else
+            {
+                // Going to windowed - use default size
+                graphics.PreferredBackBufferWidth = 1920;
+                graphics.PreferredBackBufferHeight = 1080;
+            }
+            
+            graphics.ApplyChanges();
+            Logger.Log($"[GRAPHICS] Fullscreen {(graphics.IsFullScreen ? "enabled" : "disabled")}");
         }
 
         private void QuitToMenu()
@@ -309,6 +342,17 @@ namespace Claude4_5Terraria
             timeSystem = new TimeSystem();
             timeSystem.SetCurrentTime(data.GameTime);
             lightingSystem = new LightingSystem(world, timeSystem);
+            
+            // Load tile sprites
+            try
+            {
+                Texture2D dirtSprite = Content.Load<Texture2D>("dirt");
+                world.LoadTileSprite(Enums.TileType.Dirt, dirtSprite);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GAME] Could not load dirt sprite: {ex.Message}");
+            }
 
             worldGenerator = new WorldGenerator(world, data.WorldSeed);
 
@@ -325,6 +369,9 @@ namespace Claude4_5Terraria
 
             // APPLY SAVED TILE CHANGES after world generation
             world.ApplyTileChanges(data.TileChanges);
+            
+            // Disable world updates to prevent saplings/trees from regenerating
+            world.DisableWorldUpdates();
 
             camera = new Camera(GraphicsDevice.Viewport);
             camera.Position = player.Position;
@@ -344,7 +391,12 @@ namespace Claude4_5Terraria
 
             miningSystem = new MiningSystem(world, inventory);
             inventoryUI = new InventoryUI(inventory, miningSystem);
-            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu);  // UPDATED: Added QuitToMenu callback
+            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
+            {
+                musicVolume = newVolume;
+                if (!isMusicMuted)
+                    MediaPlayer.Volume = musicVolume;
+            }, musicVolume, ToggleFullscreen);
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
 
@@ -389,6 +441,17 @@ namespace Claude4_5Terraria
             world = new World.World();
             timeSystem = new TimeSystem();
             lightingSystem = new LightingSystem(world, timeSystem);
+            
+            // Load tile sprites
+            try
+            {
+                Texture2D dirtSprite = Content.Load<Texture2D>("dirt");
+                world.LoadTileSprite(Enums.TileType.Dirt, dirtSprite);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GAME] Could not load dirt sprite: {ex.Message}");
+            }
 
             worldGenerator = new WorldGenerator(world, currentWorldSeed);
 
@@ -410,7 +473,12 @@ namespace Claude4_5Terraria
             inventory = new Inventory();
             miningSystem = new MiningSystem(world, inventory);
             inventoryUI = new InventoryUI(inventory, miningSystem);
-            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu);  // UPDATED: Added QuitToMenu callback
+            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
+            {
+                musicVolume = newVolume;
+                if (!isMusicMuted)
+                    MediaPlayer.Volume = musicVolume;
+            }, musicVolume, ToggleFullscreen);
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
 

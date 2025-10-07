@@ -1,6 +1,7 @@
 ﻿using Claude4_5Terraria.Enums;
 using Claude4_5Terraria.Player;
 using Claude4_5Terraria.Systems;
+using Claude4_5Terraria.UI;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
@@ -29,8 +30,12 @@ namespace Claude4_5Terraria.World
 
         private bool allowChunkUnloading = false;
         private bool trackTileChanges = false;
+        private bool allowWorldUpdates = true;
 
         private HashSet<Point> exploredTiles;
+        
+        // Tile sprites
+        private Dictionary<TileType, Texture2D> tileSprites;
 
         public World()
         {
@@ -44,8 +49,16 @@ namespace Claude4_5Terraria.World
             exploredTiles = new HashSet<Point>();
             modifiedTiles = new Dictionary<Point, Tile>();
             trackTileChanges = false;
+            
+            tileSprites = new Dictionary<TileType, Texture2D>();
 
             random = new Random();
+        }
+        
+        public void LoadTileSprite(TileType tileType, Texture2D sprite)
+        {
+            tileSprites[tileType] = sprite;
+            Logger.Log($"[WORLD] Loaded sprite for {tileType}");
         }
 
         public void EnableChunkUnloading()
@@ -59,6 +72,12 @@ namespace Claude4_5Terraria.World
             trackTileChanges = true;
             modifiedTiles.Clear();
             Logger.Log("[WORLD] Tile change tracking enabled - now tracking player changes only");
+        }
+
+        public void DisableWorldUpdates()
+        {
+            allowWorldUpdates = false;
+            Logger.Log("[WORLD] World updates disabled - preventing sapling growth in loaded save");
         }
 
         public void AddTree(Tree tree)
@@ -101,6 +120,9 @@ namespace Claude4_5Terraria.World
 
         public void Update(float deltaTime, WorldGenerator worldGenerator)
         {
+            // Don't update saplings/trees if world updates disabled (loaded save)
+            if (!allowWorldUpdates) return;
+            
             List<Sapling> grownSaplings = new List<Sapling>();
 
             foreach (Sapling sapling in saplings)
@@ -307,7 +329,7 @@ namespace Claude4_5Terraria.World
         {
             int centerTileX = (int)(playerCenter.X / TILE_SIZE);
             int centerTileY = (int)(playerCenter.Y / TILE_SIZE);
-            int radius = 2;
+            int radius = 3;  // 3 tiles around player
 
             for (int dx = -radius; dx <= radius; dx++)
             {
@@ -319,6 +341,11 @@ namespace Claude4_5Terraria.World
                     }
                 }
             }
+        }
+
+        public void MarkTileAsExplored(int x, int y)
+        {
+            exploredTiles.Add(new Point(x, y));
         }
 
         public bool IsTileExplored(int x, int y)
@@ -336,10 +363,12 @@ namespace Claude4_5Terraria.World
             int startTileY = Math.Max(0, (int)(visibleArea.Top / TILE_SIZE));
             int endTileY = Math.Min(WORLD_HEIGHT - 1, (int)(visibleArea.Bottom / TILE_SIZE));
 
+            // Draw underground background
             for (int x = startTileX; x <= endTileX; x++)
             {
                 for (int y = startTileY; y <= endTileY; y++)
                 {
+                    // Check if there are solid blocks above (underground)
                     bool hasBlocksAbove = false;
                     for (int checkY = y - 1; checkY >= 0; checkY--)
                     {
@@ -359,14 +388,15 @@ namespace Claude4_5Terraria.World
                     {
                         Rectangle destRect = new Rectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
+                        // Underground background color
                         Color bgColor;
                         if (y < 210)
                         {
-                            bgColor = new Color(101, 67, 33);
+                            bgColor = new Color(101, 67, 33);  // Brown dirt background
                         }
                         else
                         {
-                            bgColor = new Color(64, 64, 64);
+                            bgColor = new Color(64, 64, 64);   // Dark gray stone background
                         }
 
                         float lightLevel = lightingSystem.GetLightLevel(x, y);
@@ -382,6 +412,7 @@ namespace Claude4_5Terraria.World
                 }
             }
 
+            // Draw tiles
             for (int x = startTileX; x <= endTileX; x++)
             {
                 for (int y = startTileY; y <= endTileY; y++)
@@ -397,13 +428,34 @@ namespace Claude4_5Terraria.World
                     tileColor.A = 255;
 
                     float lightLevel = lightingSystem.GetLightLevel(x, y);
-                    tileColor = new Color(
+                    
+                    // Mark tiles as explored if they have sufficient light (lower threshold for torches)
+                    if (lightLevel > 0.25f)
+                    {
+                        MarkTileAsExplored(x, y);
+                    }
+                    
+                    // Apply lighting to color
+                    Color litColor = new Color(
                         (byte)(tileColor.R * lightLevel),
                         (byte)(tileColor.G * lightLevel),
                         (byte)(tileColor.B * lightLevel),
                         (byte)255
                     );
-
+                    
+                    // Draw tile - use sprite if available, otherwise use colored pixel
+                    if (tileSprites.ContainsKey(tile.Type))
+                    {
+                        // Draw the tile sprite with lighting applied
+                        spriteBatch.Draw(tileSprites[tile.Type], destRect, Color.White * lightLevel);
+                    }
+                    else
+                    {
+                        // Fallback to colored pixel
+                        spriteBatch.Draw(pixelTexture, destRect, litColor);
+                    }
+                    
+                    // Draw mining overlay on top of tile
                     if (miningSystem != null && miningSystem.GetTargetedTile().HasValue)
                     {
                         Point? targeted = miningSystem.GetTargetedTile();
@@ -457,8 +509,6 @@ namespace Claude4_5Terraria.World
                             }
                         }
                     }
-
-                    spriteBatch.Draw(pixelTexture, destRect, tileColor);
                 }
             }
         }
