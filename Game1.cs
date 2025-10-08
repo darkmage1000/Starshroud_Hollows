@@ -37,7 +37,7 @@ namespace Claude4_5Terraria
         private StartMenu startMenu;
         private SaveMenu saveMenu;
         private LoadMenu loadMenu;
-        private Hud hud;
+        private HUD hud;
 
         private KeyboardState previousKeyboardState;
 
@@ -49,6 +49,7 @@ namespace Claude4_5Terraria
         private bool worldGenerated = false;
         private int currentWorldSeed;
         private float totalPlayTime;
+       
 
         public Game1()
         {
@@ -532,7 +533,7 @@ namespace Claude4_5Terraria
             }, musicVolume, ToggleFullscreen);
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
-            hud = new Hud();
+            hud = new HUD();
 
             worldGenerated = true;
             Logger.Log("[GAME] Game loaded successfully");
@@ -609,7 +610,7 @@ namespace Claude4_5Terraria
             }, musicVolume, ToggleFullscreen);
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
-            hud = new Hud();
+            hud = new HUD();
 
             worldGenerated = true;
         }
