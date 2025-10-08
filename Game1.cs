@@ -7,7 +7,9 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Media;
+using System;
 using System.Threading.Tasks;
+
 
 namespace Claude4_5Terraria
 {
@@ -35,6 +37,7 @@ namespace Claude4_5Terraria
         private StartMenu startMenu;
         private SaveMenu saveMenu;
         private LoadMenu loadMenu;
+        private Hud hud;
 
         private KeyboardState previousKeyboardState;
 
@@ -242,6 +245,139 @@ namespace Claude4_5Terraria
             }
         }
 
+        private void LoadTileSprites(World.World world)
+        {
+            // Dictionary of sprite names to tile types
+            var spriteMap = new System.Collections.Generic.Dictionary<string, Enums.TileType>
+            {
+                { "dirt", Enums.TileType.Dirt },
+                { "grass", Enums.TileType.Grass },
+                { "stone", Enums.TileType.Stone },
+                { "coalblock", Enums.TileType.Coal },
+                { "copperblock", Enums.TileType.Copper },
+                { "silverblock", Enums.TileType.Silver },
+                { "platinumblock", Enums.TileType.Platinum },
+                { "torch", Enums.TileType.Torch },
+                { "saplingplanteddirt", Enums.TileType.Sapling },
+                { "woodcraftingtable", Enums.TileType.WoodCraftingBench },
+                { "coppercraftingtable", Enums.TileType.CopperCraftingBench }
+            };
+
+            foreach (var sprite in spriteMap)
+            {
+                try
+                {
+                    Texture2D texture = Content.Load<Texture2D>(sprite.Key);
+                    world.LoadTileSprite(sprite.Value, texture);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[GAME] Could not load {sprite.Key} sprite: {ex.Message}");
+                }
+            }
+        }
+        
+        private void LoadItemSprites(InventoryUI inventoryUI)
+        {
+            // Dictionary of sprite names to item types
+            var spriteMap = new System.Collections.Generic.Dictionary<string, Enums.ItemType>
+            {
+                // Tools
+                { "woodpickaxe", Enums.ItemType.WoodPickaxe },
+                { "stonepickaxe", Enums.ItemType.StonePickaxe },
+                { "copperpickaxe", Enums.ItemType.CopperPickaxe },
+                { "silverpickaxe", Enums.ItemType.SilverPickaxe },
+                { "platinumpickaxe", Enums.ItemType.PlatinumPickaxe },
+                
+                // Workbenches
+                { "woodcraftingtable", Enums.ItemType.WoodCraftingBench },
+                { "coppercraftingtable", Enums.ItemType.CopperCraftingBench },
+                
+                // Ores (inventory items)
+                { "copperore", Enums.ItemType.Copper },
+                { "silverore", Enums.ItemType.Silver },
+                { "platinumore", Enums.ItemType.Platinum },
+                { "coal", Enums.ItemType.Coal },
+                
+                // Bars
+                { "copperbar", Enums.ItemType.CopperBar },
+                { "silverbar", Enums.ItemType.SilverBar },
+                { "platinumbar", Enums.ItemType.PlatinumBar },
+                
+                // Misc
+                { "torch", Enums.ItemType.Torch },
+                { "acorn", Enums.ItemType.Acorn },
+                { "stick", Enums.ItemType.Stick },
+                
+                // Use block textures for dirt and stone in inventory
+                { "dirt", Enums.ItemType.Dirt },
+                { "stone", Enums.ItemType.Stone },
+                { "grass", Enums.ItemType.Grass }
+            };
+
+            foreach (var sprite in spriteMap)
+            {
+                try
+                {
+                    Texture2D texture = Content.Load<Texture2D>(sprite.Key);
+                    inventoryUI.LoadItemSprite(sprite.Value, texture);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[GAME] Could not load {sprite.Key} item sprite: {ex.Message}");
+                }
+            }
+        }
+        private void LoadCraftingItemSprites(InventoryUI inventoryUI)
+        {
+            // Load sprites for the crafting UI
+            var spriteMap = new System.Collections.Generic.Dictionary<string, Enums.ItemType>
+            {
+                // Tools
+                { "woodpickaxe", Enums.ItemType.WoodPickaxe },
+                { "stonepickaxe", Enums.ItemType.StonePickaxe },
+                { "copperpickaxe", Enums.ItemType.CopperPickaxe },
+                { "silverpickaxe", Enums.ItemType.SilverPickaxe },
+                { "platinumpickaxe", Enums.ItemType.PlatinumPickaxe },
+                
+                // Workbenches
+                { "woodcraftingtable", Enums.ItemType.WoodCraftingBench },
+                { "coppercraftingtable", Enums.ItemType.CopperCraftingBench },
+                
+                // Ores
+                { "copperore", Enums.ItemType.Copper },
+                { "silverore", Enums.ItemType.Silver },
+                { "platinumore", Enums.ItemType.Platinum },
+                { "coal", Enums.ItemType.Coal },
+                
+                // Bars
+                { "copperbar", Enums.ItemType.CopperBar },
+                { "silverbar", Enums.ItemType.SilverBar },
+                { "platinumbar", Enums.ItemType.PlatinumBar },
+                
+                // Misc
+                { "torch", Enums.ItemType.Torch },
+                { "acorn", Enums.ItemType.Acorn },
+                { "stick", Enums.ItemType.Stick },
+                { "dirt", Enums.ItemType.Dirt },
+                { "stone", Enums.ItemType.Stone },
+                { "grass", Enums.ItemType.Grass }
+            };
+
+            foreach (var sprite in spriteMap)
+            {
+                try
+                {
+                    Texture2D texture = Content.Load<Texture2D>(sprite.Key);
+                    inventoryUI.GetCraftingUI()?.LoadItemSprite(sprite.Value, texture);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[GAME] Could not load {sprite.Key} crafting sprite: {ex.Message}");
+                }
+            }
+        }
+
         private void ToggleFullscreen()
         {
             graphics.IsFullScreen = !graphics.IsFullScreen;
@@ -343,16 +479,8 @@ namespace Claude4_5Terraria
             timeSystem.SetCurrentTime(data.GameTime);
             lightingSystem = new LightingSystem(world, timeSystem);
             
-            // Load tile sprites
-            try
-            {
-                Texture2D dirtSprite = Content.Load<Texture2D>("dirt");
-                world.LoadTileSprite(Enums.TileType.Dirt, dirtSprite);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[GAME] Could not load dirt sprite: {ex.Message}");
-            }
+            // Load all tile sprites
+            LoadTileSprites(world);
 
             worldGenerator = new WorldGenerator(world, data.WorldSeed);
 
@@ -391,6 +519,11 @@ namespace Claude4_5Terraria
 
             miningSystem = new MiningSystem(world, inventory);
             inventoryUI = new InventoryUI(inventory, miningSystem);
+            inventoryUI.Initialize(pixelTexture, font);
+            LoadItemSprites(inventoryUI);
+            LoadCraftingItemSprites(inventoryUI);
+            LoadCraftingItemSprites(inventoryUI);
+            
             pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
             {
                 musicVolume = newVolume;
@@ -399,8 +532,7 @@ namespace Claude4_5Terraria
             }, musicVolume, ToggleFullscreen);
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
-
-            inventoryUI.Initialize(pixelTexture, font);
+            hud = new Hud();
 
             worldGenerated = true;
             Logger.Log("[GAME] Game loaded successfully");
@@ -442,16 +574,8 @@ namespace Claude4_5Terraria
             timeSystem = new TimeSystem();
             lightingSystem = new LightingSystem(world, timeSystem);
             
-            // Load tile sprites
-            try
-            {
-                Texture2D dirtSprite = Content.Load<Texture2D>("dirt");
-                world.LoadTileSprite(Enums.TileType.Dirt, dirtSprite);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[GAME] Could not load dirt sprite: {ex.Message}");
-            }
+            // Load all tile sprites
+            LoadTileSprites(world);
 
             worldGenerator = new WorldGenerator(world, currentWorldSeed);
 
@@ -473,6 +597,10 @@ namespace Claude4_5Terraria
             inventory = new Inventory();
             miningSystem = new MiningSystem(world, inventory);
             inventoryUI = new InventoryUI(inventory, miningSystem);
+            inventoryUI.Initialize(pixelTexture, font);
+            LoadItemSprites(inventoryUI);
+            LoadCraftingItemSprites(inventoryUI);
+            
             pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
             {
                 musicVolume = newVolume;
@@ -481,8 +609,7 @@ namespace Claude4_5Terraria
             }, musicVolume, ToggleFullscreen);
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
-
-            inventoryUI.Initialize(pixelTexture, font);
+            hud = new Hud();
 
             worldGenerated = true;
         }
@@ -547,6 +674,15 @@ namespace Claude4_5Terraria
                 GraphicsDevice.Viewport.Width,
                 GraphicsDevice.Viewport.Height
             );
+
+            // Draw HUD with coordinates
+            if (hud != null)
+            {
+                hud.Draw(spriteBatch, pixelTexture, font,
+                    GraphicsDevice.Viewport.Width,
+                    GraphicsDevice.Viewport.Height,
+                    player.Position);
+            }
 
             pauseMenu.Draw(spriteBatch, pixelTexture, font,
                 GraphicsDevice.Viewport.Width,

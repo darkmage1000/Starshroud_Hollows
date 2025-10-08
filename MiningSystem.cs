@@ -180,6 +180,8 @@ namespace Claude4_5Terraria.Systems
                     {
                         if (CanPlantAcorn(placeX, placeY))
                         {
+                            // Place sapling tile at the planting position
+                            world.SetTile(placeX, placeY, new Tile(TileType.Sapling));
                             world.AddSapling(placeX, placeY);
                             selectedSlot.Count--;
                             if (selectedSlot.Count <= 0)
@@ -188,7 +190,7 @@ namespace Claude4_5Terraria.Systems
                                 selectedSlot.Count = 0;
                             }
                             placementCooldown = PLACEMENT_DELAY;
-                            Logger.Log($"[PLACE] Planted acorn at ({placeX}, {placeY})");
+                            Logger.Log($"[PLACE] Planted acorn (sapling tile) at ({placeX}, {placeY})");
                         }
                         else
                         {

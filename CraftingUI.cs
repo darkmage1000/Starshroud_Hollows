@@ -1,4 +1,4 @@
-﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Claude4_5Terraria.Systems;
@@ -23,6 +23,9 @@ namespace Claude4_5Terraria.UI
 
         private Dictionary<int, Rectangle> craftButtonRects;
         private int panelX, panelY, panelWidth, panelHeight;
+        
+        // Item sprites
+        private Dictionary<ItemType, Texture2D> itemSprites;
 
         // Scrolling
         private float scrollOffset = 0f;
@@ -43,12 +46,18 @@ namespace Claude4_5Terraria.UI
         public CraftingUI(Inventory inventory)
         {
             this.inventory = inventory;
+            itemSprites = new Dictionary<ItemType, Texture2D>();
             nearCraftingBench = false;
             nearCopperBench = false;
             previousMouseState = Mouse.GetState();
             previousMouseStateForScroll = Mouse.GetState();
             availableRecipes = new List<Recipe>();
             craftButtonRects = new Dictionary<int, Rectangle>();
+        }
+        
+        public void LoadItemSprite(ItemType itemType, Texture2D sprite)
+        {
+            itemSprites[itemType] = sprite;
         }
 
         public void Update(GameTime gameTime, Vector2 playerPosition, World.World world)
@@ -352,7 +361,7 @@ namespace Claude4_5Terraria.UI
                     craftButtonRect.X + (craftButtonRect.Width - buttonTextSize.X) / 2,
                     craftButtonRect.Y + (craftButtonRect.Height - buttonTextSize.Y) / 2
                 );
-                Color textColor = canCraft ? Color.White : Color.LightGray;  // ✅ Change DarkGray to LightGray
+                Color textColor = canCraft ? Color.White : Color.LightGray;
                 spriteBatch.DrawString(font, buttonText, buttonTextPos, textColor);
             }
 
@@ -381,8 +390,17 @@ namespace Claude4_5Terraria.UI
 
             int iconSize = 40;
             Rectangle iconRect = new Rectangle(x + 10, y + 10, iconSize, iconSize);
-            Color itemColor = GetItemColor(recipe.Result);
-            spriteBatch.Draw(pixelTexture, iconRect, itemColor);
+            
+            // Draw sprite if available, otherwise use colored square
+            if (itemSprites.ContainsKey(recipe.Result))
+            {
+                spriteBatch.Draw(itemSprites[recipe.Result], iconRect, Color.White);
+            }
+            else
+            {
+                Color itemColor = GetItemColor(recipe.Result);
+                spriteBatch.Draw(pixelTexture, iconRect, itemColor);
+            }
             DrawBorder(spriteBatch, pixelTexture, iconRect, 1, Color.White * 0.5f);
 
             string resultText = $"{GetItemName(recipe.Result)} x{recipe.ResultCount}";

@@ -26,6 +26,9 @@ namespace Claude4_5Terraria.UI
 
         private Texture2D pixelTexture;
         private SpriteFont font;
+        
+        // Item sprites
+        private System.Collections.Generic.Dictionary<ItemType, Texture2D> itemSprites;
 
         // Item dragging
         private int? draggedSlotIndex;
@@ -51,14 +54,22 @@ namespace Claude4_5Terraria.UI
             hoveredSlotIndex = null;
             slotRectangles = new Rectangle[40];
             cachedScreenHeight = 1080;
+            itemSprites = new System.Collections.Generic.Dictionary<ItemType, Texture2D>();
         }
 
         public bool IsInventoryOpen => isInventoryOpen;
+        
+        public CraftingUI GetCraftingUI() => craftingUI;
 
         public void Initialize(Texture2D pixel, SpriteFont spriteFont)
         {
             pixelTexture = pixel;
             font = spriteFont;
+        }
+        
+        public void LoadItemSprite(ItemType itemType, Texture2D sprite)
+        {
+            itemSprites[itemType] = sprite;
         }
 
         public void Update(GameTime gameTime, Vector2 playerPosition, World.World world, int screenHeight)
@@ -386,8 +397,17 @@ namespace Claude4_5Terraria.UI
             int y = mouseState.Y - iconSize / 2;
             Rectangle iconRect = new Rectangle(x, y, iconSize, iconSize);
 
-            Color itemColor = GetItemColor(draggedItem.ItemType);
-            spriteBatch.Draw(pixelTexture, iconRect, itemColor * 0.8f);
+            // Draw sprite if available, otherwise use colored square
+            if (itemSprites.ContainsKey(draggedItem.ItemType))
+            {
+                spriteBatch.Draw(itemSprites[draggedItem.ItemType], iconRect, Color.White * 0.8f);
+            }
+            else
+            {
+                Color itemColor = GetItemColor(draggedItem.ItemType);
+                spriteBatch.Draw(pixelTexture, iconRect, itemColor * 0.8f);
+            }
+            
             DrawBorder(spriteBatch, iconRect, 2, Color.White);
 
             if (font != null && draggedItem.Count > 1)
@@ -470,8 +490,17 @@ namespace Claude4_5Terraria.UI
             int iconY = slotY + (SLOT_SIZE - iconSize) / 2;
             Rectangle iconRect = new Rectangle(iconX, iconY, iconSize, iconSize);
 
-            Color itemColor = GetItemColor(slot.ItemType);
-            spriteBatch.Draw(pixelTexture, iconRect, itemColor);
+            // Draw sprite if available, otherwise use colored square
+            if (itemSprites.ContainsKey(slot.ItemType))
+            {
+                spriteBatch.Draw(itemSprites[slot.ItemType], iconRect, Color.White);
+            }
+            else
+            {
+                Color itemColor = GetItemColor(slot.ItemType);
+                spriteBatch.Draw(pixelTexture, iconRect, itemColor);
+            }
+            
             DrawBorder(spriteBatch, iconRect, 1, Color.White * 0.5f);
 
             if (slot.Count > 1 && font != null)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.Xna.Framework;
 using Claude4_5Terraria.Enums;
 using Claude4_5Terraria.Systems;
@@ -95,6 +95,7 @@ namespace Claude4_5Terraria.Systems
                     surfaceHeight = (int)Math.Round(SURFACE_LEVEL * (1 - blendFactor) + surfaceHeight * blendFactor);
                 }
 
+                // FIXED: Fill all the way to the bottom of the map
                 for (int y = 0; y < Claude4_5Terraria.World.World.WORLD_HEIGHT; y++)
                 {
                     if (y < surfaceHeight) continue;
@@ -110,14 +111,33 @@ namespace Claude4_5Terraria.Systems
 
         private void GenerateCaves()
         {
-            CarveCaves(100, 40, 80, 2, 4, CAVE_START_DEPTH, 600);
-            CarveCaves(150, 60, 120, 2, 5, 600, 1200);
-            CarveCaves(140, 80, 150, 3, 6, 1200, 2000);
-            CarveCaves(80, 100, 200, 4, 8, 2000, Claude4_5Terraria.World.World.WORLD_HEIGHT - 100);
+            // Calculate safe maximum depth
+            int maxSafeDepth = Claude4_5Terraria.World.World.WORLD_HEIGHT - 150;
+            
+            // Shallow caves
+            CarveCaves(100, 40, 80, 2, 4, CAVE_START_DEPTH, Math.Min(600, maxSafeDepth));
+            // Mid-depth caves
+            CarveCaves(150, 60, 120, 2, 5, 600, Math.Min(1500, maxSafeDepth));
+            // Deep caves
+            CarveCaves(140, 80, 150, 3, 6, 1500, Math.Min(2500, maxSafeDepth));
+            // Very deep caves (NEW - more space for platinum/silver)
+            CarveCaves(120, 100, 180, 4, 7, 2500, Math.Min(3500, maxSafeDepth));
+            // Bottom caves - FIXED: Stop before the absolute bottom to prevent falling off
+            if (maxSafeDepth > 3500)
+            {
+                CarveCaves(80, 100, 200, 4, 8, 3500, maxSafeDepth);
+            }
         }
 
         private void CarveCaves(int count, int minLength, int maxLength, int minRadius, int maxRadius, int minY, int maxY)
         {
+            // Safety check to prevent invalid range
+            if (minY >= maxY)
+            {
+                Logger.Log($"[WORLDGEN] Skipping cave layer - invalid depth range: {minY} to {maxY}");
+                return;
+            }
+            
             for (int i = 0; i < count; i++)
             {
                 int startX = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
@@ -155,7 +175,7 @@ namespace Claude4_5Terraria.Systems
                 if (random.NextDouble() < 0.08 && step > 20)
                 {
                     double branchDirection = direction + (random.NextDouble() - 0.5) * Math.PI;
-                    int branchLength = random.Next(length / 3, length / 2); // Fixed: use 'length' instead of minLength
+                    int branchLength = random.Next(length / 3, length / 2);
                     CarveCaveTunnel(currentX, currentY, branchLength, minRadius, maxRadius);
                 }
 
@@ -168,8 +188,9 @@ namespace Claude4_5Terraria.Systems
                 currentX += (int)(Math.Cos(direction) * moveSpeed);
                 currentY += (int)(Math.Sin(direction) * moveSpeed);
 
+                // FIXED: Stop caves before reaching the absolute bottom
                 if (currentX < 50 || currentX >= Claude4_5Terraria.World.World.WORLD_WIDTH - 50 ||
-                    currentY < CAVE_START_DEPTH || currentY >= Claude4_5Terraria.World.World.WORLD_HEIGHT - 50)
+                    currentY < CAVE_START_DEPTH || currentY >= Claude4_5Terraria.World.World.WORLD_HEIGHT - 150)
                     break;
             }
         }
@@ -178,9 +199,10 @@ namespace Claude4_5Terraria.Systems
         {
             int torchesPlaced = 0;
 
+            // UPDATED: Place torches throughout the entire cave system
             for (int x = 50; x < Claude4_5Terraria.World.World.WORLD_WIDTH - 50; x += 8)
             {
-                for (int y = CAVE_START_DEPTH; y < Claude4_5Terraria.World.World.WORLD_HEIGHT - 50; y += 8)
+                for (int y = CAVE_START_DEPTH; y < Claude4_5Terraria.World.World.WORLD_HEIGHT - 150; y += 8)
                 {
                     var tile = world.GetTile(x, y);
 
@@ -224,10 +246,11 @@ namespace Claude4_5Terraria.Systems
 
         private void GenerateDirtPockets()
         {
-            for (int i = 0; i < 600; i++)
+            // UPDATED: More dirt pockets throughout the entire depth
+            for (int i = 0; i < 1000; i++)
             {
                 int centerX = random.Next(0, Claude4_5Terraria.World.World.WORLD_WIDTH);
-                int centerY = random.Next(CAVE_START_DEPTH, Claude4_5Terraria.World.World.WORLD_HEIGHT - 50);
+                int centerY = random.Next(CAVE_START_DEPTH, Claude4_5Terraria.World.World.WORLD_HEIGHT - 150);
                 int pocketSize = random.Next(6, 15);
 
                 for (int j = 0; j < pocketSize; j++)
@@ -244,10 +267,18 @@ namespace Claude4_5Terraria.Systems
 
         private void GenerateOres()
         {
-            PlaceOreType(TileType.Coal, 8000, 210, 2900, 5, 15);
-            PlaceOreType(TileType.Copper, 3000, 230, 1200, 3, 10);
-            PlaceOreType(TileType.Silver, 2000, 1000, 2000, 3, 8);
-            PlaceOreType(TileType.Platinum, 1200, 1800, 2950, 2, 6);
+            // UPDATED: Ore generation for full map depth
+            // Coal - common, found early
+            PlaceOreType(TileType.Coal, 12000, 210, Claude4_5Terraria.World.World.WORLD_HEIGHT - 150, 5, 15);
+            
+            // Copper - common, shallow to mid depth
+            PlaceOreType(TileType.Copper, 5000, 230, 1800, 3, 10);
+            
+            // Silver - uncommon, mid to deep (FIXED: Much deeper range)
+            PlaceOreType(TileType.Silver, 3500, 1500, 3000, 3, 8);
+            
+            // Platinum - rare, deep only (FIXED: Even deeper range)
+            PlaceOreType(TileType.Platinum, 2000, 2500, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 2, 6);
         }
 
         private void PlaceOreType(TileType oreType, int veinCount, int minDepth, int maxDepth, int minVeinSize, int maxVeinSize)

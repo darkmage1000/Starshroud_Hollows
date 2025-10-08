@@ -144,9 +144,13 @@ namespace Claude4_5Terraria.World
 
         private void GrowSaplingIntoTree(int x, int y)
         {
+            // Check what's below the sapling
+            Tile groundTile = GetTile(x, y + 1);
+            
+            // Remove the sapling tile - leave the ground as is (dirt or grass)
             SetTile(x, y, new Tile(TileType.Air));
 
-            Logger.Log($"[WORLD] Sapling grew into tree at ({x}, {y})");
+            Logger.Log($"[WORLD] Sapling grew into tree at ({x}, {y}), ground below is {groundTile?.Type}");
 
             int trunkHeight = random.Next(8, 15);
             var tree = new Tree(x, y + 1, trunkHeight);
