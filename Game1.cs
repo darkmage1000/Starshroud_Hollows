@@ -49,7 +49,7 @@ namespace Claude4_5Terraria
         private bool worldGenerated = false;
         private int currentWorldSeed;
         private float totalPlayTime;
-       
+
 
         public Game1()
         {
@@ -150,11 +150,18 @@ namespace Claude4_5Terraria
             // Only update pause menu if it exists (after world is generated)
             if (pauseMenu != null)
             {
+                // FIX: Check for Escape key press to toggle pause state (Opens/Closes the menu)
+                if (keyboardState.IsKeyDown(Keys.Escape) && !previousKeyboardState.IsKeyDown(Keys.Escape))
+                {
+                    pauseMenu.TogglePause();
+                }
+
                 pauseMenu.Update();
             }
 
             if (pauseMenu != null && pauseMenu.IsPaused)
             {
+
                 if (keyboardState.IsKeyDown(Keys.OemPlus) || keyboardState.IsKeyDown(Keys.Add))
                 {
                     musicVolume = MathHelper.Clamp(musicVolume + 0.01f, 0f, 1f);
@@ -232,6 +239,13 @@ namespace Claude4_5Terraria
                 Claude4_5Terraria.Player.Player.PLAYER_HEIGHT
             );
 
+            // FIX: Call the updated minimap method
+            if (hud != null)
+            {
+                // Calls the simplified UpdateMinimapData(world)
+                hud.UpdateMinimapData(world);
+            }
+
             inventoryUI.Update(gameTime, player.Position, world, GraphicsDevice.Viewport.Height);
 
             previousKeyboardState = keyboardState;
@@ -278,7 +292,7 @@ namespace Claude4_5Terraria
                 }
             }
         }
-        
+
         private void LoadItemSprites(InventoryUI inventoryUI)
         {
             // Dictionary of sprite names to item types
@@ -383,7 +397,7 @@ namespace Claude4_5Terraria
         private void ToggleFullscreen()
         {
             graphics.IsFullScreen = !graphics.IsFullScreen;
-            
+
             if (graphics.IsFullScreen)
             {
                 // Going to fullscreen - use native resolution
@@ -396,7 +410,7 @@ namespace Claude4_5Terraria
                 graphics.PreferredBackBufferWidth = 1920;
                 graphics.PreferredBackBufferHeight = 1080;
             }
-            
+
             graphics.ApplyChanges();
             Logger.Log($"[GRAPHICS] Fullscreen {(graphics.IsFullScreen ? "enabled" : "disabled")}");
         }
@@ -421,6 +435,7 @@ namespace Claude4_5Terraria
             pauseMenu = null;
             saveMenu = null;
             miningOverlay = null;
+            hud = null;
 
             // Return to main menu
             startMenu.SetState(MenuState.MainMenu);
@@ -471,16 +486,24 @@ namespace Claude4_5Terraria
             Logger.Log($"[GAME] Game saved to slot {slotIndex + 1}");
         }
 
+
         private void LoadGameFromSave(SaveData data)
         {
             currentWorldSeed = data.WorldSeed;
             totalPlayTime = data.PlayTimeSeconds;
 
-            world = new World.World();
+            // FIX 1: Create HUD FIRST
+            hud = new HUD();
+            // FIX 2: Initialize HUD with GraphicsDevice
+            hud.Initialize(GraphicsDevice);
+            // FIX 3: Pass HUD to World constructor
+            world = new World.World(hud);
+
             timeSystem = new TimeSystem();
             timeSystem.SetCurrentTime(data.GameTime);
             lightingSystem = new LightingSystem(world, timeSystem);
-            
+
+
             // Load all tile sprites
             LoadTileSprites(world);
 
@@ -499,7 +522,7 @@ namespace Claude4_5Terraria
 
             // APPLY SAVED TILE CHANGES after world generation
             world.ApplyTileChanges(data.TileChanges);
-            
+
             // Disable world updates to prevent saplings/trees from regenerating
             world.DisableWorldUpdates();
 
@@ -524,17 +547,19 @@ namespace Claude4_5Terraria
             inventoryUI.Initialize(pixelTexture, font);
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
-            LoadCraftingItemSprites(inventoryUI);
-            
+
+            // CRITICAL FIX: REMOVED redundant 'hud = new HUD()' here.
+
+            // FIX CS1729: Corrected constructor call to match 7 arguments (removed zoom toggle)
             pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
             {
                 musicVolume = newVolume;
                 if (!isMusicMuted)
                     MediaPlayer.Volume = musicVolume;
-            }, musicVolume, ToggleFullscreen);
+            }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud);
+
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
-            hud = new HUD();
 
             worldGenerated = true;
             Logger.Log("[GAME] Game loaded successfully");
@@ -569,13 +594,19 @@ namespace Claude4_5Terraria
                 Logger.Log("[GAME] ===== STARTING NEW GAME =====");
             }
 
+            // FIX 1: Create HUD FIRST
+            hud = new HUD();
+            // FIX 2: Initialize HUD with GraphicsDevice
+            hud.Initialize(GraphicsDevice);
+
             currentWorldSeed = System.Environment.TickCount;
             totalPlayTime = 0f;
 
-            world = new World.World();
+            // FIX 3: Pass HUD to World constructor
+            world = new World.World(hud);
             timeSystem = new TimeSystem();
             lightingSystem = new LightingSystem(world, timeSystem);
-            
+
             // Load all tile sprites
             LoadTileSprites(world);
 
@@ -602,16 +633,20 @@ namespace Claude4_5Terraria
             inventoryUI.Initialize(pixelTexture, font);
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
-            
+
+            // CRITICAL FIX: REMOVED redundant 'hud = new HUD()' here.
+
+            // FIX CS1729: Corrected constructor call to match 7 arguments (removed zoom toggle)
             pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
             {
                 musicVolume = newVolume;
                 if (!isMusicMuted)
                     MediaPlayer.Volume = musicVolume;
-            }, musicVolume, ToggleFullscreen);
+            }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud);
+            // ADDED hud.ToggleFullscreenMap (6th arg) AND hud (7th arg) to match the new constructor.
+
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
-            hud = new HUD();
 
             worldGenerated = true;
         }
@@ -677,13 +712,14 @@ namespace Claude4_5Terraria
                 GraphicsDevice.Viewport.Height
             );
 
-            // Draw HUD with coordinates
+            // Draw HUD with world param for minimap
             if (hud != null)
             {
                 hud.Draw(spriteBatch, pixelTexture, font,
                     GraphicsDevice.Viewport.Width,
                     GraphicsDevice.Viewport.Height,
-                    player.Position);
+                    player.Position,
+                    world);
             }
 
             pauseMenu.Draw(spriteBatch, pixelTexture, font,

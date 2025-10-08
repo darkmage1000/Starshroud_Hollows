@@ -1,12 +1,13 @@
 ﻿using Claude4_5Terraria.Enums;
 using Claude4_5Terraria.Player;
 using Claude4_5Terraria.Systems;
-using Claude4_5Terraria.UI;
+using Claude4_5Terraria.UI; // <-- REQUIRED for HUD reference
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+
 
 namespace Claude4_5Terraria.World
 {
@@ -33,11 +34,18 @@ namespace Claude4_5Terraria.World
         private bool allowWorldUpdates = true;
 
         private HashSet<Point> exploredTiles;
-        
+
+        // FIX: Public getter to expose explored tiles for HUD/Minimap
+        public HashSet<Point> ExploredTiles => exploredTiles;
+
         // Tile sprites
         private Dictionary<TileType, Texture2D> tileSprites;
 
-        public World()
+        // FIX: HUD reference for flagging minimap updates
+        private HUD hudReference;
+
+
+        public World(HUD hud)
         {
             loadedChunks = new Dictionary<Point, Chunk>();
             chunksWide = (WORLD_WIDTH + Chunk.CHUNK_SIZE - 1) / Chunk.CHUNK_SIZE;
@@ -49,12 +57,14 @@ namespace Claude4_5Terraria.World
             exploredTiles = new HashSet<Point>();
             modifiedTiles = new Dictionary<Point, Tile>();
             trackTileChanges = false;
-            
+
             tileSprites = new Dictionary<TileType, Texture2D>();
 
             random = new Random();
+
+            // STORE HUD REFERENCE
+            hudReference = hud;
         }
-        
         public void LoadTileSprite(TileType tileType, Texture2D sprite)
         {
             tileSprites[tileType] = sprite;
@@ -122,7 +132,7 @@ namespace Claude4_5Terraria.World
         {
             // Don't update saplings/trees if world updates disabled (loaded save)
             if (!allowWorldUpdates) return;
-            
+
             List<Sapling> grownSaplings = new List<Sapling>();
 
             foreach (Sapling sapling in saplings)
@@ -146,7 +156,7 @@ namespace Claude4_5Terraria.World
         {
             // Check what's below the sapling
             Tile groundTile = GetTile(x, y + 1);
-            
+
             // Remove the sapling tile - leave the ground as is (dirt or grass)
             SetTile(x, y, new Tile(TileType.Air));
 
@@ -198,25 +208,7 @@ namespace Claude4_5Terraria.World
             int endChunkX = Math.Min(chunksWide - 1, (visibleArea.Right + pixelsPerChunk - 1) / pixelsPerChunk + preload);
             int endChunkY = Math.Min(chunksHigh - 1, (visibleArea.Bottom + pixelsPerChunk - 1) / pixelsPerChunk + preload);
 
-            // FIXED: Disable unloading to prevent losing generated tile data
-            /*
-            if (allowChunkUnloading)
-            {
-                List<Point> toUnload = new List<Point>();
-                foreach (var kvp in loadedChunks)
-                {
-                    Point pos = kvp.Key;
-                    if (pos.X < startChunkX || pos.X > endChunkX || pos.Y < startChunkY || pos.Y > endChunkY)
-                    {
-                        toUnload.Add(pos);
-                    }
-                }
-                foreach (var pos in toUnload)
-                {
-                    loadedChunks.Remove(pos);
-                }
-            }
-            */
+            // Removed/Commented-out unloading logic (as per previous consensus)
 
             for (int cx = startChunkX; cx <= endChunkX; cx++)
             {
@@ -232,13 +224,6 @@ namespace Claude4_5Terraria.World
                 }
             }
         }
-
-       // public void EnableChunkUnloading()
-       // {
-            // FIXED: Don't enable unloading to keep all generated chunks in memory
-            // allowChunkUnloading = true;
-        //    Logger.Log("[WORLD] Chunk unloading DISABLED - keeping full world in memory for reliability");
-       // }
 
         public void SetTile(int worldX, int worldY, Tile tile)
         {
@@ -276,6 +261,7 @@ namespace Claude4_5Terraria.World
             }
         }
 
+        // CRITICAL FIX: Ensure chunk is loaded before accessing tile data
         public Tile GetTile(int worldX, int worldY)
         {
             if (worldX < 0 || worldX >= WORLD_WIDTH || worldY < 0 || worldY >= WORLD_HEIGHT)
@@ -287,12 +273,17 @@ namespace Claude4_5Terraria.World
             int localY = worldY % Chunk.CHUNK_SIZE;
 
             Point chunkPos = new Point(chunkX, chunkY);
-            if (loadedChunks.ContainsKey(chunkPos))
+
+            // FIX: If the map is drawing a tile, we must load/create the chunk containing it.
+            if (!loadedChunks.ContainsKey(chunkPos))
             {
-                return loadedChunks[chunkPos].GetTile(localX, localY);
+                Chunk chunk = new Chunk(chunkX, chunkY);
+                chunk.IsLoaded = true;
+                loadedChunks[chunkPos] = chunk;
             }
 
-            return null;
+            // Now we can safely return the tile
+            return loadedChunks[chunkPos].GetTile(localX, localY);
         }
 
         public List<TileChangeData> GetModifiedTiles()
@@ -346,21 +337,40 @@ namespace Claude4_5Terraria.World
             int centerTileY = (int)(playerCenter.Y / TILE_SIZE);
             int radius = 3;  // 3 tiles around player
 
+            bool newlyExplored = false;
+
             for (int dx = -radius; dx <= radius; dx++)
             {
                 for (int dy = -radius; dy <= radius; dy++)
                 {
                     if (dx * dx + dy * dy <= radius * radius)
                     {
-                        exploredTiles.Add(new Point(centerTileX + dx, centerTileY + dy));
+                        // Check if Add was successful (i.e., it's a new tile)
+                        if (exploredTiles.Add(new Point(centerTileX + dx, centerTileY + dy)))
+                        {
+                            newlyExplored = true;
+                        }
                     }
                 }
+            }
+
+            // Flag update only if something new was explored
+            if (newlyExplored && hudReference != null)
+            {
+                hudReference.FlagMinimapUpdate();
             }
         }
 
         public void MarkTileAsExplored(int x, int y)
         {
-            exploredTiles.Add(new Point(x, y));
+            // Check if the tile was actually added (i.e., it wasn't already explored)
+            if (exploredTiles.Add(new Point(x, y)))
+            {
+                if (hudReference != null)
+                {
+                    hudReference.FlagMinimapUpdate();
+                }
+            }
         }
 
         public bool IsTileExplored(int x, int y)
@@ -443,13 +453,13 @@ namespace Claude4_5Terraria.World
                     tileColor.A = 255;
 
                     float lightLevel = lightingSystem.GetLightLevel(x, y);
-                    
+
                     // Mark tiles as explored if they have sufficient light (lower threshold for torches)
                     if (lightLevel > 0.25f)
                     {
                         MarkTileAsExplored(x, y);
                     }
-                    
+
                     // Apply lighting to color
                     Color litColor = new Color(
                         (byte)(tileColor.R * lightLevel),
@@ -457,7 +467,7 @@ namespace Claude4_5Terraria.World
                         (byte)(tileColor.B * lightLevel),
                         (byte)255
                     );
-                    
+
                     // Draw tile - use sprite if available, otherwise use colored pixel
                     if (tileSprites.ContainsKey(tile.Type))
                     {
@@ -469,7 +479,7 @@ namespace Claude4_5Terraria.World
                         // Fallback to colored pixel
                         spriteBatch.Draw(pixelTexture, destRect, litColor);
                     }
-                    
+
                     // Draw mining overlay on top of tile
                     if (miningSystem != null && miningSystem.GetTargetedTile().HasValue)
                     {
@@ -528,7 +538,8 @@ namespace Claude4_5Terraria.World
             }
         }
 
-        private Color GetTileColor(TileType type)
+        // FIX: Change to public so HUD can use it for minimap
+        public Color GetTileColor(TileType type)
         {
             switch (type)
             {
@@ -547,6 +558,12 @@ namespace Claude4_5Terraria.World
                 case TileType.Sapling: return new Color(100, 200, 100);
                 default: return Color.White;
             }
+        }
+        // DEPRECATED: This method is no longer used by the optimized HUD.
+        public Color[,] GetMinimapData()
+        {
+            // This method is left blank or removed as the HUD now updates data incrementally.
+            return new Color[0, 0];
         }
 
         public int GetSurfaceHeight(int x)

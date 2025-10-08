@@ -1,16 +1,59 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Claude4_5Terraria.World;
+using System;
+using System.Collections.Generic;
 
 namespace Claude4_5Terraria.UI
 {
     public class HUD
     {
         private bool showBlockOutlines;
+        private bool showMinimap = true;
+        private float minimapOpacity = 0.7f;
+        private const int MINIMAP_WIDTH = 200;
+        private const int MINIMAP_HEIGHT = 400;
+        private bool isMapFullscreen = false;
+        public bool IsMapFullscreen => isMapFullscreen;
+
+        // NEW CONSTANT: Defines the fixed tile area visible in the zoomed view (100x100 tiles)
+        private const int MINIMAP_ZOOM_RADIUS = 50;
+
+        // --- CONSOLIDATED AND CORRECTED FIELDS ---
+        private Texture2D minimapTexture;
+        private Color[] minimapColorData;
+        private bool minimapNeedsUpdate = true;
+        // ------------------------------------------
 
         public HUD()
         {
             showBlockOutlines = false;
         }
+
+        // --- INITIALIZATION AND FLAGGING ---
+
+        public void Initialize(GraphicsDevice graphicsDevice)
+        {
+            int worldW = World.World.WORLD_WIDTH;
+            int worldH = World.World.WORLD_HEIGHT;
+
+            minimapTexture = new Texture2D(graphicsDevice, worldW, worldH);
+            minimapColorData = new Color[worldW * worldH];
+
+            for (int i = 0; i < minimapColorData.Length; i++)
+            {
+                minimapColorData[i] = Color.Transparent;
+            }
+
+            minimapNeedsUpdate = true;
+        }
+
+        public void FlagMinimapUpdate()
+        {
+            minimapNeedsUpdate = true;
+        }
+
+        // --- CONTROLS ---
 
         public void ToggleBlockOutlines()
         {
@@ -19,23 +62,147 @@ namespace Claude4_5Terraria.UI
 
         public bool ShowBlockOutlines => showBlockOutlines;
 
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition)
+        public bool ShowMinimap { get => showMinimap; set => showMinimap = value; }
+        public float MinimapOpacity { get => minimapOpacity; set => minimapOpacity = MathHelper.Clamp(value, 0f, 1f); }
+        public void ToggleMinimap() { showMinimap = !showMinimap; }
+
+        public void ToggleFullscreenMap()
+        {
+            isMapFullscreen = !isMapFullscreen;
+            showMinimap = !isMapFullscreen; // Hide the small map when fullscreen
+        }
+
+        // --- UPDATE LOGIC ---
+
+        public void UpdateMinimapData(Claude4_5Terraria.World.World world)
+        {
+            if (minimapTexture == null || !minimapNeedsUpdate) return;
+
+            int worldW = World.World.WORLD_WIDTH;
+            int worldH = World.World.WORLD_HEIGHT;
+
+            foreach (Point tilePos in world.ExploredTiles)
+            {
+                int x = tilePos.X;
+                int y = tilePos.Y;
+
+                if (x >= 0 && x < worldW && y >= 0 && y < worldH)
+                {
+                    int index = y * worldW + x;
+
+                    if (index >= 0 && index < minimapColorData.Length)
+                    {
+                        Tile tile = world.GetTile(x, y);
+
+                        if (tile != null && tile.IsActive)
+                        {
+                            minimapColorData[index] = world.GetTileColor(tile.Type);
+                        }
+                        else
+                        {
+                            minimapColorData[index] = Color.Black * 0.15f;
+                        }
+                    }
+                }
+            }
+
+            minimapTexture.SetData(minimapColorData);
+            minimapNeedsUpdate = false;
+        }
+
+        // --- DRAWING LOGIC ---
+
+        public void DrawMinimap(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world)
+        {
+            // Declare player position variables ONCE here
+            int playerTileX = (int)(playerPosition.X / World.World.TILE_SIZE);
+            int playerTileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
+            float scaleX, scaleY;
+            int playerScreenX, playerScreenY;
+            Rectangle playerDot;
+
+            // Defines the size of the source rectangle for the zoomed view (100 tiles wide/high)
+            int sourceTileSize = MINIMAP_ZOOM_RADIUS * 2;
+            int sourceX = playerTileX - MINIMAP_ZOOM_RADIUS;
+            int sourceY = playerTileY - MINIMAP_ZOOM_RADIUS;
+            Rectangle sourceRect = new Rectangle(sourceX, sourceY, sourceTileSize, sourceTileSize);
+
+
+            if (isMapFullscreen)
+            {
+                // Draw a very low opacity background overlay so the game is still visible
+                spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, screenWidth, screenHeight), Color.Black * 0.1f);
+
+                // CRITICAL FIX: Fullscreen map uses a zoomed view, but stretched across the screen.
+                Rectangle fullScreenRect = new Rectangle(0, 0, screenWidth, screenHeight);
+
+                // Draw the zoomed portion (sourceRect) stretched to fill the fullScreenRect.
+                // This makes the map legible while fullscreen.
+                spriteBatch.Draw(minimapTexture, fullScreenRect, sourceRect, Color.White * minimapOpacity);
+
+                // Player dot position within the fullScreenRect (player is always centered)
+                int dotSize = 10;
+                playerScreenX = (screenWidth / 2);
+                playerScreenY = (screenHeight / 2);
+
+                playerDot = new Rectangle(playerScreenX - dotSize / 2, playerScreenY - dotSize / 2, dotSize, dotSize);
+                spriteBatch.Draw(pixelTexture, playerDot, Color.Red);
+
+                return;
+            }
+
+            // --- Small Minimap (Default Zoomed View) ---
+            if (!showMinimap || minimapTexture == null) return;
+
+            // Small map size (200x400)
+            Rectangle minimapRect = new Rectangle(10, screenHeight - MINIMAP_HEIGHT - 10, MINIMAP_WIDTH, MINIMAP_HEIGHT);
+
+            // Draw the CROPPED/ZOOMED portion of the full texture, scaled to minimapRect.
+            // This is the legible view for the small map.
+            // We draw the sourceRect (100x100 tiles) into the minimapRect (200x400 screen pixels).
+            spriteBatch.Draw(minimapTexture, minimapRect, sourceRect, Color.White * minimapOpacity);
+
+            // Draw border
+            DrawBorder(spriteBatch, pixelTexture, minimapRect, 2, Color.White * minimapOpacity);
+
+            // Player dot position within the small minimap (player is always centered in the zoomed view)
+            scaleX = (float)MINIMAP_WIDTH / sourceTileSize; // Scale 200px / 100 tiles = 2x
+            scaleY = (float)MINIMAP_HEIGHT / sourceTileSize; // Scale 400px / 100 tiles = 4x (will be stretched/cropped)
+
+            // Player is located at (MINIMAP_ZOOM_RADIUS, MINIMAP_ZOOM_RADIUS) in the sourceRect, which is the center.
+            playerScreenX = minimapRect.X + (int)(MINIMAP_WIDTH * 0.5f);
+            playerScreenY = minimapRect.Y + (int)(MINIMAP_HEIGHT * 0.5f);
+
+            playerDot = new Rectangle(playerScreenX - 2, playerScreenY - 2, 4, 4);
+            spriteBatch.Draw(pixelTexture, playerDot, Color.Red);
+
+            // Opacity label
+            string opacityText = $"Opacity: {(int)(minimapOpacity * 100)}%";
+            Vector2 textSize = font.MeasureString(opacityText);
+            Vector2 textPos = new Vector2(minimapRect.X + (MINIMAP_WIDTH - textSize.X) / 2, minimapRect.Y - 20);
+            spriteBatch.DrawString(font, opacityText, textPos, Color.White * minimapOpacity);
+
+        }
+
+        // Main Draw entry point
+        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world)
         {
             if (font == null) return;
 
-            // Draw coordinates in top-left
-            int tileX = (int)(playerPosition.X / 32); // TILE_SIZE = 32
-            int tileY = (int)(playerPosition.Y / 32);
+            // Draw coordinates, block outline hint, etc.
+            int tileX = (int)(playerPosition.X / World.World.TILE_SIZE);
+            int tileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
             string coordText = $"X: {tileX}, Y: {tileY}";
             Vector2 coordSize = font.MeasureString(coordText);
             Vector2 coordPosition = new Vector2(10, 10);
-            
+
             // Background for coordinates
             Rectangle coordBgRect = new Rectangle(
                 (int)coordPosition.X - 5,
                 (int)coordPosition.Y - 5,
                 (int)coordSize.X + 10,
                 (int)coordSize.Y + 10
+
             );
             spriteBatch.Draw(pixelTexture, coordBgRect, Color.Black * 0.7f);
             spriteBatch.DrawString(font, coordText, coordPosition, Color.Yellow);
@@ -43,7 +210,6 @@ namespace Claude4_5Terraria.UI
             // Draw block outline hint in top-right
             string hintText = showBlockOutlines ? "T: Hide Outlines" : "T: Show Outlines";
             Vector2 textSize = font.MeasureString(hintText);
-
             Vector2 textPosition = new Vector2(screenWidth - textSize.X - 20, 10);
 
             // Background
@@ -57,6 +223,17 @@ namespace Claude4_5Terraria.UI
 
             // Text
             spriteBatch.DrawString(font, hintText, textPosition, Color.White);
+
+            // Draw minimap in bottom left
+            DrawMinimap(spriteBatch, pixelTexture, font, screenWidth, screenHeight, playerPosition, world);
+        }
+
+        private void DrawBorder(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle rect, int thickness, Color color)
+        {
+            spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, rect.Width, thickness), color);
+            spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
+            spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
+            spriteBatch.Draw(pixelTexture, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
         }
     }
 }

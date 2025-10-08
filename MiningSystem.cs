@@ -437,7 +437,7 @@ namespace Claude4_5Terraria.Systems
             else
             {
                 world.SetTile(x, y, new Tile(TileType.Air));
-                droppedItemType = ItemTypeExtensions.FromTileType(tileType);
+                droppedItemType = (tileType == TileType.Grass) ? ItemType.Dirt : ItemTypeExtensions.FromTileType(tileType);
                 dropCount = 1;
             }
 

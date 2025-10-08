@@ -12,7 +12,8 @@ namespace Claude4_5Terraria.UI
         Options,
         LoadMenu,
         Loading,
-        Playing
+        Playing,
+        Paused
     }
 
     public class StartMenu
