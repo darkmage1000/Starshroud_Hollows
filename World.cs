@@ -187,6 +187,7 @@ namespace Claude4_5Terraria.World
             AddTree(tree);
         }
 
+        // In World.cs, in the UpdateLoadedChunks method, comment out or remove the unloading section (around lines ~200-220 based on document):
         public void UpdateLoadedChunks(Camera camera)
         {
             Rectangle visibleArea = camera.GetVisibleArea(TILE_SIZE);
@@ -197,6 +198,8 @@ namespace Claude4_5Terraria.World
             int endChunkX = Math.Min(chunksWide - 1, (visibleArea.Right + pixelsPerChunk - 1) / pixelsPerChunk + preload);
             int endChunkY = Math.Min(chunksHigh - 1, (visibleArea.Bottom + pixelsPerChunk - 1) / pixelsPerChunk + preload);
 
+            // FIXED: Disable unloading to prevent losing generated tile data
+            /*
             if (allowChunkUnloading)
             {
                 List<Point> toUnload = new List<Point>();
@@ -213,6 +216,7 @@ namespace Claude4_5Terraria.World
                     loadedChunks.Remove(pos);
                 }
             }
+            */
 
             for (int cx = startChunkX; cx <= endChunkX; cx++)
             {
@@ -228,6 +232,13 @@ namespace Claude4_5Terraria.World
                 }
             }
         }
+
+       // public void EnableChunkUnloading()
+       // {
+            // FIXED: Don't enable unloading to keep all generated chunks in memory
+            // allowChunkUnloading = true;
+        //    Logger.Log("[WORLD] Chunk unloading DISABLED - keeping full world in memory for reliability");
+       // }
 
         public void SetTile(int worldX, int worldY, Tile tile)
         {

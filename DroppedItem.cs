@@ -2,6 +2,7 @@
 using Microsoft.Xna.Framework.Graphics;
 using Claude4_5Terraria.Enums;
 using System;
+using Microsoft.Xna.Framework.Content;
 
 namespace Claude4_5Terraria.Entities
 {
@@ -20,6 +21,14 @@ namespace Claude4_5Terraria.Entities
         private float lifetime;
         private const float DESPAWN_TIME = 300f;
 
+        private Texture2D itemSprite;
+        private static ContentManager staticContent;
+
+        public static void SetStaticContent(ContentManager content)
+        {
+            staticContent = content;
+        }
+
         public DroppedItem(Vector2 position, ItemType itemType)  // Changed parameter type
         {
             Position = position;
@@ -35,6 +44,51 @@ namespace Claude4_5Terraria.Entities
 
             isOnGround = false;
             lifetime = 0f;
+
+            LoadItemSprite();
+        }
+
+        private void LoadItemSprite()
+        {
+            string spriteName = GetSpriteName(ItemType);
+            if (!string.IsNullOrEmpty(spriteName) && staticContent != null)
+            {
+                try
+                {
+                    itemSprite = staticContent.Load<Texture2D>(spriteName);
+                }
+                catch
+                {
+                    itemSprite = null;
+                }
+            }
+        }
+
+        private string GetSpriteName(ItemType type)
+        {
+            switch (type)
+            {
+                case ItemType.Dirt:
+                    return "dirt";
+                case ItemType.Grass:
+                    return "grass";
+                case ItemType.Stone:
+                    return "stone";
+                case ItemType.Coal:
+                    return "coal";
+                case ItemType.Copper:
+                    return "copperore";
+                case ItemType.Silver:
+                    return "silverore";
+                case ItemType.Platinum:
+                    return "platinumore";
+                case ItemType.Wood:
+                    return "wood"; // Falls back to color if not present
+                case ItemType.Acorn:
+                    return "acorn";
+                default:
+                    return null;
+            }
         }
 
         public void Update(float deltaTime, World.World world)
@@ -115,8 +169,6 @@ namespace Claude4_5Terraria.Entities
         }
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
         {
-            Color itemColor = GetItemColor(ItemType);
-
             Rectangle itemRect = new Rectangle(
                 (int)Position.X,
                 (int)Position.Y,
@@ -124,7 +176,16 @@ namespace Claude4_5Terraria.Entities
                 ITEM_SIZE
             );
 
-            spriteBatch.Draw(pixelTexture, itemRect, itemColor);
+            if (itemSprite != null)
+            {
+                spriteBatch.Draw(itemSprite, itemRect, Color.White);
+            }
+            else
+            {
+                Color itemColor = GetItemColor(ItemType);
+                spriteBatch.Draw(pixelTexture, itemRect, itemColor);
+            }
+
             DrawBorder(spriteBatch, pixelTexture, itemRect, 1, Color.White * 0.8f);
         }
 

@@ -73,6 +73,7 @@ namespace Claude4_5Terraria
         protected override void LoadContent()
         {
             spriteBatch = new SpriteBatch(GraphicsDevice);
+            DroppedItem.SetStaticContent(Content);
 
             pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
             pixelTexture.SetData(new[] { Color.White });

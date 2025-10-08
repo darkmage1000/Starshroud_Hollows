@@ -25,6 +25,7 @@ namespace Claude4_5Terraria.Systems
             this.random = new Random(this.seed);
         }
 
+        // In WorldGenerator.cs, update Generate() to preload all chunks before terrain gen (ensures SetTile works world-wide):
         public void Generate()
         {
             DateTime startTime = DateTime.Now;
@@ -32,6 +33,25 @@ namespace Claude4_5Terraria.Systems
             try
             {
                 Logger.Log("[WORLDGEN] Starting world generation...");
+
+                // FIXED: Preload all chunks to ensure SetTile persists during generation
+                Logger.Log("[WORLDGEN] Preloading all chunks...");
+                int chunksWide = (Claude4_5Terraria.World.World.WORLD_WIDTH + Claude4_5Terraria.World.Chunk.CHUNK_SIZE - 1) / Claude4_5Terraria.World.Chunk.CHUNK_SIZE;
+                int chunksHigh = (Claude4_5Terraria.World.World.WORLD_HEIGHT + Claude4_5Terraria.World.Chunk.CHUNK_SIZE - 1) / Claude4_5Terraria.World.Chunk.CHUNK_SIZE;
+                for (int cx = 0; cx < chunksWide; cx++)
+                {
+                    for (int cy = 0; cy < chunksHigh; cy++)
+                    {
+                        Point chunkPos = new Point(cx, cy);
+                        if (!world.loadedChunks.ContainsKey(chunkPos))
+                        {
+                            Claude4_5Terraria.World.Chunk chunk = new Claude4_5Terraria.World.Chunk(cx, cy);
+                            chunk.IsLoaded = true;
+                            world.loadedChunks[chunkPos] = chunk;
+                        }
+                    }
+                }
+                Logger.Log($"[WORLDGEN] Preloaded {world.loadedChunks.Count} chunks");
 
                 OnProgressUpdate?.Invoke(0.0f, "Generating terrain...");
                 GenerateTerrain();
@@ -109,23 +129,28 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
+        // In WorldGenerator.cs, update GenerateCaves() to add more caves with varying sizes (extra small/medium/large layers):
         private void GenerateCaves()
         {
             // Calculate safe maximum depth
             int maxSafeDepth = Claude4_5Terraria.World.World.WORLD_HEIGHT - 150;
-            
+
+            // Small shallow caves (NEW: More small ones near surface)
+            CarveCaves(200, 20, 40, 1, 2, CAVE_START_DEPTH, Math.Min(600, maxSafeDepth));
             // Shallow caves
             CarveCaves(100, 40, 80, 2, 4, CAVE_START_DEPTH, Math.Min(600, maxSafeDepth));
             // Mid-depth caves
             CarveCaves(150, 60, 120, 2, 5, 600, Math.Min(1500, maxSafeDepth));
+            // Medium deep caves (NEW: Extra medium-sized)
+            CarveCaves(120, 50, 100, 3, 5, 1000, Math.Min(2000, maxSafeDepth));
             // Deep caves
             CarveCaves(140, 80, 150, 3, 6, 1500, Math.Min(2500, maxSafeDepth));
-            // Very deep caves (NEW - more space for platinum/silver)
-            CarveCaves(120, 100, 180, 4, 7, 2500, Math.Min(3500, maxSafeDepth));
+            // Very deep caves (NEW: More large ones deeper)
+            CarveCaves(160, 100, 180, 4, 7, 2500, Math.Min(3500, maxSafeDepth));
             // Bottom caves - FIXED: Stop before the absolute bottom to prevent falling off
             if (maxSafeDepth > 3500)
             {
-                CarveCaves(80, 100, 200, 4, 8, 3500, maxSafeDepth);
+                CarveCaves(100, 100, 200, 4, 8, 3500, maxSafeDepth);  // Increased count for more bottom variety
             }
         }
 
@@ -269,34 +294,68 @@ namespace Claude4_5Terraria.Systems
         {
             // UPDATED: Ore generation for full map depth
             // Coal - common, found early
-            PlaceOreType(TileType.Coal, 12000, 210, Claude4_5Terraria.World.World.WORLD_HEIGHT - 150, 5, 15);
-            
+            PlaceOreType(TileType.Coal, 12000, 210, 1900, 5, 9); 
             // Copper - common, shallow to mid depth
-            PlaceOreType(TileType.Copper, 5000, 230, 1800, 3, 10);
+            PlaceOreType(TileType.Copper, 11000, 210, 1800, 5, 7);
             
             // Silver - uncommon, mid to deep (FIXED: Much deeper range)
-            PlaceOreType(TileType.Silver, 3500, 1500, 3000, 3, 8);
+            PlaceOreType(TileType.Silver, 6000, 1150, 3000, 5, 7);
             
             // Platinum - rare, deep only (FIXED: Even deeper range)
-            PlaceOreType(TileType.Platinum, 2000, 2500, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 2, 6);
+            PlaceOreType(TileType.Platinum, 5000, 1900, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);
         }
 
         private void PlaceOreType(TileType oreType, int veinCount, int minDepth, int maxDepth, int minVeinSize, int maxVeinSize)
         {
             for (int i = 0; i < veinCount; i++)
             {
-                int veinX = random.Next(0, Claude4_5Terraria.World.World.WORLD_WIDTH);
-                int veinY = random.Next(minDepth, maxDepth);
-                int veinSize = random.Next(minVeinSize, maxVeinSize);
+                int startX = random.Next(0, Claude4_5Terraria.World.World.WORLD_WIDTH);
+                int startY = random.Next(minDepth, maxDepth);
+                int veinLength = random.Next(minVeinSize, maxVeinSize + 1);  // Length of the vein chain
+                int veinThickness = random.Next(1, 3);  // 1-2 tiles thick for vein feel
 
-                for (int j = 0; j < veinSize; j++)
+                double direction = random.NextDouble() * Math.PI * 2;
+                int currentX = startX;
+                int currentY = startY;
+
+                for (int step = 0; step < veinLength; step++)
                 {
-                    int oreX = veinX + random.Next(-4, 5);
-                    int oreY = veinY + random.Next(-4, 5);
+                    // Place a small cluster at current position (connected to previous)
+                    for (int dx = -veinThickness / 2; dx <= veinThickness / 2; dx++)
+                    {
+                        for (int dy = -veinThickness / 2; dy <= veinThickness / 2; dy++)
+                        {
+                            if (dx * dx + dy * dy <= (veinThickness / 2) * (veinThickness / 2))
+                            {
+                                int oreX = currentX + dx;
+                                int oreY = currentY + dy;
 
-                    var tile = world.GetTile(oreX, oreY);
-                    if (tile != null && tile.Type == TileType.Stone)
-                        world.SetTile(oreX, oreY, new Claude4_5Terraria.World.Tile(oreType));
+                                if (oreX >= 0 && oreX < Claude4_5Terraria.World.World.WORLD_WIDTH &&
+                                    oreY >= 0 && oreY < Claude4_5Terraria.World.World.WORLD_HEIGHT)
+                                {
+                                    var tile = world.GetTile(oreX, oreY);
+                                    if (tile != null && tile.Type == TileType.Stone)
+                                        world.SetTile(oreX, oreY, new Claude4_5Terraria.World.Tile(oreType));
+                                }
+                            }
+                        }
+                    }
+
+                    // Wobble the direction slightly for natural curves
+                    direction += (random.NextDouble() - 0.5) * 0.8;
+
+                    // Bias slightly downward for deeper veins
+                    if (random.NextDouble() < 0.3)
+                        direction += 0.1;
+
+                    int moveStep = random.Next(1, 3);  // Step size for connection
+                    currentX += (int)(Math.Cos(direction) * moveStep);
+                    currentY += (int)(Math.Sin(direction) * moveStep);
+
+                    // Bounds check to stay in world
+                    if (currentX < 0 || currentX >= Claude4_5Terraria.World.World.WORLD_WIDTH ||
+                        currentY < minDepth || currentY > maxDepth)
+                        break;
                 }
             }
         }
