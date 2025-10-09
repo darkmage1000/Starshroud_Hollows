@@ -183,6 +183,18 @@
 /processorParam:Quality=Best
 /build:hitting a tree.mp3
 
+#begin magicchest.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:magicchest.png
+
 #begin placing and mining a torch.mp3
 /importer:Mp3Importer
 /processor:SongProcessor
@@ -273,6 +285,18 @@
 /processorParam:TextureFormat=Color
 /build:silverblock.png
 
+#begin silverchest.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:silverchest.png
+
 #begin silverore.png
 /importer:TextureImporter
 /processor:TextureProcessor
@@ -345,6 +369,18 @@
 /processorParam:TextureFormat=Color
 /build:torch.png
 
+#begin woodchest.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:woodchest.png
+
 #begin woodcraftingtable.png
 /importer:TextureImporter
 /processor:TextureProcessor
@@ -368,16 +404,4 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:woodpickaxe.png
-
-#begin stonepickaxe.png
-/importer:TextureImporter
-/processor:TextureProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:GenerateMipmaps=False
-/processorParam:PremultiplyAlpha=True
-/processorParam:ResizeToPowerOfTwo=False
-/processorParam:MakeSquare=False
-/processorParam:TextureFormat=Color
-/build:stonepickaxe.png
 
