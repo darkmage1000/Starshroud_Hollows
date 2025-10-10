@@ -246,11 +246,16 @@ namespace Claude4_5Terraria.Systems
                     break;
 
                 case ChestTier.Silver:
-                    // 3 Platinum Ore, Silver Bars (5-10), Torches (10-15), 3 Recall Potions
+                    // 3 Platinum Ore, Silver Bars (5-10), Torches (10-15), 3 Recall Potions, 30% chance Empty Bucket
                     chest.Inventory.AddItem(ItemType.Platinum, 3);
                     chest.Inventory.AddItem(ItemType.SilverBar, random.Next(5, 11));
                     chest.Inventory.AddItem(ItemType.Torch, random.Next(10, 16));
                     chest.Inventory.AddItem(ItemType.RecallPotion, 3);
+                    // 30% chance for bucket
+                    if (random.NextDouble() < 0.3)
+                    {
+                        chest.Inventory.AddItem(ItemType.EmptyBucket, 1);
+                    }
                     break;
 
                 case ChestTier.Magic:

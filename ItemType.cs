@@ -26,6 +26,7 @@ namespace Claude4_5Terraria.Enums
         WoodChest,
         SilverChest,
         MagicChest,
+        Bed,
 
         // Consumables
         RecallPotion,  // Teleports to spawn, 3 uses
@@ -38,6 +39,9 @@ namespace Claude4_5Terraria.Enums
         SilverPickaxe,
         PlatinumPickaxe,
         RunicPickaxe,  // Best pickaxe tier
+        EmptyBucket,
+        WaterBucket,
+        LavaBucket,
 
         // Weapons
         WoodSword
@@ -63,6 +67,7 @@ namespace Claude4_5Terraria.Enums
                 case ItemType.WoodChest: return TileType.WoodChest;
                 case ItemType.SilverChest: return TileType.SilverChest;
                 case ItemType.MagicChest: return TileType.MagicChest;
+                case ItemType.Bed: return TileType.Bed;
                 default: return TileType.Air;
             }
         }
@@ -85,6 +90,7 @@ namespace Claude4_5Terraria.Enums
                 case TileType.WoodChest: return ItemType.WoodChest;
                 case TileType.SilverChest: return ItemType.SilverChest;
                 case TileType.MagicChest: return ItemType.MagicChest;
+                case TileType.Bed: return ItemType.Bed;
                 default: return ItemType.Dirt;
             }
         }
@@ -103,6 +109,7 @@ namespace Claude4_5Terraria.Enums
                 case ItemType.WoodChest:
                 case ItemType.SilverChest:
                 case ItemType.MagicChest:
+                case ItemType.Bed:
                     return true;
                 default:
                     return false;

@@ -20,6 +20,8 @@ namespace Claude4_5Terraria.Entities
         private bool isOnGround;
         private float lifetime;
         private const float DESPAWN_TIME = 300f;
+        private float pickupDelay; // NEW: Delay before item can be picked up
+        private const float PICKUP_DELAY_TIME = 1.5f; // 1.5 second delay (was 0.5)
 
         private Texture2D itemSprite;
         private static ContentManager staticContent;
@@ -44,6 +46,7 @@ namespace Claude4_5Terraria.Entities
 
             isOnGround = false;
             lifetime = 0f;
+            pickupDelay = PICKUP_DELAY_TIME; // NEW: Start with pickup delay
 
             LoadItemSprite();
         }
@@ -94,6 +97,12 @@ namespace Claude4_5Terraria.Entities
         public void Update(float deltaTime, World.World world)
         {
             lifetime += deltaTime;
+            
+            // NEW: Decrease pickup delay
+            if (pickupDelay > 0)
+            {
+                pickupDelay -= deltaTime;
+            }
 
             if (!isOnGround)
             {
@@ -153,6 +162,9 @@ namespace Claude4_5Terraria.Entities
 
         public bool CanCollect(Vector2 playerPosition, int playerWidth, int playerHeight)
         {
+            // NEW: Can't pick up if still in delay period
+            if (pickupDelay > 0) return false;
+            
             Rectangle itemRect = new Rectangle((int)Position.X, (int)Position.Y, ITEM_SIZE, ITEM_SIZE);
             Rectangle playerRect = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
 

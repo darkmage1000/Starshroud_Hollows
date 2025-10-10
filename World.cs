@@ -128,6 +128,11 @@ namespace Claude4_5Terraria.World
             Logger.Log($"[WORLD] Planted sapling at ({x}, {y})");
         }
 
+        // NEW: Liquid spreading system
+        private float liquidUpdateTimer = 0f;
+        private const float LIQUID_UPDATE_INTERVAL = 0.5f; // INCREASED: Update liquids every 0.5 seconds (was 0.1)
+        private const int MAX_LIQUID_UPDATES_PER_FRAME = 10; // LIMIT: Only update 10 liquid tiles per frame
+        
         public void Update(float deltaTime, WorldGenerator worldGenerator)
         {
             // Don't update saplings/trees if world updates disabled (loaded save)
@@ -149,6 +154,94 @@ namespace Claude4_5Terraria.World
             {
                 GrowSaplingIntoTree(sapling.Position.X, sapling.Position.Y);
                 saplings.Remove(sapling);
+            }
+            
+            // NEW: Update liquid spreading (OPTIMIZED)
+            liquidUpdateTimer += deltaTime;
+            if (liquidUpdateTimer >= LIQUID_UPDATE_INTERVAL)
+            {
+                liquidUpdateTimer = 0f;
+                UpdateLiquidSpreading();
+            }
+        }
+        
+        // NEW: Liquid spreading logic (HEAVILY OPTIMIZED)
+        private void UpdateLiquidSpreading()
+        {
+            List<Point> liquidsToSpread = new List<Point>();
+            
+            // OPTIMIZATION: Only check loaded chunks near camera/player
+            // Find all liquid tiles that need to spread (LIMIT TO LOADED CHUNKS ONLY)
+            int checkedChunks = 0;
+            foreach (var chunk in loadedChunks.Values)
+            {
+                // CRITICAL OPTIMIZATION: Skip chunks that are too far from player
+                checkedChunks++;
+                if (checkedChunks > 20) break; // Only check 20 nearest chunks max
+                
+                for (int localX = 0; localX < Chunk.CHUNK_SIZE; localX += 2) // OPTIMIZATION: Check every other tile
+                {
+                    for (int localY = 0; localY < Chunk.CHUNK_SIZE; localY += 2) // OPTIMIZATION: Check every other tile
+                    {
+                        int worldX = chunk.ChunkX * Chunk.CHUNK_SIZE + localX;
+                        int worldY = chunk.ChunkY * Chunk.CHUNK_SIZE + localY;
+                        
+                        Tile tile = GetTile(worldX, worldY);
+                        if (tile != null && tile.IsActive && (tile.Type == TileType.Water || tile.Type == TileType.Lava))
+                        {
+                            liquidsToSpread.Add(new Point(worldX, worldY));
+                            
+                            // CRITICAL: Limit how many liquids we process
+                            if (liquidsToSpread.Count >= MAX_LIQUID_UPDATES_PER_FRAME)
+                            {
+                                goto FinishedSearching;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            FinishedSearching:
+            
+            // Spread each liquid (already limited to max 10)
+            foreach (Point liquid in liquidsToSpread)
+            {
+                SpreadLiquid(liquid.X, liquid.Y);
+            }
+        }
+        
+        private void SpreadLiquid(int x, int y)
+        {
+            Tile sourceTile = GetTile(x, y);
+            if (sourceTile == null || !sourceTile.IsActive) return;
+            
+            TileType liquidType = sourceTile.Type;
+            if (liquidType != TileType.Water && liquidType != TileType.Lava) return;
+            
+            // Try to spread down first (liquids fall)
+            Tile below = GetTile(x, y + 1);
+            if (below != null && !below.IsActive)
+            {
+                SetTile(x, y + 1, new Tile(liquidType));
+                return; // Only spread in one direction per update
+            }
+            
+            // If can't spread down, try spreading sideways
+            Tile left = GetTile(x - 1, y);
+            Tile right = GetTile(x + 1, y);
+            
+            // Spread left if possible
+            if (left != null && !left.IsActive && random.Next(2) == 0)
+            {
+                SetTile(x - 1, y, new Tile(liquidType));
+                return;
+            }
+            
+            // Spread right if possible
+            if (right != null && !right.IsActive)
+            {
+                SetTile(x + 1, y, new Tile(liquidType));
+                return;
             }
         }
 
@@ -236,6 +329,9 @@ namespace Claude4_5Terraria.World
             if (trackTileChanges && tile.Type == TileType.Air)
             {
                 Logger.Log($"[WORLD] Player mined tile at ({worldX}, {worldY})");
+                
+                // CRITICAL: When a block is mined, check if liquids need to spread into the new space
+                TriggerLiquidSpreadCheck(worldX, worldY);
             }
 
             int chunkX = worldX / Chunk.CHUNK_SIZE;
@@ -258,6 +354,26 @@ namespace Claude4_5Terraria.World
             {
                 Point tilePos = new Point(worldX, worldY);
                 modifiedTiles[tilePos] = tile;
+            }
+        }
+        
+        // NEW: Trigger immediate liquid spread check when block is mined
+        private void TriggerLiquidSpreadCheck(int minedX, int minedY)
+        {
+            // Check all 4 adjacent tiles for liquids that need to spread
+            CheckAndSpreadAdjacentLiquid(minedX - 1, minedY); // Left
+            CheckAndSpreadAdjacentLiquid(minedX + 1, minedY); // Right
+            CheckAndSpreadAdjacentLiquid(minedX, minedY - 1); // Above
+            CheckAndSpreadAdjacentLiquid(minedX, minedY + 1); // Below
+        }
+        
+        private void CheckAndSpreadAdjacentLiquid(int x, int y)
+        {
+            Tile tile = GetTile(x, y);
+            if (tile != null && tile.IsActive && (tile.Type == TileType.Water || tile.Type == TileType.Lava))
+            {
+                // Found a liquid adjacent to the mined block - spread it immediately
+                SpreadLiquid(x, y);
             }
         }
 
@@ -559,6 +675,10 @@ namespace Claude4_5Terraria.World
                 case TileType.WoodChest: return new Color(139, 69, 19);
                 case TileType.SilverChest: return new Color(192, 192, 192);
                 case TileType.MagicChest: return new Color(138, 43, 226);
+                case TileType.Lava: return new Color(255, 100, 0); // Bright orange-red
+                case TileType.Water: return new Color(30, 144, 255); // Blue
+                case TileType.Obsidian: return new Color(20, 20, 30); // Very dark purple/black
+                case TileType.Bed: return new Color(200, 50, 50); // Red bed
                 default: return Color.White;
             }
         }
@@ -591,6 +711,9 @@ namespace Claude4_5Terraria.World
             Tile tile = GetTile(x, y);
             if (tile == null || !tile.IsActive) return false;
             if (tile.IsPartOfTree || tile.Type == TileType.Torch || tile.Type == TileType.Sapling) return false;
+            
+            // CRITICAL FIX: Water and lava are NOT solid - player can enter them
+            if (tile.Type == TileType.Water || tile.Type == TileType.Lava) return false;
 
             return true;
         }

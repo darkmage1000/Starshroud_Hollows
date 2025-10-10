@@ -71,7 +71,7 @@ namespace Claude4_5Terraria
         private List<Vector2> rainParticles;
         private Random random;
         private const int MAX_RAIN_DROPS = 1000;
-        private const float RAIN_SPEED = 15f;
+        private const float RAIN_SPEED = 800f;  // MUCH faster rain
         private const float RAIN_OFFSET_X = 500f;
         private const float RAIN_OFFSET_Y = 100f;
         // ------------------------------------------
@@ -134,8 +134,9 @@ namespace Claude4_5Terraria
             {
                 mineDirtSound = Content.Load<SoundEffect>("a_pickaxe_hitting_dirt");
                 mineStoneSound = Content.Load<SoundEffect>("a_pickaxe_hitting_stone");
-                mineTorchSound = Content.Load<SoundEffect>("hitting_a_tree");
-                placeTorchSound = Content.Load<SoundEffect>("placing_and_mining_a_torch");
+                SoundEffect woodSound = Content.Load<SoundEffect>("hitting a tree");  // Load wood sound separately
+                mineTorchSound = woodSound;  // Use wood sound for torch
+                placeTorchSound = Content.Load<SoundEffect>("placing and mining a torch");  // FIXED: spaces
 
                 // CRITICAL AUDIO FIX: Create a SoundEffectInstance immediately after loading
                 // This initializes the audio track resources, preventing late-game crashes/silence.
@@ -411,6 +412,15 @@ namespace Claude4_5Terraria
                 ToggleAutoMining();
             }
 
+            // NEW: Press Q to drop currently selected item (only when inventory is CLOSED)
+            if (keyboardState.IsKeyDown(Keys.Q) && !previousKeyboardState.IsKeyDown(Keys.Q))
+            {
+                if (inventoryUI != null && !inventoryUI.IsInventoryOpen)
+                {
+                    DropSelectedItem();
+                }
+            }
+
             // Execute player update before position calculations
             player.Update(gameTime);
             camera.Position = player.Position;
@@ -453,12 +463,19 @@ namespace Claude4_5Terraria
             }
 
 
-            // NEW: Handle right-click to open chests OR use Recall Potion
+            // NEW: Handle right-click to open chests, use Recall Potion, or use bed
             if (mouseState.RightButton == ButtonState.Pressed && previousMouseState.RightButton == ButtonState.Released)
             {
+                // Get world position from mouse
+                Vector2 worldPos = camera.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
+                int tileX = (int)(worldPos.X / World.World.TILE_SIZE);
+                int tileY = (int)(worldPos.Y / World.World.TILE_SIZE);
+                var clickedTile = world.GetTile(tileX, tileY);
+                
                 // Check if player is using Recall Potion from hotbar
                 var selectedSlot = miningSystem.GetSelectedHotbarSlot();
                 var slot = inventory.GetSlot(selectedSlot);
+                
                 if (slot != null && slot.ItemType == ItemType.RecallPotion && slot.Count > 0)
                 {
                     // Use Recall Potion - teleport to spawn
@@ -471,9 +488,34 @@ namespace Claude4_5Terraria
                     }
                     Logger.Log("[GAME] Used Recall Potion - teleported to spawn!");
                 }
-                else
+                // Check if player is using a bucket
+                else if (slot != null && (slot.ItemType == ItemType.EmptyBucket || slot.ItemType == ItemType.WaterBucket || slot.ItemType == ItemType.LavaBucket))
                 {
-                    // Try to open chest
+                    HandleBucketUse(tileX, tileY, clickedTile, slot);
+                }
+                // Check if clicking on a bed
+                else if (clickedTile != null && clickedTile.Type == TileType.Bed)
+                {
+                    // Set bed as spawn and speed up time
+                    Point bedTilePos = new Point(tileX, tileY);
+                    Vector2 bedSpawnPos = new Vector2(
+                        bedTilePos.X * World.World.TILE_SIZE,
+                        (bedTilePos.Y - 2) * World.World.TILE_SIZE  // Spawn 2 tiles above bed
+                    );
+                    player.SetBedSpawn(bedSpawnPos);
+                    
+                    // Speed up time (advance to morning)
+                    if (timeSystem != null)
+                    {
+                        timeSystem.AdvanceToMorning();
+                        Logger.Log("[GAME] Slept in bed - time advanced to morning!");
+                    }
+                }
+                // Check if clicking on a chest
+                else if (clickedTile != null && (clickedTile.Type == TileType.WoodChest ||
+                    clickedTile.Type == TileType.SilverChest ||
+                    clickedTile.Type == TileType.MagicChest))
+                {
                     HandleChestInteraction(mouseState);
                 }
             }
@@ -519,6 +561,56 @@ namespace Claude4_5Terraria
                 chestSystem.RemoveChest(position, inventory);
                 world.SetTile(position.X, position.Y, new Tile(TileType.Air));
                 Logger.Log($"[GAME] Chest mined at ({position.X}, {position.Y})");
+            }
+        }
+
+        // NEW: Handle bucket use
+        private void HandleBucketUse(int tileX, int tileY, Tile clickedTile, InventorySlot slot)
+        {
+            if (slot == null) return;
+            
+            // Empty bucket: try to pick up liquid
+            if (slot.ItemType == ItemType.EmptyBucket)
+            {
+                if (clickedTile != null && clickedTile.IsActive)
+                {
+                    if (clickedTile.Type == TileType.Water)
+                    {
+                        // Pick up water
+                        world.SetTile(tileX, tileY, new Tile(TileType.Air));
+                        slot.ItemType = ItemType.WaterBucket;
+                        Logger.Log("[GAME] Filled bucket with water!");
+                    }
+                    else if (clickedTile.Type == TileType.Lava)
+                    {
+                        // Pick up lava
+                        world.SetTile(tileX, tileY, new Tile(TileType.Air));
+                        slot.ItemType = ItemType.LavaBucket;
+                        Logger.Log("[GAME] Filled bucket with lava!");
+                    }
+                }
+            }
+            // Water bucket: place water
+            else if (slot.ItemType == ItemType.WaterBucket)
+            {
+                if (clickedTile == null || !clickedTile.IsActive)
+                {
+                    // Place water
+                    world.SetTile(tileX, tileY, new Tile(TileType.Water));
+                    slot.ItemType = ItemType.EmptyBucket;
+                    Logger.Log("[GAME] Placed water!");
+                }
+            }
+            // Lava bucket: place lava
+            else if (slot.ItemType == ItemType.LavaBucket)
+            {
+                if (clickedTile == null || !clickedTile.IsActive)
+                {
+                    // Place lava
+                    world.SetTile(tileX, tileY, new Tile(TileType.Lava));
+                    slot.ItemType = ItemType.EmptyBucket;
+                    Logger.Log("[GAME] Placed lava!");
+                }
             }
         }
 
@@ -709,6 +801,52 @@ namespace Claude4_5Terraria
 
             graphics.ApplyChanges();
             Logger.Log($"[GRAPHICS] Fullscreen {(graphics.IsFullScreen ? "enabled" : "disabled")}");
+        }
+
+        // NEW: Drop currently selected item
+        private void DropSelectedItem()
+        {
+            if (inventory == null || miningSystem == null || player == null)
+            {
+                Logger.Log("[DROP] Cannot drop - systems not initialized");
+                return;
+            }
+
+            int selectedSlot = miningSystem.GetSelectedHotbarSlot();
+            var slot = inventory.GetSlot(selectedSlot);
+
+            if (slot == null)
+            {
+                Logger.Log($"[DROP] Slot {selectedSlot} is null");
+                return;
+            }
+
+            if (slot.IsEmpty())
+            {
+                Logger.Log($"[DROP] Slot {selectedSlot} is empty");
+                return;
+            }
+
+            // Drop item in front of player with some velocity
+            Vector2 dropPosition = new Vector2(
+                player.Position.X + Claude4_5Terraria.Player.Player.PLAYER_WIDTH / 2,
+                player.Position.Y + Claude4_5Terraria.Player.Player.PLAYER_HEIGHT / 2
+            );
+
+            // Add offset in direction player is facing (throw it forward)
+            // Throw it further away to prevent instant pickup
+            dropPosition.X += 64; // Drop 2 tiles away (was 32)
+            dropPosition.Y -= 32; // Drop higher above (was 16)
+
+            Logger.Log($"[DROP] Dropping {slot.ItemType} from slot {selectedSlot} at {dropPosition}");
+            miningSystem.DropItem(dropPosition, slot.ItemType, 1);
+            slot.Count--;
+            if (slot.Count <= 0)
+            {
+                slot.ItemType = ItemType.None;
+                slot.Count = 0;
+            }
+            Logger.Log($"[DROP] Successfully dropped {slot.ItemType}. Remaining: {slot.Count}");
         }
 
         private void QuitToMenu()
@@ -965,8 +1103,8 @@ namespace Claude4_5Terraria
                 miningSystem.CurrentAnimationFrame
             );
 
-            // 3. Handle Torch Lighting
-            if (heldItemType == ItemType.Torch)
+            // 3. Handle Torch Lighting and Lava Bucket Lighting
+            if (heldItemType == ItemType.Torch || heldItemType == ItemType.LavaBucket)
             {
                 // Activate and position the dynamic light source at the player's center
                 lightingSystem.SetPlayerLight(player.GetCenterPosition(), true);
@@ -995,11 +1133,11 @@ namespace Claude4_5Terraria
             // --- NEW: Draw Rain Particles ---
             if (timeSystem.IsRaining)
             {
-                Color rainColor = new Color(200, 200, 255, 150); // Light blue/gray, semi-transparent
+                Color rainColor = new Color(30, 60, 120, 180); // Dark blue, semi-transparent
                 foreach (Vector2 p in rainParticles)
                 {
-                    // Draw a thin line (1x4 pixel rain drop)
-                    spriteBatch.Draw(pixelTexture, p, null, rainColor, 0f, Vector2.Zero, new Vector2(1f, 4f), SpriteEffects.None, 0f);
+                    // Draw a longer thin line (1x8 pixel rain drop for faster movement)
+                    spriteBatch.Draw(pixelTexture, p, null, rainColor, 0f, Vector2.Zero, new Vector2(1f, 8f), SpriteEffects.None, 0f);
                 }
             }
             // --- END NEW ---
@@ -1015,14 +1153,18 @@ namespace Claude4_5Terraria
 
             if (hud != null)
             {
-                // UPDATED: Passed the isAutoMiningActive and the timeSystem.IsRaining parameters to HUD.Draw
+                // UPDATED: Passed player health parameters to HUD.Draw
                 hud.Draw(spriteBatch, pixelTexture, font,
                     GraphicsDevice.Viewport.Width,
                     GraphicsDevice.Viewport.Height,
                     player.Position,
                     world,
                     isAutoMiningActive, // Auto-mine state
-                    timeSystem.IsRaining // Weather state
+                    timeSystem.IsRaining, // Weather state
+                    player.Health, // Player current health
+                    player.MaxHealth, // Player max health
+                    player.AirBubbles, // Player air
+                    player.MaxAirBubbles // Player max air
                 );
             }
 

@@ -27,13 +27,13 @@
 
 #begin a_pickaxe_hitting_dirt.mp3
 /importer:Mp3Importer
-/processor:SongProcessor
+/processor:SoundEffectProcessor
 /processorParam:Quality=Best
 /build:a_pickaxe_hitting_dirt.mp3
 
 #begin a_pickaxe_hitting_stone.mp3
 /importer:Mp3Importer
-/processor:SongProcessor
+/processor:SoundEffectProcessor
 /processorParam:Quality=Best
 /build:a_pickaxe_hitting_stone.mp3
 
@@ -179,7 +179,7 @@
 
 #begin hitting a tree.mp3
 /importer:Mp3Importer
-/processor:SongProcessor
+/processor:SoundEffectProcessor
 /processorParam:Quality=Best
 /build:hitting a tree.mp3
 
@@ -197,7 +197,7 @@
 
 #begin placing and mining a torch.mp3
 /importer:Mp3Importer
-/processor:SongProcessor
+/processor:SoundEffectProcessor
 /processorParam:Quality=Best
 /build:placing and mining a torch.mp3
 
@@ -248,6 +248,18 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:platinumpickaxe.png
+
+#begin runicpickaxe.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:runicpickaxe.png
 
 #begin saplingplanteddirt.png
 /importer:TextureImporter

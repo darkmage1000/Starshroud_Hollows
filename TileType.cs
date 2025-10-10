@@ -18,6 +18,10 @@ namespace Claude4_5Terraria.Enums
         Sapling,
         WoodChest,
         SilverChest,
-        MagicChest
+        MagicChest,
+        Lava,
+        Water,
+        Obsidian,
+        Bed
     }
 }

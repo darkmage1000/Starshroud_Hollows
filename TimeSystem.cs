@@ -160,5 +160,15 @@ namespace Claude4_5Terraria.Systems
 
             return $"{displayHours}:{minutes:D2} {period}";
         }
+
+        // NEW: Advance time to morning (for sleeping in bed)
+        public void AdvanceToMorning()
+        {
+            // Set time to 6 AM (0.25)
+            timeOfDay = 0.25f;
+            // Stop rain when sleeping
+            isRaining = false;
+            Logger.Log("[TIME] Advanced to morning (6:00 AM)");
+        }
     }
 }

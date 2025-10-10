@@ -107,6 +107,19 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
+        // NEW: Public method to drop items (for Q key)
+        public void DropItem(Vector2 position, ItemType itemType, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                Vector2 itemPosition = position + new Vector2(
+                    (float)(random.NextDouble() - 0.5) * 20,
+                    (float)(random.NextDouble() - 0.5) * 20
+                );
+                droppedItems.Add(new DroppedItem(itemPosition, itemType));
+            }
+        }
+
         // UPDATED: Auto-mine functionality is contained here
         public void Update(GameTime gameTime, Vector2 playerCenter, Camera camera, Vector2 playerPosition, int playerWidth, int playerHeight, bool autoMiningActive, Vector2 lastPlayerDirection)
         {
@@ -253,12 +266,64 @@ namespace Claude4_5Terraria.Systems
                             placementCooldown = PLACEMENT_DELAY;
                         }
                     }
+                    // BED PLACEMENT
+                    else if (selectedSlot != null && !selectedSlot.IsEmpty() && selectedSlot.ItemType == ItemType.Bed)
+                    {
+                        Tile placeTile = world.GetTile(placeX, placeY);
+                        
+                        // Check if placing on solid ground
+                        Tile below = world.GetTile(placeX, placeY + 1);
+                        if (below != null && below.IsActive && (placeTile == null || !placeTile.IsActive))
+                        {
+                            Rectangle blockRect = new Rectangle(
+                                placeX * World.World.TILE_SIZE,
+                                placeY * World.World.TILE_SIZE,
+                                World.World.TILE_SIZE,
+                                World.World.TILE_SIZE
+                            );
+
+                            Rectangle playerRect = new Rectangle(
+                                (int)playerPosition.X,
+                                (int)playerPosition.Y,
+                                playerWidth,
+                                playerHeight
+                            );
+
+                            if (!blockRect.Intersects(playerRect))
+                            {
+                                world.SetTile(placeX, placeY, new Tile(TileType.Bed));
+                                Logger.Log($"[PLACE] Placed bed at ({placeX}, {placeY})");
+                                selectedSlot.Count--;
+                                if (selectedSlot.Count <= 0)
+                                {
+                                    selectedSlot.ItemType = ItemType.None;
+                                    selectedSlot.Count = 0;
+                                }
+                                placementCooldown = PLACEMENT_DELAY;
+                            }
+                        }
+                        else
+                        {
+                            Logger.Log($"[PLACE] Bed requires solid ground below");
+                            placementCooldown = PLACEMENT_DELAY;
+                        }
+                    }
                     // REGULAR BLOCK PLACEMENT
                     else
                     {
                         Tile placeTile = world.GetTile(placeX, placeY);
 
-                        if (placeTile != null && !placeTile.IsActive)
+                        // Allow placement on water, but NOT on lava or solid blocks
+                        if (placeTile != null && placeTile.IsActive && placeTile.Type == TileType.Lava)
+                        {
+                            Logger.Log($"[PLACE] Cannot place blocks on lava");
+                            placementCooldown = PLACEMENT_DELAY;
+                        }
+                        else if (placeTile != null && placeTile.IsActive && placeTile.Type != TileType.Water)
+                        {
+                            // Already a solid block here
+                        }
+                        else
                         {
                             Rectangle blockRect = new Rectangle(
                                 placeX * World.World.TILE_SIZE,
@@ -473,6 +538,14 @@ namespace Claude4_5Terraria.Systems
 
             Tile tile = world.GetTile(targetPoint.X, targetPoint.Y);
 
+            // CRITICAL FIX: Cannot mine water or lava directly - only move by removing blocks
+            if (tile != null && (tile.Type == TileType.Water || tile.Type == TileType.Lava))
+            {
+                miningProgress = 0f;
+                CurrentAnimationFrame = 0;
+                return;
+            }
+
             if (tile != null)
             {
                 InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
@@ -567,8 +640,8 @@ namespace Claude4_5Terraria.Systems
                     dropCount = 5;
                 }
 
-                // Play generic mine sound for wood/trees
-                breakSound = mineDirtSound; // Using dirt sound as a default for softer materials
+                // Play wood sound for trees
+                breakSound = mineTorchSound; // Using wood sound (loaded as mineTorchSound)
 
                 Vector2 acornPosition = new Vector2(
                     x * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8,

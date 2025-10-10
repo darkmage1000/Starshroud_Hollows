@@ -136,8 +136,10 @@ namespace Claude4_5Terraria.UI
         private void HandleInventoryClicks(MouseState currentMouseState)
         {
             Point mousePoint = new Point(currentMouseState.X, currentMouseState.Y);
+            KeyboardState keyState = Keyboard.GetState();
+            bool shiftPressed = keyState.IsKeyDown(Keys.LeftShift) || keyState.IsKeyDown(Keys.RightShift);
 
-            // Start dragging
+            // Start dragging OR Shift+Click quick transfer
             if (currentMouseState.LeftButton == ButtonState.Pressed &&
                 previousMouseState.LeftButton == ButtonState.Released &&
                 !draggedSlotIndex.HasValue)
@@ -149,8 +151,26 @@ namespace Claude4_5Terraria.UI
                         InventorySlot slot = inventory.GetSlot(i);
                         if (slot != null && !slot.IsEmpty())
                         {
-                            StartDrag(i);
-                            Logger.Log($"[INVENTORY] Started dragging from slot {i}: {slot.ItemType} x{slot.Count}");
+                            if (shiftPressed)
+                            {
+                                // SHIFT+CLICK: Quick transfer between hotbar and storage
+                                if (i < 10)
+                                {
+                                    // From hotbar to storage
+                                    QuickMoveToStorage(i);
+                                }
+                                else
+                                {
+                                    // From storage to hotbar
+                                    QuickMoveToHotbar(i);
+                                }
+                                Logger.Log($"[INVENTORY] Quick-moved {slot.ItemType} from slot {i}");
+                            }
+                            else
+                            {
+                                StartDrag(i);
+                                Logger.Log($"[INVENTORY] Started dragging from slot {i}: {slot.ItemType} x{slot.Count}");
+                            }
                             break;
                         }
                     }
@@ -261,6 +281,74 @@ namespace Claude4_5Terraria.UI
             }
             draggedSlotIndex = null;
             draggedItem = null;
+        }
+
+        // NEW: Quick move from hotbar to storage
+        private void QuickMoveToStorage(int hotbarIndex)
+        {
+            var sourceSlot = inventory.GetSlot(hotbarIndex);
+            if (sourceSlot == null || sourceSlot.IsEmpty()) return;
+
+            // Try to stack with existing items in storage first
+            for (int i = 10; i < 40; i++)
+            {
+                var targetSlot = inventory.GetSlot(i);
+                if (targetSlot.ItemType == sourceSlot.ItemType && !targetSlot.IsEmpty())
+                {
+                    targetSlot.Count += sourceSlot.Count;
+                    sourceSlot.ItemType = ItemType.None;
+                    sourceSlot.Count = 0;
+                    return;
+                }
+            }
+
+            // Find first empty slot in storage
+            for (int i = 10; i < 40; i++)
+            {
+                var targetSlot = inventory.GetSlot(i);
+                if (targetSlot.IsEmpty())
+                {
+                    targetSlot.ItemType = sourceSlot.ItemType;
+                    targetSlot.Count = sourceSlot.Count;
+                    sourceSlot.ItemType = ItemType.None;
+                    sourceSlot.Count = 0;
+                    return;
+                }
+            }
+        }
+
+        // NEW: Quick move from storage to hotbar
+        private void QuickMoveToHotbar(int storageIndex)
+        {
+            var sourceSlot = inventory.GetSlot(storageIndex);
+            if (sourceSlot == null || sourceSlot.IsEmpty()) return;
+
+            // Try to stack with existing items in hotbar first
+            for (int i = 0; i < 10; i++)
+            {
+                var targetSlot = inventory.GetSlot(i);
+                if (targetSlot.ItemType == sourceSlot.ItemType && !targetSlot.IsEmpty())
+                {
+                    targetSlot.Count += sourceSlot.Count;
+                    sourceSlot.ItemType = ItemType.None;
+                    sourceSlot.Count = 0;
+                    return;
+                }
+            }
+
+            // Find first empty slot in hotbar
+            for (int i = 0; i < 10; i++)
+            {
+                var targetSlot = inventory.GetSlot(i);
+                if (targetSlot.IsEmpty())
+                {
+                    targetSlot.ItemType = sourceSlot.ItemType;
+                    targetSlot.Count = sourceSlot.Count;
+                    sourceSlot.ItemType = ItemType.None;
+                    sourceSlot.Count = 0;
+                    return;
+                }
+            }
         }
 
         public void Draw(SpriteBatch spriteBatch, Texture2D pixel, SpriteFont spriteFont, int screenWidth, int screenHeight)
@@ -400,7 +488,24 @@ namespace Claude4_5Terraria.UI
             // Draw sprite if available, otherwise use colored square
             if (itemSprites.ContainsKey(draggedItem.ItemType))
             {
-                spriteBatch.Draw(itemSprites[draggedItem.ItemType], iconRect, Color.White * 0.8f);
+                Texture2D itemTexture = itemSprites[draggedItem.ItemType];
+                Rectangle sourceRect;
+                
+                // FIXED: Special handling for Runic Pickaxe (animated spritesheet)
+                if (draggedItem.ItemType == ItemType.RunicPickaxe)
+                {
+                    // Only show first frame when dragging
+                    int frameWidth = itemTexture.Width / 2;
+                    int frameHeight = itemTexture.Height / 2;
+                    sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
+                }
+                else
+                {
+                    // Regular items use full texture
+                    sourceRect = new Rectangle(0, 0, itemTexture.Width, itemTexture.Height);
+                }
+                
+                spriteBatch.Draw(itemTexture, iconRect, sourceRect, Color.White * 0.8f);
             }
             else
             {
@@ -493,7 +598,25 @@ namespace Claude4_5Terraria.UI
             // Draw sprite if available, otherwise use colored square
             if (itemSprites.ContainsKey(slot.ItemType))
             {
-                spriteBatch.Draw(itemSprites[slot.ItemType], iconRect, Color.White);
+                Texture2D itemTexture = itemSprites[slot.ItemType];
+                Rectangle sourceRect;
+                
+                // FIXED: Special handling for Runic Pickaxe (animated spritesheet)
+                if (slot.ItemType == ItemType.RunicPickaxe)
+                {
+                    // Runic pickaxe is a 2x2 grid (3 frames total)
+                    // Frame 0 is at (0,0) - top-left corner
+                    int frameWidth = itemTexture.Width / 2;
+                    int frameHeight = itemTexture.Height / 2;
+                    sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
+                }
+                else
+                {
+                    // Regular items use full texture
+                    sourceRect = new Rectangle(0, 0, itemTexture.Width, itemTexture.Height);
+                }
+                
+                spriteBatch.Draw(itemTexture, iconRect, sourceRect, Color.White);
             }
             else
             {
@@ -542,6 +665,12 @@ namespace Claude4_5Terraria.UI
                 case ItemType.SilverBar: return "Silver Bar";
                 case ItemType.PlatinumBar: return "Platinum Bar";
                 case ItemType.Acorn: return "Acorn";
+                case ItemType.RunicPickaxe: return "Runic Pickaxe";
+                case ItemType.RecallPotion: return "Recall Potion";
+                case ItemType.WoodChest: return "Wood Chest";
+                case ItemType.SilverChest: return "Silver Chest";
+                case ItemType.MagicChest: return "Magic Chest";
+                case ItemType.CopperCraftingBench: return "Copper Crafting Bench";
                 default: return type.ToString();
             }
         }
@@ -571,6 +700,12 @@ namespace Claude4_5Terraria.UI
                 case ItemType.SilverBar: return new Color(192, 192, 192);
                 case ItemType.PlatinumBar: return new Color(229, 228, 226);
                 case ItemType.Acorn: return new Color(139, 90, 43);
+                case ItemType.RunicPickaxe: return new Color(100, 200, 255);
+                case ItemType.RecallPotion: return new Color(100, 100, 255);
+                case ItemType.WoodChest: return new Color(139, 90, 43);
+                case ItemType.SilverChest: return new Color(192, 192, 192);
+                case ItemType.MagicChest: return new Color(200, 100, 255);
+                case ItemType.CopperCraftingBench: return new Color(200, 100, 0);
                 default: return Color.White;
             }
         }

@@ -123,6 +123,16 @@ namespace Claude4_5Terraria.Systems
             silverChest.AddIngredient(ItemType.SilverBar, 15);
             recipes.Add(silverChest);
 
+            // NEW: Bed recipe (wood bench)
+            Recipe bed = new Recipe(ItemType.Bed, 1, requiresWoodBench: true);
+            bed.AddIngredient(ItemType.Wood, 10);
+            recipes.Add(bed);
+
+            // NEW: Bucket recipe (copper bench)
+            Recipe bucket = new Recipe(ItemType.EmptyBucket, 1, requiresCopperBench: true);
+            bucket.AddIngredient(ItemType.SilverBar, 15);
+            recipes.Add(bucket);
+
             // Note: Magic chests are NOT craftable - they can only be found
             // Note: Runic pickaxe is NOT craftable - only found in Magic chests
         }

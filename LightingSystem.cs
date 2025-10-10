@@ -12,9 +12,13 @@ namespace Claude4_5Terraria.Systems
 
         private const float TORCH_RADIUS = 12f;  // Increased radius
         private const float TORCH_BRIGHTNESS = 3.5f;  // Increased brightness
+        
+        private const float LAVA_RADIUS = 8f;  // Lava glows less far than torches
+        private const float LAVA_BRIGHTNESS = 2.0f;  // Dimmer orange glow
 
         private Dictionary<Point, float> lightMap;
         private List<Point> torchPositions;
+        private List<Point> lavaPositions;
 
         // NEW: Dynamic light source for player's held torch
         private Vector2 playerLightWorldPosition;
@@ -27,6 +31,7 @@ namespace Claude4_5Terraria.Systems
             this.timeSystem = timeSystem;
             lightMap = new Dictionary<Point, float>();
             torchPositions = new List<Point>();
+            lavaPositions = new List<Point>();
 
             playerLightWorldPosition = Vector2.Zero;
             isPlayerLightActive = false;
@@ -47,6 +52,7 @@ namespace Claude4_5Terraria.Systems
         public void UpdateTorchCache(Vector2 cameraPosition)
         {
             torchPositions.Clear();
+            lavaPositions.Clear();
 
             int cameraTileX = (int)(cameraPosition.X / World.World.TILE_SIZE);
             int cameraTileY = (int)(cameraPosition.Y / World.World.TILE_SIZE);
@@ -61,9 +67,16 @@ namespace Claude4_5Terraria.Systems
                     int checkY = cameraTileY + dy;
 
                     World.Tile tile = world.GetTile(checkX, checkY);
-                    if (tile != null && tile.IsActive && tile.Type == TileType.Torch)
+                    if (tile != null && tile.IsActive)
                     {
-                        torchPositions.Add(new Point(checkX, checkY));
+                        if (tile.Type == TileType.Torch)
+                        {
+                            torchPositions.Add(new Point(checkX, checkY));
+                        }
+                        else if (tile.Type == TileType.Lava)
+                        {
+                            lavaPositions.Add(new Point(checkX, checkY));
+                        }
                     }
                 }
             }
@@ -91,9 +104,10 @@ namespace Claude4_5Terraria.Systems
             float ambientLight = timeSystem.GetAmbientLight();
             float sunlight = CalculateSunlight(tileX, tileY, ambientLight);
             float torchLight = CalculateTorchLight(tileX, tileY);
+            float lavaLight = CalculateLavaLight(tileX, tileY);
             float exploredLight = world.IsTileExplored(tileX, tileY) ? 0.15f : 0f; // Slight glow for explored areas
 
-            float finalLight = Math.Max(Math.Max(sunlight, torchLight), exploredLight);
+            float finalLight = Math.Max(Math.Max(Math.Max(sunlight, torchLight), lavaLight), exploredLight);
 
             return Math.Min(1.0f, finalLight);
         }
@@ -202,6 +216,36 @@ namespace Claude4_5Terraria.Systems
             }
 
             return maxTorchLight;
+        }
+        
+        private float CalculateLavaLight(int tileX, int tileY)
+        {
+            float maxLavaLight = 0f;
+
+            foreach (Point lavaPos in lavaPositions)
+            {
+                float distance = (float)Math.Sqrt(
+                    Math.Pow(tileX - lavaPos.X, 2) +
+                    Math.Pow(tileY - lavaPos.Y, 2)
+                );
+
+                if (distance > LAVA_RADIUS)
+                    continue;
+
+                if (IsLightPathBlocked(lavaPos.X, lavaPos.Y, tileX, tileY))
+                    continue;
+
+                // Linear falloff
+                float falloff = 1.0f - (distance / LAVA_RADIUS);
+                float lightStrength = LAVA_BRIGHTNESS * falloff;
+
+                // Smoother curve for lava glow
+                lightStrength = (float)Math.Pow(lightStrength, 0.6);
+
+                maxLavaLight = Math.Max(maxLavaLight, lightStrength);
+            }
+
+            return maxLavaLight;
         }
 
         private bool IsLightPathBlocked(int fromX, int fromY, int toX, int toY)

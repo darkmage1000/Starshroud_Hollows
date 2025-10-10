@@ -192,15 +192,18 @@ namespace Claude4_5Terraria.UI
         }
 
         // NEW: Method to draw health and mana bars
-        private void DrawBars(SpriteBatch spriteBatch, Texture2D pixelTexture)
+        private void DrawBars(SpriteBatch spriteBatch, Texture2D pixelTexture, float currentHealth, float maxHealth, float currentAir, float maxAir)
         {
             // --- Health Bar (Red) ---
+            float healthPercent = currentHealth / maxHealth;
+            int healthFillWidth = (int)(BAR_WIDTH * healthPercent);
+            
             Rectangle healthBgRect = new Rectangle(BAR_START_X, BAR_START_Y, BAR_WIDTH, BAR_HEIGHT);
-            Rectangle healthFillRect = new Rectangle(BAR_START_X, BAR_START_Y, BAR_WIDTH, BAR_HEIGHT);
+            Rectangle healthFillRect = new Rectangle(BAR_START_X, BAR_START_Y, healthFillWidth, BAR_HEIGHT);
 
             // Background (Dark Red)
             spriteBatch.Draw(pixelTexture, healthBgRect, Color.DarkRed);
-            // Full Health (Red) - Since we have no value, we draw the bar full
+            // Health fill (Red) - based on current health
             spriteBatch.Draw(pixelTexture, healthFillRect, Color.Red);
             DrawBorder(spriteBatch, pixelTexture, healthBgRect, 1, Color.White);
 
@@ -211,19 +214,36 @@ namespace Claude4_5Terraria.UI
 
             // Background (Dark Blue)
             spriteBatch.Draw(pixelTexture, manaBgRect, Color.DarkBlue);
-            // Full Mana (Blue) - Since we have no value, we draw the bar full
+            // Full Mana (Blue) - Not implemented yet, so full bar
             spriteBatch.Draw(pixelTexture, manaFillRect, Color.Blue);
             DrawBorder(spriteBatch, pixelTexture, manaBgRect, 1, Color.White);
+            
+            // --- Air Bubbles Bar (Cyan) - Only show when underwater ---
+            if (currentAir < maxAir)
+            {
+                float airPercent = currentAir / maxAir;
+                int airFillWidth = (int)(BAR_WIDTH * airPercent);
+                
+                int airY = manaY + BAR_HEIGHT + 4;
+                Rectangle airBgRect = new Rectangle(BAR_START_X, airY, BAR_WIDTH, BAR_HEIGHT);
+                Rectangle airFillRect = new Rectangle(BAR_START_X, airY, airFillWidth, BAR_HEIGHT);
+                
+                // Background (Dark Cyan)
+                spriteBatch.Draw(pixelTexture, airBgRect, new Color(0, 100, 100));
+                // Air fill (Cyan)
+                spriteBatch.Draw(pixelTexture, airFillRect, Color.Cyan);
+                DrawBorder(spriteBatch, pixelTexture, airBgRect, 1, Color.White);
+            }
         }
 
         // Main Draw entry point
-        // UPDATED: Added isRaining parameter
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive, bool isRaining)
+        // UPDATED: Added isRaining parameter and player health
+        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive, bool isRaining, float playerHealth, float playerMaxHealth, float playerAir, float playerMaxAir)
         {
             if (font == null) return;
 
             // Draw Health and Mana Bars at the very top-left
-            DrawBars(spriteBatch, pixelTexture);
+            DrawBars(spriteBatch, pixelTexture, playerHealth, playerMaxHealth, playerAir, playerMaxAir);
 
             // --- Draw coordinates (Moved down to account for bars) ---
             int tileX = (int)(playerPosition.X / World.World.TILE_SIZE);

@@ -10,10 +10,26 @@ namespace Claude4_5Terraria.Player
     {
         public Vector2 Position { get; set; }
         public Vector2 Velocity { get; set; }
-        public Vector2 SpawnPosition { get; set; }  // NEW: Remember spawn point
+        public Vector2 SpawnPosition { get; set; }  // Spawn point (can be bed or world spawn)
+        public Vector2 BedSpawnPosition { get; set; }  // NEW: Bed spawn location
+        public bool HasBedSpawn { get; set; }  // NEW: Whether player has set a bed spawn
 
-        public const int PLAYER_WIDTH = 32;   // 1 block wide
-        public const int PLAYER_HEIGHT = 64;  // 2 blocks tall (32 * 2)
+        // Health system
+        public float Health { get; private set; }
+        public float MaxHealth { get; private set; }
+        private float lavaDamageTimer = 0f;
+        private const float LAVA_DAMAGE_INTERVAL = 0.5f; // Damage every 0.5 seconds
+        private const float LAVA_DAMAGE_AMOUNT = 10f; // 10 damage per tick
+        
+        // NEW: Swimming and breathing
+        public float AirBubbles { get; private set; }
+        public float MaxAirBubbles { get; private set; }
+        private const float AIR_DEPLETE_RATE = 10f; // Air per second underwater
+        private const float AIR_RESTORE_RATE = 50f; // Air per second in air
+        private const float DROWN_DAMAGE = 5f; // Damage per second when no air
+
+        public const int PLAYER_WIDTH = 30;   // Slightly less than 1 block for smoother movement
+        public const int PLAYER_HEIGHT = 62;  // Slightly less than 2 blocks to fit in 64px spaces
 
         private const float GRAVITY = 0.5f;
         private const float MAX_FALL_SPEED = 15f;
@@ -51,17 +67,50 @@ namespace Claude4_5Terraria.Player
         {
             this.world = world;
             Position = startPosition;
-            SpawnPosition = startPosition;  // NEW: Set spawn position
+            SpawnPosition = startPosition;  // World spawn
+            BedSpawnPosition = Vector2.Zero;  // No bed spawn yet
+            HasBedSpawn = false;
             Velocity = Vector2.Zero;
             isOnGround = false;
+            
+            // Initialize health
+            MaxHealth = 100f;
+            Health = MaxHealth;
+            
+            // Initialize air
+            MaxAirBubbles = 100f;
+            AirBubbles = MaxAirBubbles;
         }
 
-        // NEW: Teleport to spawn
+        // NEW: Set bed as spawn point
+        public void SetBedSpawn(Vector2 bedPosition)
+        {
+            BedSpawnPosition = bedPosition;
+            HasBedSpawn = true;
+            Systems.Logger.Log($"[PLAYER] Bed spawn set at: {bedPosition}");
+        }
+
+        // NEW: Clear bed spawn (when bed destroyed)
+        public void ClearBedSpawn()
+        {
+            HasBedSpawn = false;
+            Systems.Logger.Log("[PLAYER] Bed spawn cleared");
+        }
+
+        // Teleport to spawn (bed spawn if available, otherwise world spawn)
         public void TeleportToSpawn()
         {
-            Position = SpawnPosition;
+            if (HasBedSpawn)
+            {
+                Position = BedSpawnPosition;
+                Systems.Logger.Log($"[PLAYER] Teleported to bed spawn: {BedSpawnPosition}");
+            }
+            else
+            {
+                Position = SpawnPosition;
+                Systems.Logger.Log($"[PLAYER] Teleported to world spawn: {SpawnPosition}");
+            }
             Velocity = Vector2.Zero;
-            Systems.Logger.Log($"[PLAYER] Teleported to spawn: {SpawnPosition}");
         }
 
         public void LoadContent(Texture2D playerSpriteSheet)
@@ -95,6 +144,12 @@ namespace Claude4_5Terraria.Player
         public void Update(GameTime gameTime)
         {
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            
+            // Check for lava damage
+            CheckLavaDamage(deltaTime);
+            
+            // NEW: Handle swimming and drowning
+            HandleSwimming(deltaTime);
             KeyboardState keyState = Keyboard.GetState();
 
             float horizontalInput = 0;
@@ -139,6 +194,193 @@ namespace Claude4_5Terraria.Player
 
             ApplyPhysics();
             UpdateAnimation(deltaTime);
+        }
+
+        private void CheckLavaDamage(float deltaTime)
+        {
+            // Check if player is touching lava
+            bool inLava = IsInLava();
+            
+            if (inLava)
+            {
+                lavaDamageTimer += deltaTime;
+                
+                if (lavaDamageTimer >= LAVA_DAMAGE_INTERVAL)
+                {
+                    TakeDamage(LAVA_DAMAGE_AMOUNT);
+                    lavaDamageTimer = 0f;
+                    Systems.Logger.Log($"[PLAYER] Lava damage! Health: {Health}/{MaxHealth}");
+                }
+            }
+            else
+            {
+                lavaDamageTimer = 0f;
+            }
+        }
+
+        private bool IsInLava()
+        {
+            int tileSize = World.World.TILE_SIZE;
+            
+            // Check multiple points on the player
+            Vector2[] checkPoints = new Vector2[]
+            {
+                new Vector2(Position.X + 5, Position.Y + 5),
+                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + 5),
+                new Vector2(Position.X + 5, Position.Y + PLAYER_HEIGHT - 5),
+                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + PLAYER_HEIGHT - 5),
+                new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + PLAYER_HEIGHT / 2)
+            };
+            
+            foreach (Vector2 point in checkPoints)
+            {
+                int tileX = (int)(point.X / tileSize);
+                int tileY = (int)(point.Y / tileSize);
+                
+                var tile = world.GetTile(tileX, tileY);
+                if (tile != null && tile.IsActive && tile.Type == TileType.Lava)
+                {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        public void TakeDamage(float amount)
+        {
+            Health -= amount;
+            if (Health < 0) Health = 0;
+            
+            // If health reaches 0, respawn at spawn point
+            if (Health <= 0)
+            {
+                Systems.Logger.Log("[PLAYER] Player died! Respawning...");
+                TeleportToSpawn();
+                Health = MaxHealth;
+            }
+        }
+
+        public void Heal(float amount)
+        {
+            Health += amount;
+            if (Health > MaxHealth) Health = MaxHealth;
+        }
+        
+        // NEW: Handle swimming, drowning, and slow fall in water
+        private void HandleSwimming(float deltaTime)
+        {
+            bool inWater = IsInWater();
+            bool inLava = IsInLava();
+            
+            // Check if player's HEAD is underwater (top 1/3 of player)
+            bool headUnderwater = IsHeadUnderwater();
+            
+            // In water: deplete air only if HEAD is underwater, slow fall
+            if (inWater)
+            {
+                // Only deplete air if head is underwater
+                if (headUnderwater)
+                {
+                    AirBubbles -= AIR_DEPLETE_RATE * deltaTime;
+                    
+                    if (AirBubbles <= 0)
+                    {
+                        AirBubbles = 0;
+                        // Drown damage when out of air
+                        TakeDamage(DROWN_DAMAGE * deltaTime);
+                    }
+                }
+                else
+                {
+                    // Head above water - restore air
+                    AirBubbles += AIR_RESTORE_RATE * deltaTime;
+                    if (AirBubbles > MaxAirBubbles) AirBubbles = MaxAirBubbles;
+                }
+                
+                // Slow fall in water
+                if (Velocity.Y > 3f)
+                {
+                    Velocity = new Vector2(Velocity.X, 3f);
+                }
+            }
+            // In lava: slow fall (no air bubbles, just burn)
+            else if (inLava)
+            {
+                // Slow fall in lava
+                if (Velocity.Y > 3f)
+                {
+                    Velocity = new Vector2(Velocity.X, 3f);
+                }
+                
+                // Restore air when in lava (not underwater)
+                AirBubbles += AIR_RESTORE_RATE * deltaTime;
+                if (AirBubbles > MaxAirBubbles) AirBubbles = MaxAirBubbles;
+            }
+            // Not in liquid: restore air
+            else
+            {
+                AirBubbles += AIR_RESTORE_RATE * deltaTime;
+                if (AirBubbles > MaxAirBubbles) AirBubbles = MaxAirBubbles;
+            }
+        }
+        
+        private bool IsHeadUnderwater()
+        {
+            int tileSize = World.World.TILE_SIZE;
+            
+            // Check if the top 1/3 of the player (head area) is in water
+            int headHeight = PLAYER_HEIGHT / 3;
+            
+            Vector2[] checkPoints = new Vector2[]
+            {
+                new Vector2(Position.X + 5, Position.Y + 5), // Top-left of head
+                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + 5), // Top-right of head
+                new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + headHeight / 2) // Center of head
+            };
+            
+            foreach (Vector2 point in checkPoints)
+            {
+                int tileX = (int)(point.X / tileSize);
+                int tileY = (int)(point.Y / tileSize);
+                
+                var tile = world.GetTile(tileX, tileY);
+                if (tile != null && tile.IsActive && tile.Type == TileType.Water)
+                {
+                    return true; // Head is underwater
+                }
+            }
+            
+            return false; // Head is above water
+        }
+        
+        private bool IsInWater()
+        {
+            int tileSize = World.World.TILE_SIZE;
+            
+            // Check multiple points on the player
+            Vector2[] checkPoints = new Vector2[]
+            {
+                new Vector2(Position.X + 5, Position.Y + 5),
+                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + 5),
+                new Vector2(Position.X + 5, Position.Y + PLAYER_HEIGHT - 5),
+                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + PLAYER_HEIGHT - 5),
+                new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + PLAYER_HEIGHT / 2)
+            };
+            
+            foreach (Vector2 point in checkPoints)
+            {
+                int tileX = (int)(point.X / tileSize);
+                int tileY = (int)(point.Y / tileSize);
+                
+                var tile = world.GetTile(tileX, tileY);
+                if (tile != null && tile.IsActive && tile.Type == TileType.Water)
+                {
+                    return true;
+                }
+            }
+            
+            return false;
         }
 
         private void UpdateAnimation(float deltaTime)
@@ -203,18 +445,18 @@ namespace Claude4_5Terraria.Player
         {
             int tileSize = World.World.TILE_SIZE;
 
-            // Check points with small margin from edges to allow 2-block passage
-            // Reduce top margin to allow fitting through 2-block spaces
+            // FIXED: Use tighter margins so player fits exactly in 2-block (64px) spaces
+            // Player is 32x64, tiles are 32x32, so we need minimal padding
             Vector2[] checkPoints = new Vector2[]
             {
-                new Vector2(position.X + 2, position.Y + 1),  // Top-left (minimal margin)
-                new Vector2(position.X + PLAYER_WIDTH - 2, position.Y + 1),  // Top-right (minimal margin)
-                new Vector2(position.X + 2, position.Y + PLAYER_HEIGHT - 1),  // Bottom-left
-                new Vector2(position.X + PLAYER_WIDTH - 2, position.Y + PLAYER_HEIGHT - 1),  // Bottom-right
-                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + 1),  // Top-center (minimal margin)
+                new Vector2(position.X + 1, position.Y + 0),  // Top-left (almost no margin)
+                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + 0),  // Top-right (almost no margin)
+                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT - 1),  // Bottom-left
+                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT - 1),  // Bottom-right
+                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + 0),  // Top-center (almost no margin)
                 new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + PLAYER_HEIGHT - 1),  // Bottom-center
-                new Vector2(position.X + 2, position.Y + PLAYER_HEIGHT / 2),  // Left-center
-                new Vector2(position.X + PLAYER_WIDTH - 2, position.Y + PLAYER_HEIGHT / 2)  // Right-center
+                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT / 2),  // Left-center
+                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT / 2)  // Right-center
             };
 
             foreach (Vector2 point in checkPoints)

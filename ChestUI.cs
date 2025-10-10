@@ -69,8 +69,10 @@ namespace Claude4_5Terraria.UI
         private void HandleMouseInput(MouseState mouseState)
         {
             Point mousePos = new Point(mouseState.X, mouseState.Y);
+            KeyboardState keyState = Keyboard.GetState();
+            bool shiftPressed = keyState.IsKeyDown(Keys.LeftShift) || keyState.IsKeyDown(Keys.RightShift);
 
-            // Left click - start drag or place item
+            // Left click - start drag OR Shift+Click quick transfer
             if (mouseState.LeftButton == ButtonState.Pressed && previousMouseState.LeftButton == ButtonState.Released)
             {
                 // Check chest slots
@@ -82,8 +84,18 @@ namespace Claude4_5Terraria.UI
                         var slot = currentChest.Inventory.GetSlot(i);
                         if (slot != null && slot.ItemType != ItemType.None)
                         {
-                            draggedChestSlot = i;
-                            draggedPlayerSlot = null;
+                            if (shiftPressed)
+                            {
+                                // SHIFT+CLICK: Quick move from chest to player inventory
+                                playerInventory.AddItem(slot.ItemType, slot.Count);
+                                currentChest.Inventory.SetSlot(i, ItemType.None, 0);
+                                Logger.Log($"[CHEST UI] Quick-moved {slot.ItemType} from chest to inventory");
+                            }
+                            else
+                            {
+                                draggedChestSlot = i;
+                                draggedPlayerSlot = null;
+                            }
                         }
                         return;
                     }
@@ -98,8 +110,21 @@ namespace Claude4_5Terraria.UI
                         var slot = playerInventory.GetSlot(i);
                         if (slot != null && slot.ItemType != ItemType.None)
                         {
-                            draggedPlayerSlot = i;
-                            draggedChestSlot = null;
+                            if (shiftPressed)
+                            {
+                                // SHIFT+CLICK: Quick move from player inventory to chest
+                                if (currentChest.Inventory.AddItem(slot.ItemType, slot.Count))
+                                {
+                                    slot.ItemType = ItemType.None;
+                                    slot.Count = 0;
+                                    Logger.Log($"[CHEST UI] Quick-moved item from inventory to chest");
+                                }
+                            }
+                            else
+                            {
+                                draggedPlayerSlot = i;
+                                draggedChestSlot = null;
+                            }
                         }
                         return;
                     }
@@ -189,8 +214,8 @@ namespace Claude4_5Terraria.UI
         {
             int col = index % CHEST_COLS;
             int row = index / CHEST_COLS;
-            int startX = 400 - (CHEST_COLS * SLOT_SIZE + (CHEST_COLS - 1) * PADDING) / 2;
-            int startY = 150;
+            int startX = 760 - (CHEST_COLS * SLOT_SIZE + (CHEST_COLS - 1) * PADDING) / 2; // Centered at 960
+            int startY = 230;
             return new Rectangle(
                 startX + col * (SLOT_SIZE + PADDING),
                 startY + row * (SLOT_SIZE + PADDING),
@@ -203,8 +228,8 @@ namespace Claude4_5Terraria.UI
         {
             int col = index % 10;
             int row = index / 10;
-            int startX = 400 - (10 * SLOT_SIZE + 9 * PADDING) / 2;
-            int startY = 450;
+            int startX = 960 - (10 * SLOT_SIZE + 9 * PADDING) / 2; // Centered at 960
+            int startY = 600;
             return new Rectangle(
                 startX + col * (SLOT_SIZE + PADDING),
                 startY + row * (SLOT_SIZE + PADDING),
@@ -218,18 +243,18 @@ namespace Claude4_5Terraria.UI
             if (!isOpen) return;
 
             // Draw semi-transparent background
-            spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, 800, 600), Color.Black * 0.7f);
+            spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, 1920, 1080), Color.Black * 0.7f);
 
-            // Draw chest panel
-            Rectangle chestPanel = new Rectangle(200, 100, 400, 300);
+            // CENTERED: Draw chest panel in center of screen
+            Rectangle chestPanel = new Rectangle(560, 200, 400, 300);
             spriteBatch.Draw(pixelTexture, chestPanel, Color.DarkSlateGray);
             DrawBorder(spriteBatch, pixelTexture, chestPanel, 2, Color.White);
 
-            // Draw chest title
+            // Draw chest title ABOVE the chest panel (centered)
             string chestTitle = $"{currentChest.Tier} Chest";
             Vector2 titleSize = font.MeasureString(chestTitle);
             spriteBatch.DrawString(font, chestTitle, 
-                new Vector2(400 - titleSize.X / 2, 110), Color.White);
+                new Vector2(960 - titleSize.X / 2, 170), Color.White);
 
             // Draw chest slots
             for (int i = 0; i < ChestInventory.CHEST_SLOTS; i++)
@@ -266,16 +291,16 @@ namespace Claude4_5Terraria.UI
                 }
             }
 
-            // Draw player inventory panel
-            Rectangle playerPanel = new Rectangle(100, 420, 600, 150);
+            // Draw player inventory panel (centered)
+            Rectangle playerPanel = new Rectangle(660, 570, 600, 150);
             spriteBatch.Draw(pixelTexture, playerPanel, Color.DarkSlateGray);
             DrawBorder(spriteBatch, pixelTexture, playerPanel, 2, Color.White);
 
-            // Draw player inventory title
+            // Draw player inventory title ABOVE the player panel (centered)
             string invTitle = "Your Inventory";
             Vector2 invTitleSize = font.MeasureString(invTitle);
             spriteBatch.DrawString(font, invTitle,
-                new Vector2(400 - invTitleSize.X / 2, 430), Color.White);
+                new Vector2(960 - invTitleSize.X / 2, 540), Color.White);
 
             // Draw player inventory slots
             for (int i = 0; i < playerInventory.GetSlotCount(); i++)
@@ -335,11 +360,11 @@ namespace Claude4_5Terraria.UI
                 }
             }
 
-            // Draw instructions
-            string instructions = "Drag items to move them | ESC to close";
+            // Draw instructions below everything (centered)
+            string instructions = "Drag items to move | Shift+Click for quick transfer | ESC to close";
             Vector2 instSize = font.MeasureString(instructions);
             spriteBatch.DrawString(font, instructions,
-                new Vector2(400 - instSize.X / 2, 570), Color.LightGray);
+                new Vector2(960 - instSize.X / 2, 750), Color.LightGray);
         }
 
         private void DrawBorder(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle rect, int thickness, Color color)
