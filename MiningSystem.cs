@@ -4,6 +4,7 @@ using Claude4_5Terraria.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Microsoft.Xna.Framework.Audio;
 using System;
 using System.Collections.Generic;
 
@@ -38,7 +39,18 @@ namespace Claude4_5Terraria.Systems
 
         private Random random;
 
-        public MiningSystem(World.World world, Inventory inventory)
+        // --- NEW SOUND FIELDS ---
+        private SoundEffect mineDirtSound;
+        private SoundEffect mineStoneSound;
+        private SoundEffect mineTorchSound;
+        private SoundEffect placeTorchSound;
+
+        // NEW: Field to hold the dynamic game sound volume
+        private float gameSoundVolume = 1.0f;
+        // ------------------------
+
+        // CRITICAL FIX: Constructor now accepts 6 arguments (world, inventory, and 4 sound effects + volume)
+        public MiningSystem(World.World world, Inventory inventory, SoundEffect mineDirt, SoundEffect mineStone, SoundEffect mineTorch, SoundEffect placeTorch, float initialSoundVolume)
         {
             this.world = world;
             this.inventory = inventory;
@@ -51,6 +63,20 @@ namespace Claude4_5Terraria.Systems
             selectedHotbarSlot = 0;
             placementCooldown = 0f;
             random = new Random();
+
+            // NEW: Assign sound effects and initial volume
+            mineDirtSound = mineDirt;
+            mineStoneSound = mineStone;
+            mineTorchSound = mineTorch;
+            placeTorchSound = placeTorch;
+
+            this.gameSoundVolume = initialSoundVolume; // Assign initial volume
+        }
+
+        // NEW: Public setter for Game1 to update volume when slider moves
+        public void SetSoundVolume(float newVolume)
+        {
+            gameSoundVolume = newVolume;
         }
 
         public Point? GetTargetedTile()
@@ -106,22 +132,14 @@ namespace Claude4_5Terraria.Systems
                 // Determine the base target (player center)
                 miningWorldPos = playerCenter;
 
-                // CRITICAL FIX: Horizontal Multi-Block Mining
+                // Horizontal Multi-Block Mining
                 if (lastPlayerDirection.X != 0)
                 {
-                    // Target the block immediately adjacent to the player's body.
-                    // This is 1.0 TILE_SIZE from the player's center for a 1-tile wide player.
+                    // Target 1.0 tiles away horizontally (centers the target on the adjacent block for multi-mine)
                     miningWorldPos.X += lastPlayerDirection.X * World.World.TILE_SIZE * 1.0f;
-
-                    // We must also target the vertical center between the top and bottom adjacent tiles.
-                    // Since the player's center is at Y+32, and the two blocks are Y+0/Y+32, targeting Y+16/Y+48 (center)
-                    // isn't necessary if the targeted block logic handles the 2x1 area.
-                    // However, to ensure *both* blocks are hit in the horizontal path, we target the *top* one.
-                    // Let's rely on the dedicated multi-block processor below. We just need to ensure the single target is adjacent.
                 }
                 else // Vertical movement (mines a single block)
                 {
-                    // For vertical, 1.5 tiles ensures it targets the center of the next block up or down
                     miningWorldPos += lastPlayerDirection * World.World.TILE_SIZE * 1.5f;
                 }
             }
@@ -169,19 +187,14 @@ namespace Claude4_5Terraria.Systems
 
                 if (autoMiningActive && horizontalDir != 0)
                 {
-                    // Target the two blocks horizontally adjacent to the player's two-block height
-                    // Top block in front of player: (targetX, PlayerTopY)
-                    // Bottom block in front of player: (targetX, PlayerBottomY)
+                    // Target the block *in front* of the player
+                    int targetX_Multi = (int)((playerPosition.X + (playerWidth / 2) + (horizontalDir * World.World.TILE_SIZE)) / World.World.TILE_SIZE);
 
-                    // We need the tile Y position of the player's top block (head level)
                     int playerTopTileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
                     int playerBottomTileY = (int)((playerPosition.Y + playerHeight - 1) / World.World.TILE_SIZE);
 
                     int targetHeadY = playerTopTileY; // The block level the player's head is in
                     int targetFootY = playerBottomTileY; // The block level the player's feet are in
-
-                    // Target the block *in front* of the player
-                    int targetX_Multi = (int)((playerPosition.X + (playerWidth / 2) + (horizontalDir * World.World.TILE_SIZE)) / World.World.TILE_SIZE);
 
                     // Call the specialized multi-block horizontal auto-mine processor
                     ProcessHorizontalAutoMining(targetX_Multi, targetHeadY, targetFootY, deltaTime, lastPlayerDirection);
@@ -206,7 +219,7 @@ namespace Claude4_5Terraria.Systems
                 CurrentAnimationFrame = 0; // Reset animation frame
             }
 
-            // ===== PLACEMENT (RIGHT CLICK - unchanged) =====
+            // ===== PLACEMENT (RIGHT CLICK - includes sound for torch placement) =====
             if (mouseState.RightButton == ButtonState.Pressed && placementCooldown <= 0)
             {
                 if (distanceToTile <= PLACEMENT_RANGE * World.World.TILE_SIZE)
@@ -299,6 +312,9 @@ namespace Claude4_5Terraria.Systems
                                             {
                                                 world.SetTile(placeX, placeY, new Tile(blockType));
                                                 Logger.Log($"[PLACE] Placed {blockType} at ({placeX}, {placeY})");
+
+                                                // UPDATED PLAYBACK
+                                                placeTorchSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
 
                                                 selectedSlot.Count--;
                                                 if (selectedSlot.Count <= 0)
@@ -418,8 +434,6 @@ namespace Claude4_5Terraria.Systems
             float miningSpeed = ToolProperties.GetMiningSpeed(currentTool);
             float adjustedMiningTime = baseMiningTime / miningSpeed;
 
-            // We apply progress at full speed, targeting the two blocks simultaneously
-            // (The time adjustment should be handled implicitly by the mining time values)
             miningProgress += deltaTime / adjustedMiningTime;
 
             // Update animation frame based on progress
@@ -506,7 +520,105 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
-        // --- RESTORED METHOD BODY ---
+        // UPDATED: Added sound logic
+        private void BreakBlock(int x, int y)
+        {
+            Tile tile = world.GetTile(x, y);
+            if (tile == null) return;
+
+            TileType tileType = tile.Type;
+            ItemType droppedItemType;
+            int dropCount = 1;
+
+            // --- Determine sound before removing tile ---
+            SoundEffect breakSound = null;
+            if (tileType == TileType.Dirt || tileType == TileType.Grass)
+            {
+                breakSound = mineDirtSound;
+            }
+            else if (tileType == TileType.Stone || tileType == TileType.Copper || tileType == TileType.Silver || tileType == TileType.Platinum || tileType == TileType.Coal)
+            {
+                breakSound = mineStoneSound;
+            }
+            else if (tileType == TileType.Torch)
+            {
+                breakSound = mineTorchSound;
+            }
+            // --- End sound determination ---
+
+
+            if ((tile.Type == TileType.Wood || tile.Type == TileType.Leaves) && tile.IsPartOfTree)
+            {
+                int woodBlockCount = CountTreeWoodBlocks(x, y);
+                world.RemoveTree(x, y);
+
+                droppedItemType = ItemType.Wood;
+
+                if (woodBlockCount <= 10)
+                {
+                    dropCount = 3;
+                }
+                else if (woodBlockCount <= 13)
+                {
+                    dropCount = 4;
+                }
+                else
+                {
+                    dropCount = 5;
+                }
+
+                // Play generic mine sound for wood/trees
+                breakSound = mineDirtSound; // Using dirt sound as a default for softer materials
+
+                Vector2 acornPosition = new Vector2(
+                    x * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8,
+                    y * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8
+                );
+                int acornCount = random.Next(1, 3);
+                for (int i = 0; i < acornCount; i++)
+                {
+                    Vector2 pos = acornPosition + new Vector2(
+                        (float)(random.NextDouble() - 0.5) * 20,
+                        (float)(random.NextDouble() - 0.5) * 20
+                    );
+                    droppedItems.Add(new DroppedItem(pos, ItemType.Acorn));
+                }
+            }
+            else
+            {
+                // Check if it's a chest before breaking
+                if (tileType == TileType.WoodChest || tileType == TileType.SilverChest || tileType == TileType.MagicChest)
+                {
+                    // Play stone sound as a generic hard object sound
+                    mineStoneSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
+                    OnChestMined?.Invoke(new Point(x, y), tileType);
+                    return;
+                }
+
+                world.SetTile(x, y, new Tile(TileType.Air));
+                droppedItemType = (tileType == TileType.Grass) ? ItemType.Dirt : ItemTypeExtensions.FromTileType(tileType);
+                dropCount = 1;
+            }
+
+            // Play the determined break sound with volume multiplier (MOST ROBUST PLAYBACK)
+            breakSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
+
+            Vector2 basePosition = new Vector2(
+                x * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8,
+                y * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8
+            );
+
+            for (int i = 0; i < dropCount; i++)
+            {
+                Vector2 itemPosition = basePosition + new Vector2(
+                    (float)(random.NextDouble() - 0.5) * 16,
+                    (float)(random.NextDouble() - 0.5) * 16
+                );
+                droppedItems.Add(new DroppedItem(itemPosition, droppedItemType));
+            }
+        }
+
+
         private bool HasAdjacentSolidBlock(int x, int y)
         {
             bool left = world.IsSolidAtPosition(x - 1, y);
@@ -517,7 +629,7 @@ namespace Claude4_5Terraria.Systems
             return left || right || up || down;
         }
 
-        // --- RESTORED METHOD BODY ---
+
         private bool IsPlaceable(TileType type)
         {
             switch (type)
@@ -538,7 +650,7 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
-        // --- RESTORED METHOD BODY ---
+
         public void DrawItems(SpriteBatch spriteBatch, Texture2D pixelTexture)
         {
             foreach (DroppedItem item in droppedItems)
@@ -576,6 +688,7 @@ namespace Claude4_5Terraria.Systems
                 case TileType.Coal:
                     return 0.7f;
                 case TileType.Torch:
+                    return 0.3f;
                 case TileType.WoodCraftingBench:
                 case TileType.CopperCraftingBench:
                 case TileType.Sapling:
@@ -586,80 +699,6 @@ namespace Claude4_5Terraria.Systems
                     return 0.5f;
                 default:
                     return 1.0f;
-            }
-        }
-
-        private void BreakBlock(int x, int y)
-        {
-            Tile tile = world.GetTile(x, y);
-            if (tile == null) return;
-
-            TileType tileType = tile.Type;
-            ItemType droppedItemType;
-            int dropCount = 1;
-
-            if ((tile.Type == TileType.Wood || tile.Type == TileType.Leaves) && tile.IsPartOfTree)
-            {
-                int woodBlockCount = CountTreeWoodBlocks(x, y);
-                world.RemoveTree(x, y);
-
-                droppedItemType = ItemType.Wood;
-
-                if (woodBlockCount <= 10)
-                {
-                    dropCount = 3;
-                }
-                else if (woodBlockCount <= 13)
-                {
-                    dropCount = 4;
-                }
-                else
-                {
-                    dropCount = 5;
-                }
-
-                Vector2 acornPosition = new Vector2(
-                    x * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8,
-                    y * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8
-                );
-                int acornCount = random.Next(1, 3);
-                for (int i = 0; i < acornCount; i++)
-                {
-                    Vector2 pos = acornPosition + new Vector2(
-                        (float)(random.NextDouble() - 0.5) * 20,
-                        (float)(random.NextDouble() - 0.5) * 20
-                    );
-                    droppedItems.Add(new DroppedItem(pos, ItemType.Acorn));
-                }
-            }
-            else
-            {
-                // Check if it's a chest before breaking
-                if (tileType == TileType.WoodChest || tileType == TileType.SilverChest || tileType == TileType.MagicChest)
-                {
-                    // Notify that a chest was mined (Game1 will handle chest system)
-                    OnChestMined?.Invoke(new Point(x, y), tileType);
-                    // Don't drop anything here - ChestSystem.RemoveChest handles it
-                    return;
-                }
-
-                world.SetTile(x, y, new Tile(TileType.Air));
-                droppedItemType = (tileType == TileType.Grass) ? ItemType.Dirt : ItemTypeExtensions.FromTileType(tileType);
-                dropCount = 1;
-            }
-
-            Vector2 basePosition = new Vector2(
-                x * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8,
-                y * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8
-            );
-
-            for (int i = 0; i < dropCount; i++)
-            {
-                Vector2 itemPosition = basePosition + new Vector2(
-                    (float)(random.NextDouble() - 0.5) * 16,
-                    (float)(random.NextDouble() - 0.5) * 16
-                );
-                droppedItems.Add(new DroppedItem(itemPosition, droppedItemType));
             }
         }
 

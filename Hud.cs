@@ -19,6 +19,13 @@ namespace Claude4_5Terraria.UI
         // NEW CONSTANT: Defines the fixed tile area visible in the zoomed view (100x100 tiles)
         private const int MINIMAP_ZOOM_RADIUS = 50;
 
+        // --- CONSTANTS FOR HEALTH/MANA BARS ---
+        private const int BAR_WIDTH = 200;
+        private const int BAR_HEIGHT = 18;
+        private const int BAR_START_X = 10;
+        private const int BAR_START_Y = 10;
+        // ------------------------------------------
+
         // --- CONSOLIDATED AND CORRECTED FIELDS ---
         private Texture2D minimapTexture;
         private Color[] minimapColorData;
@@ -184,18 +191,47 @@ namespace Claude4_5Terraria.UI
 
         }
 
+        // NEW: Method to draw health and mana bars
+        private void DrawBars(SpriteBatch spriteBatch, Texture2D pixelTexture)
+        {
+            // --- Health Bar (Red) ---
+            Rectangle healthBgRect = new Rectangle(BAR_START_X, BAR_START_Y, BAR_WIDTH, BAR_HEIGHT);
+            Rectangle healthFillRect = new Rectangle(BAR_START_X, BAR_START_Y, BAR_WIDTH, BAR_HEIGHT);
+
+            // Background (Dark Red)
+            spriteBatch.Draw(pixelTexture, healthBgRect, Color.DarkRed);
+            // Full Health (Red) - Since we have no value, we draw the bar full
+            spriteBatch.Draw(pixelTexture, healthFillRect, Color.Red);
+            DrawBorder(spriteBatch, pixelTexture, healthBgRect, 1, Color.White);
+
+            // --- Mana Bar (Blue) ---
+            int manaY = BAR_START_Y + BAR_HEIGHT + 4; // Offset 4 pixels below the health bar
+            Rectangle manaBgRect = new Rectangle(BAR_START_X, manaY, BAR_WIDTH, BAR_HEIGHT);
+            Rectangle manaFillRect = new Rectangle(BAR_START_X, manaY, BAR_WIDTH, BAR_HEIGHT);
+
+            // Background (Dark Blue)
+            spriteBatch.Draw(pixelTexture, manaBgRect, Color.DarkBlue);
+            // Full Mana (Blue) - Since we have no value, we draw the bar full
+            spriteBatch.Draw(pixelTexture, manaFillRect, Color.Blue);
+            DrawBorder(spriteBatch, pixelTexture, manaBgRect, 1, Color.White);
+        }
+
         // Main Draw entry point
         // UPDATED: Added isRaining parameter
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive, bool isRaining)
         {
             if (font == null) return;
 
-            // --- Draw coordinates ---
+            // Draw Health and Mana Bars at the very top-left
+            DrawBars(spriteBatch, pixelTexture);
+
+            // --- Draw coordinates (Moved down to account for bars) ---
             int tileX = (int)(playerPosition.X / World.World.TILE_SIZE);
             int tileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
             string coordText = $"X: {tileX}, Y: {tileY}";
             Vector2 coordSize = font.MeasureString(coordText);
-            Vector2 coordPosition = new Vector2(10, 10);
+            // Positioned below the mana bar (BAR_START_Y + BAR_HEIGHT * 2 + 15)
+            Vector2 coordPosition = new Vector2(BAR_START_X, BAR_START_Y + BAR_HEIGHT * 2 + 15);
 
             // Background for coordinates
             Rectangle coordBgRect = new Rectangle(
@@ -208,7 +244,7 @@ namespace Claude4_5Terraria.UI
             spriteBatch.Draw(pixelTexture, coordBgRect, Color.Black * 0.7f);
             spriteBatch.DrawString(font, coordText, coordPosition, Color.Yellow);
 
-            // --- NEW: Draw Weather Status (Below coordinates) ---
+            // --- Draw Weather Status (Below coordinates) ---
             // FIXED: Removed emojis to prevent SpriteFont crash
             string weatherText = isRaining ? "Weather: RAIN (R)" : "Weather: CLEAR (C)";
             Color weatherColor = isRaining ? Color.SkyBlue : Color.White;

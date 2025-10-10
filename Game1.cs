@@ -8,6 +8,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Media;
+using Microsoft.Xna.Framework.Audio;
 using System;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -48,6 +49,10 @@ namespace Claude4_5Terraria
 
         private Song backgroundMusic;
         private float musicVolume = 0.1f;
+
+        // NEW: Game Sounds Volume Field
+        private float gameSoundsVolume = 0.5f;
+
         private bool isMusicMuted = false;
         private bool showMiningOutlines = false;
 
@@ -62,6 +67,22 @@ namespace Claude4_5Terraria
         // NEW: Dictionary to hold all loaded item textures for drawing
         private Dictionary<ItemType, Texture2D> itemTextureMap;
 
+        // --- NEW RAIN SYSTEM FIELDS (Unchanged) ---
+        private List<Vector2> rainParticles;
+        private Random random;
+        private const int MAX_RAIN_DROPS = 1000;
+        private const float RAIN_SPEED = 15f;
+        private const float RAIN_OFFSET_X = 500f;
+        private const float RAIN_OFFSET_Y = 100f;
+        // ------------------------------------------
+
+        // --- NEW SOUND EFFECT FIELDS ---
+        private SoundEffect mineDirtSound;
+        private SoundEffect mineStoneSound;
+        private SoundEffect mineTorchSound;
+        private SoundEffect placeTorchSound;
+        // -------------------------------
+
 
         public Game1()
         {
@@ -73,10 +94,21 @@ namespace Claude4_5Terraria
             graphics.PreferredBackBufferHeight = 1080;
             graphics.IsFullScreen = false;
             graphics.ApplyChanges();
+
+            random = new Random(); // Initialize Random
+            rainParticles = new List<Vector2>(); // Initialize particle list
         }
 
         protected override void Initialize()
         {
+            // CRITICAL AUDIO FIX: Ensure Audio is ready immediately
+            try
+            {
+                // This line can sometimes force the audio device to activate
+                SoundEffect.MasterVolume = 1.0f;
+            }
+            catch { }
+
             previousKeyboardState = Keyboard.GetState();
             previousMouseState = Mouse.GetState(); // NEW
             totalPlayTime = 0f;
@@ -97,16 +129,39 @@ namespace Claude4_5Terraria
             // Initialize item texture map
             itemTextureMap = new Dictionary<ItemType, Texture2D>();
 
+            // NEW: Load Sound Effects (Mapping to Content file names)
+            try
+            {
+                mineDirtSound = Content.Load<SoundEffect>("a_pickaxe_hitting_dirt");
+                mineStoneSound = Content.Load<SoundEffect>("a_pickaxe_hitting_stone");
+                mineTorchSound = Content.Load<SoundEffect>("hitting_a_tree");
+                placeTorchSound = Content.Load<SoundEffect>("placing_and_mining_a_torch");
+
+                // CRITICAL AUDIO FIX: Create a SoundEffectInstance immediately after loading
+                // This initializes the audio track resources, preventing late-game crashes/silence.
+                mineStoneSound?.CreateInstance().Dispose();
+
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] Could not load sound effects: {ex.Message}. Check .mgcb names.");
+            }
+            // --- END NEW SOUNDS ---
+
             backgroundMusic = Content.Load<Song>("CozyBackground");
             MediaPlayer.IsRepeating = true;
             MediaPlayer.Volume = musicVolume;
             MediaPlayer.Play(backgroundMusic);
 
-            startMenu = new StartMenu(musicVolume, (newVolume) =>
-            {
-                musicVolume = newVolume;
-                MediaPlayer.Volume = isMusicMuted ? 0f : musicVolume;
-            }, ToggleFullscreen, menuBackgroundTexture);
+            // UPDATED: Pass SetGameSoundsVolume callback and initial volume, AND PlayTestSound
+            // CRITICAL FIX FOR CS1729: StartMenu constructor now includes PlayTestSound
+            startMenu = new StartMenu(musicVolume,
+                                      (newVolume) => { musicVolume = newVolume; if (!isMusicMuted) MediaPlayer.Volume = musicVolume; },
+                                      gameSoundsVolume,
+                                      SetGameSoundsVolume,
+                                      ToggleFullscreen,
+                                      menuBackgroundTexture,
+                                      PlayTestSound); // NEW: Pass the test sound action (7th argument)
 
             Logger.Log("[GAME] Content loaded successfully");
         }
@@ -115,6 +170,25 @@ namespace Claude4_5Terraria
         {
             MediaPlayer.Stop();
             base.UnloadContent();
+        }
+
+        // NEW: Public method for PauseMenu/StartMenu to set sound volume
+        public void SetGameSoundsVolume(float newVolume)
+        {
+            gameSoundsVolume = newVolume;
+            // Update the mining system immediately if it exists
+            // This ensures sound volume changes instantly even if the MiningSystem was created earlier.
+            miningSystem?.SetSoundVolume(newVolume);
+        }
+
+        // NEW: Plays a sound based on the current SFX volume level (for volume testing)
+        private void PlayTestSound()
+        {
+            if (mineDirtSound != null)
+            {
+                // Play the dirt sound at the current gameSoundsVolume level
+                mineDirtSound.Play(volume: gameSoundsVolume, pitch: 0.0f, pan: 0.0f);
+            }
         }
 
         // NEW: Public method for PauseMenu to toggle auto-mining state
@@ -129,6 +203,69 @@ namespace Claude4_5Terraria
                 isAutoMiningActive = !isAutoMiningActive;
             }
             Logger.Log($"[INPUT] Auto-Mining is now {(isAutoMiningActive ? "ON" : "OFF")}");
+        }
+
+        // NEW: Rain particle update logic (Unchanged from previous step)
+        private void UpdateRainParticles(float deltaTime, int screenWidth, int screenHeight)
+        {
+            if (timeSystem != null && timeSystem.IsRaining)
+            {
+                // Add new particles up to MAX_RAIN_DROPS
+                while (rainParticles.Count < MAX_RAIN_DROPS)
+                {
+                    // Spawn particle randomly within a visible area plus a small offset
+                    float spawnX = (float)random.NextDouble() * (screenWidth + (int)RAIN_OFFSET_X * 2) - RAIN_OFFSET_X;
+                    float spawnY = (float)random.NextDouble() * (screenHeight + (int)RAIN_OFFSET_Y * 2) - RAIN_OFFSET_Y;
+                    rainParticles.Add(new Vector2(spawnX, spawnY));
+                }
+
+                // Update particle positions
+                for (int i = rainParticles.Count - 1; i >= 0; i--)
+                {
+                    Vector2 p = rainParticles[i];
+                    Vector2 nextP = p;
+                    nextP.Y += RAIN_SPEED * deltaTime;
+                    nextP.X -= RAIN_SPEED * deltaTime * 0.1f; // Slight diagonal offset
+
+                    // 1. Convert new screen position to world tile coordinates
+                    Matrix transformMatrix = camera.GetTransformMatrix();
+                    Matrix inverseTransform = Matrix.Invert(transformMatrix);
+                    Vector2 worldPos = Vector2.Transform(nextP, inverseTransform);
+
+                    int tileX = (int)(worldPos.X / World.World.TILE_SIZE);
+                    int tileY = (int)(worldPos.Y / World.World.TILE_SIZE);
+
+                    // 2. Check for solid block collision (CRITICAL NEW LOGIC)
+                    if (world.IsSolidAtPosition(tileX, tileY))
+                    {
+                        // Collision detected: stop the rain particle and respawn it at the top
+                        p.Y = -RAIN_OFFSET_Y;
+                        p.X = (float)random.NextDouble() * (screenWidth + (int)RAIN_OFFSET_X * 2) - RAIN_OFFSET_X;
+                    }
+                    // 3. Check bounds for respawn
+                    else if (nextP.Y > screenHeight + RAIN_OFFSET_Y || nextP.X < -RAIN_OFFSET_X || nextP.X > screenWidth + RAIN_OFFSET_X)
+                    {
+                        // Fell off screen: respawn near the top
+                        p.Y = -RAIN_OFFSET_Y;
+                        p.X = (float)random.NextDouble() * (screenWidth + (int)RAIN_OFFSET_X * 2) - RAIN_OFFSET_X;
+                    }
+                    else
+                    {
+                        // No collision and still on screen: update position
+                        p = nextP;
+                    }
+
+                    rainParticles[i] = p;
+                }
+            }
+            else
+            {
+                // Clear particles quickly when rain stops
+                if (rainParticles.Count > 0)
+                {
+                    rainParticles.Clear();
+                }
+            }
         }
 
 
@@ -247,6 +384,10 @@ namespace Claude4_5Terraria
             totalPlayTime += deltaTime;
 
             timeSystem.Update(deltaTime);
+
+            // NEW: Update rain particles (must run after timeSystem update)
+            UpdateRainParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+
 
             for (int i = 0; i < 10; i++)
             {
@@ -676,7 +817,8 @@ namespace Claude4_5Terraria
                     slot.Count = slotData.Count;
                 }
             }
-            miningSystem = new MiningSystem(world, inventory);
+            // CRITICAL FIX: Passing 6 arguments to MiningSystem constructor
+            miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume);
 
             // NEW: Subscribe to chest events
             miningSystem.OnChestMined += HandleChestMined;
@@ -687,12 +829,12 @@ namespace Claude4_5Terraria
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
             chestUI = new ChestUI();
-            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
-            {
-                musicVolume = newVolume;
-                if (!isMusicMuted)
-                    MediaPlayer.Volume = musicVolume;
-            }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud, ToggleAutoMining, isAutoMiningActive); // ADDED: ToggleAutoMining & initial state
+            // UPDATED: Pass SetGameSoundsVolume and initial volume to PauseMenu
+            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu,
+                                      (newVolume) => { musicVolume = newVolume; if (!isMusicMuted) MediaPlayer.Volume = musicVolume; }, musicVolume,
+                                      ToggleFullscreen, hud.ToggleFullscreenMap, hud,
+                                      ToggleAutoMining, isAutoMiningActive,
+                                      SetGameSoundsVolume, gameSoundsVolume);
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
             worldGenerated = true;
@@ -709,7 +851,6 @@ namespace Claude4_5Terraria
                 SaveData saveData = SaveSystem.LoadGame(slotIndex);
                 if (saveData != null)
                 {
-                    Logger.Log($"[GAME] Save data loaded successfully!");
                     LoadGameFromSave(saveData);
                     return;
                 }
@@ -746,7 +887,8 @@ namespace Claude4_5Terraria
             camera = new Camera(GraphicsDevice.Viewport);
             camera.Position = player.Position;
             inventory = new Inventory();
-            miningSystem = new MiningSystem(world, inventory);
+            // CRITICAL FIX: Passing 6 arguments to MiningSystem constructor
+            miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume);
 
             // NEW: Subscribe to chest events
             miningSystem.OnChestMined += HandleChestMined;
@@ -757,12 +899,12 @@ namespace Claude4_5Terraria
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
             chestUI = new ChestUI();
-            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
-            {
-                musicVolume = newVolume;
-                if (!isMusicMuted)
-                    MediaPlayer.Volume = musicVolume;
-            }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud, ToggleAutoMining, isAutoMiningActive); // ADDED: ToggleAutoMining & initial state
+            // UPDATED: Pass SetGameSoundsVolume and initial volume to PauseMenu
+            pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu,
+                                      (newVolume) => { musicVolume = newVolume; if (!isMusicMuted) MediaPlayer.Volume = musicVolume; }, musicVolume,
+                                      ToggleFullscreen, hud.ToggleFullscreenMap, hud,
+                                      ToggleAutoMining, isAutoMiningActive,
+                                      SetGameSoundsVolume, gameSoundsVolume);
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
             worldGenerated = true;
@@ -849,6 +991,19 @@ namespace Claude4_5Terraria
                 blendState: BlendState.AlphaBlend,
                 samplerState: SamplerState.PointClamp
             );
+
+            // --- NEW: Draw Rain Particles ---
+            if (timeSystem.IsRaining)
+            {
+                Color rainColor = new Color(200, 200, 255, 150); // Light blue/gray, semi-transparent
+                foreach (Vector2 p in rainParticles)
+                {
+                    // Draw a thin line (1x4 pixel rain drop)
+                    spriteBatch.Draw(pixelTexture, p, null, rainColor, 0f, Vector2.Zero, new Vector2(1f, 4f), SpriteEffects.None, 0f);
+                }
+            }
+            // --- END NEW ---
+
 
             inventoryUI.Draw(
                 spriteBatch,

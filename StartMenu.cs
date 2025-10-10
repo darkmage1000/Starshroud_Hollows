@@ -33,19 +33,28 @@ namespace Claude4_5Terraria.UI
         private bool loadingSavedGame;
         private int loadingSlotIndex;
 
+        // Fields for sound control
+        private float initialGameSoundsVolume;
+        private Action<float> onGameSoundsVolumeChanged;
+
+
         private const int MENU_OPTION_PLAY = 0;
         private const int MENU_OPTION_LOAD = 1;
         private const int MENU_OPTION_OPTIONS = 2;
         private const int MENU_OPTION_QUIT = 3;
         private const int MENU_OPTIONS_COUNT = 4;
-        
+
         // Button rectangles for click detection
         private Rectangle playButton;
         private Rectangle loadButton;
         private Rectangle optionsButton;
         private Rectangle quitButton;
 
-        public StartMenu(float initialMusicVolume, Action<float> onMusicVolumeChanged, Action onToggleFullscreen, Texture2D backgroundTexture = null)
+        // CRITICAL FIX: Constructor now takes 7 arguments (including the test sound action)
+        public StartMenu(float initialMusicVolume, Action<float> onMusicVolumeChanged,
+                         float initialGameSoundsVolume, Action<float> onGameSoundsVolumeChanged,
+                         Action onToggleFullscreen, Texture2D backgroundTexture = null,
+                         Action onTestSoundPlayed = null) // NEW: Test Sound Action
         {
             currentState = MenuState.MainMenu;
             selectedOption = 0;
@@ -53,7 +62,17 @@ namespace Claude4_5Terraria.UI
             previousMouseState = Mouse.GetState();
             loadingProgress = 0f;
             loadingMessage = "Generating world...";
-            optionsMenu = new OptionsMenu(initialMusicVolume, onMusicVolumeChanged, onToggleFullscreen);
+
+            // Store volume fields
+            this.initialGameSoundsVolume = initialGameSoundsVolume;
+            this.onGameSoundsVolumeChanged = onGameSoundsVolumeChanged;
+
+            // CRITICAL FIX: Pass new arguments to OptionsMenu constructor
+            optionsMenu = new OptionsMenu(initialMusicVolume, onMusicVolumeChanged,
+                                          initialGameSoundsVolume, onGameSoundsVolumeChanged,
+                                          onToggleFullscreen,
+                                          onTestSoundPlayed); // NEW: Pass the test sound action
+
             loadMenu = new LoadMenu(OnLoadSlotSelected);
             this.backgroundTexture = backgroundTexture;
             loadingSavedGame = false;
@@ -84,6 +103,12 @@ namespace Claude4_5Terraria.UI
         public void SetMusicVolume(float volume)
         {
             optionsMenu.SetMusicVolume(volume);
+        }
+
+        // NEW: Setter to set volume for the options menu slider
+        public void SetGameSoundsVolume(float volume)
+        {
+            optionsMenu.SetSoundEffectsVolume(volume);
         }
 
         public void Update(int screenWidth, int screenHeight)
@@ -328,7 +353,7 @@ namespace Claude4_5Terraria.UI
             );
 
             Color textColor = isDisabled ? Color.DarkGray : (isSelected ? Color.Yellow : Color.White);
-            
+
             // Text shadow
             spriteBatch.DrawString(font, text, textPos + new Vector2(2, 2), Color.Black);
             // Text
