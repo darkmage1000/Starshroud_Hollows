@@ -10,6 +10,7 @@ namespace Claude4_5Terraria.Systems
         private Random random;
         private Claude4_5Terraria.World.World world;
         private int seed;
+        private ChestSystem chestSystem;
 
         private const int SURFACE_LEVEL = 200;
         private const int DIRT_LAYER_THICKNESS = 10;
@@ -18,14 +19,14 @@ namespace Claude4_5Terraria.Systems
         public Action<float, string> OnProgressUpdate;
         public int GetSeed() => seed;
 
-        public WorldGenerator(Claude4_5Terraria.World.World world, int seed = 0)
+        public WorldGenerator(Claude4_5Terraria.World.World world, int seed = 0, ChestSystem chestSystem = null)
         {
             this.world = world;
             this.seed = seed == 0 ? Environment.TickCount : seed;
             this.random = new Random(this.seed);
+            this.chestSystem = chestSystem;
         }
 
-        // In WorldGenerator.cs, update Generate() to preload all chunks before terrain gen (ensures SetTile works world-wide):
         public void Generate()
         {
             DateTime startTime = DateTime.Now;
@@ -34,7 +35,7 @@ namespace Claude4_5Terraria.Systems
             {
                 Logger.Log("[WORLDGEN] Starting world generation...");
 
-                // FIXED: Preload all chunks to ensure SetTile persists during generation
+                // Preload all chunks to ensure SetTile persists during generation
                 Logger.Log("[WORLDGEN] Preloading all chunks...");
                 int chunksWide = (Claude4_5Terraria.World.World.WORLD_WIDTH + Claude4_5Terraria.World.Chunk.CHUNK_SIZE - 1) / Claude4_5Terraria.World.Chunk.CHUNK_SIZE;
                 int chunksHigh = (Claude4_5Terraria.World.World.WORLD_HEIGHT + Claude4_5Terraria.World.Chunk.CHUNK_SIZE - 1) / Claude4_5Terraria.World.Chunk.CHUNK_SIZE;
@@ -56,19 +57,26 @@ namespace Claude4_5Terraria.Systems
                 OnProgressUpdate?.Invoke(0.0f, "Generating terrain...");
                 GenerateTerrain();
 
-                OnProgressUpdate?.Invoke(0.2f, "Carving caves...");
+                OnProgressUpdate?.Invoke(0.15f, "Carving caves...");
                 GenerateCaves();
 
-                OnProgressUpdate?.Invoke(0.4f, "Placing torches...");
+                // NEW STEP: Guarantee at least one chest per layer's major starting area
+                OnProgressUpdate?.Invoke(0.25f, "Placing guaranteed chests...");
+                PlaceGuaranteedChests();
+
+                OnProgressUpdate?.Invoke(0.3f, "Placing torches...");
                 PlaceCaveTorches();
 
-                OnProgressUpdate?.Invoke(0.5f, "Adding dirt pockets...");
+                OnProgressUpdate?.Invoke(0.4f, "Adding dirt pockets...");
                 GenerateDirtPockets();
 
-                OnProgressUpdate?.Invoke(0.6f, "Generating ores...");
+                OnProgressUpdate?.Invoke(0.5f, "Generating ores...");
                 GenerateOres();
 
-                OnProgressUpdate?.Invoke(0.8f, "Planting trees...");
+                OnProgressUpdate?.Invoke(0.65f, "Placing random chests...");
+                GenerateChests(); // Renamed to "random chests" for clarity
+
+                OnProgressUpdate?.Invoke(0.75f, "Planting trees...");
                 GenerateTrees();
 
                 OnProgressUpdate?.Invoke(0.9f, "Growing grass...");
@@ -115,7 +123,6 @@ namespace Claude4_5Terraria.Systems
                     surfaceHeight = (int)Math.Round(SURFACE_LEVEL * (1 - blendFactor) + surfaceHeight * blendFactor);
                 }
 
-                // FIXED: Fill all the way to the bottom of the map
                 for (int y = 0; y < Claude4_5Terraria.World.World.WORLD_HEIGHT; y++)
                 {
                     if (y < surfaceHeight) continue;
@@ -129,46 +136,106 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
-        // In WorldGenerator.cs, update GenerateCaves() to add more caves with varying sizes (extra small/medium/large layers):
+        // This list will store the spawn points of the major tunnels for guaranteed chest placement
+        private System.Collections.Generic.List<Point> caveStartPoints = new System.Collections.Generic.List<Point>();
+
         private void GenerateCaves()
         {
-            // Calculate safe maximum depth
             int maxSafeDepth = Claude4_5Terraria.World.World.WORLD_HEIGHT - 150;
-
-            // Small shallow caves (NEW: More small ones near surface)
-            CarveCaves(200, 20, 40, 1, 2, CAVE_START_DEPTH, Math.Min(600, maxSafeDepth));
-            // Shallow caves
-            CarveCaves(100, 40, 80, 2, 4, CAVE_START_DEPTH, Math.Min(600, maxSafeDepth));
-            // Mid-depth caves
-            CarveCaves(150, 60, 120, 2, 5, 600, Math.Min(1500, maxSafeDepth));
-            // Medium deep caves (NEW: Extra medium-sized)
-            CarveCaves(120, 50, 100, 3, 5, 1000, Math.Min(2000, maxSafeDepth));
-            // Deep caves
-            CarveCaves(140, 80, 150, 3, 6, 1500, Math.Min(2500, maxSafeDepth));
-            // Very deep caves (NEW: More large ones deeper)
-            CarveCaves(160, 100, 180, 4, 7, 2500, Math.Min(3500, maxSafeDepth));
-            // Bottom caves - FIXED: Stop before the absolute bottom to prevent falling off
-            if (maxSafeDepth > 3500)
+            // Counts increased by 20%
+            caveStartPoints.Clear(); // Clear before generating
+            CarveCaves(936, 20, 40, 1, 2, CAVE_START_DEPTH, Math.Min(600, maxSafeDepth));
+            CarveCaves(468, 40, 80, 2, 4, CAVE_START_DEPTH, Math.Min(600, maxSafeDepth));
+            CarveCaves(702, 60, 120, 2, 5, 600, Math.Min(1500, maxSafeDepth));
+            CarveCaves(562, 50, 100, 3, 5, 1000, Math.Min(2000, maxSafeDepth));
+            CarveCaves(655, 80, 150, 3, 6, 1500, Math.Min(2500, maxSafeDepth));
+            if (maxSafeDepth > 2500)
             {
-                CarveCaves(100, 100, 200, 4, 8, 3500, maxSafeDepth);  // Increased count for more bottom variety
+                CarveCaves(390, 100, 180, 4, 7, 2500, maxSafeDepth);
             }
         }
 
         private void CarveCaves(int count, int minLength, int maxLength, int minRadius, int maxRadius, int minY, int maxY)
         {
-            // Safety check to prevent invalid range
             if (minY >= maxY)
             {
                 Logger.Log($"[WORLDGEN] Skipping cave layer - invalid depth range: {minY} to {maxY}");
                 return;
             }
-            
+
             for (int i = 0; i < count; i++)
             {
                 int startX = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
                 int startY = random.Next(minY, maxY);
                 CarveCaveTunnel(startX, startY, random.Next(minLength, maxLength), minRadius, maxRadius);
+
+                // Track the start point of major tunnels for guaranteed chest placement
+                // We'll track roughly 1/10th of the starting points as "major" spots for chests
+                if (i % 10 == 0)
+                {
+                    caveStartPoints.Add(new Point(startX, startY));
+                }
             }
+        }
+
+        private void PlaceGuaranteedChests()
+        {
+            if (chestSystem == null)
+            {
+                Logger.Log("[WORLDGEN] Warning: ChestSystem is null, skipping guaranteed chest generation");
+                return;
+            }
+
+            int guaranteedChestsPlaced = 0;
+            foreach (Point startPoint in caveStartPoints)
+            {
+                ChestTier tier = ChestTier.Wood;
+                TileType tileType = TileType.WoodChest;
+                int maxSearchY = 500;
+
+                // Determine chest type based on the general depth layer of the tunnel's start point
+                if (startPoint.Y >= 1900)
+                {
+                    tier = ChestTier.Magic;
+                    tileType = TileType.MagicChest;
+                    maxSearchY = 2300;
+                }
+                else if (startPoint.Y >= 1000)
+                {
+                    tier = ChestTier.Silver;
+                    tileType = TileType.SilverChest;
+                    maxSearchY = 1500;
+                }
+
+                // We'll search in a small area around the start point for a cave floor
+                Point? floorPos = FindCaveFloorInArea(startPoint.X, startPoint.Y, maxSearchY, 20);
+
+                if (floorPos.HasValue && IsValidChestSpot(floorPos.Value))
+                {
+                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new Claude4_5Terraria.World.Tile(tileType));
+                    chestSystem.PlaceChest(floorPos.Value, tier, true);
+                    Chest chest = chestSystem.GetChest(floorPos.Value);
+                    if (chest != null) chestSystem.GenerateChestLoot(chest, random);
+                    guaranteedChestsPlaced++;
+                }
+            }
+            Logger.Log($"[WORLDGEN] Placed {guaranteedChestsPlaced} guaranteed layer chests from {caveStartPoints.Count} tunnel start points.");
+        }
+
+        private Point? FindCaveFloorInArea(int centerX, int centerY, int maxY, int radius)
+        {
+            for (int dx = -radius; dx <= radius; dx++)
+            {
+                for (int dy = -radius; dy <= radius; dy++)
+                {
+                    int x = centerX + dx;
+                    int y = centerY + dy;
+                    Point? floorPos = FindCaveFloor(x, y, maxY);
+                    if (floorPos.HasValue)
+                        return floorPos.Value;
+                }
+            }
+            return null;
         }
 
         private void CarveCaveTunnel(int startX, int startY, int length, int minRadius, int maxRadius)
@@ -205,15 +272,12 @@ namespace Claude4_5Terraria.Systems
                 }
 
                 direction += (random.NextDouble() - 0.5) * 0.5;
-
-                if (currentY < 700)
-                    direction += 0.05;
+                if (currentY < 700) direction += 0.05;
 
                 int moveSpeed = random.Next(1, 3);
                 currentX += (int)(Math.Cos(direction) * moveSpeed);
                 currentY += (int)(Math.Sin(direction) * moveSpeed);
 
-                // FIXED: Stop caves before reaching the absolute bottom
                 if (currentX < 50 || currentX >= Claude4_5Terraria.World.World.WORLD_WIDTH - 50 ||
                     currentY < CAVE_START_DEPTH || currentY >= Claude4_5Terraria.World.World.WORLD_HEIGHT - 150)
                     break;
@@ -223,38 +287,27 @@ namespace Claude4_5Terraria.Systems
         private void PlaceCaveTorches()
         {
             int torchesPlaced = 0;
-
-            // UPDATED: Place torches throughout the entire cave system
             for (int x = 50; x < Claude4_5Terraria.World.World.WORLD_WIDTH - 50; x += 8)
             {
                 for (int y = CAVE_START_DEPTH; y < Claude4_5Terraria.World.World.WORLD_HEIGHT - 150; y += 8)
                 {
                     var tile = world.GetTile(x, y);
-
                     if (tile == null || !tile.IsActive)
                     {
                         if (random.Next(0, 25) == 0)
                         {
                             int torchCount = random.Next(3, 8);
-
                             for (int i = 0; i < torchCount; i++)
                             {
                                 int torchX = x + random.Next(-15, 16);
                                 int torchY = y + random.Next(-10, 11);
-
                                 var torchSpot = world.GetTile(torchX, torchY);
                                 if (torchSpot == null || !torchSpot.IsActive)
                                 {
-                                    bool hasAdjacent = false;
                                     if (world.IsSolidAtPosition(torchX - 1, torchY) ||
                                         world.IsSolidAtPosition(torchX + 1, torchY) ||
                                         world.IsSolidAtPosition(torchX, torchY - 1) ||
                                         world.IsSolidAtPosition(torchX, torchY + 1))
-                                    {
-                                        hasAdjacent = true;
-                                    }
-
-                                    if (hasAdjacent)
                                     {
                                         world.SetTile(torchX, torchY, new Claude4_5Terraria.World.Tile(TileType.Torch));
                                         torchesPlaced++;
@@ -265,24 +318,20 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-
             Logger.Log($"[WORLDGEN] Placed {torchesPlaced} cave torches");
         }
 
         private void GenerateDirtPockets()
         {
-            // UPDATED: More dirt pockets throughout the entire depth
-            for (int i = 0; i < 1000; i++)
+            for (int i = 0; i < 3900; i++)
             {
                 int centerX = random.Next(0, Claude4_5Terraria.World.World.WORLD_WIDTH);
                 int centerY = random.Next(CAVE_START_DEPTH, Claude4_5Terraria.World.World.WORLD_HEIGHT - 150);
                 int pocketSize = random.Next(6, 15);
-
                 for (int j = 0; j < pocketSize; j++)
                 {
                     int dirtX = centerX + random.Next(-4, 5);
                     int dirtY = centerY + random.Next(-4, 5);
-
                     var tile = world.GetTile(dirtX, dirtY);
                     if (tile != null && tile.Type == TileType.Stone)
                         world.SetTile(dirtX, dirtY, new Claude4_5Terraria.World.Tile(TileType.Dirt));
@@ -292,17 +341,10 @@ namespace Claude4_5Terraria.Systems
 
         private void GenerateOres()
         {
-            // UPDATED: Ore generation for full map depth
-            // Coal - common, found early
-            PlaceOreType(TileType.Coal, 12000, 210, 1900, 5, 9); 
-            // Copper - common, shallow to mid depth
-            PlaceOreType(TileType.Copper, 11000, 210, 1800, 5, 7);
-            
-            // Silver - uncommon, mid to deep (FIXED: Much deeper range)
-            PlaceOreType(TileType.Silver, 6000, 1150, 3000, 5, 7);
-            
-            // Platinum - rare, deep only (FIXED: Even deeper range)
-            PlaceOreType(TileType.Platinum, 5000, 1900, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);
+            PlaceOreType(TileType.Coal, 46800, 210, 1900, 5, 9);
+            PlaceOreType(TileType.Copper, 42900, 210, 1800, 5, 7);
+            PlaceOreType(TileType.Silver, 23400, 1150, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);
+            PlaceOreType(TileType.Platinum, 19500, 1900, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);
         }
 
         private void PlaceOreType(TileType oreType, int veinCount, int minDepth, int maxDepth, int minVeinSize, int maxVeinSize)
@@ -311,16 +353,14 @@ namespace Claude4_5Terraria.Systems
             {
                 int startX = random.Next(0, Claude4_5Terraria.World.World.WORLD_WIDTH);
                 int startY = random.Next(minDepth, maxDepth);
-                int veinLength = random.Next(minVeinSize, maxVeinSize + 1);  // Length of the vein chain
-                int veinThickness = random.Next(1, 3);  // 1-2 tiles thick for vein feel
-
+                int veinLength = random.Next(minVeinSize, maxVeinSize + 1);
+                int veinThickness = random.Next(1, 3);
                 double direction = random.NextDouble() * Math.PI * 2;
                 int currentX = startX;
                 int currentY = startY;
 
                 for (int step = 0; step < veinLength; step++)
                 {
-                    // Place a small cluster at current position (connected to previous)
                     for (int dx = -veinThickness / 2; dx <= veinThickness / 2; dx++)
                     {
                         for (int dy = -veinThickness / 2; dy <= veinThickness / 2; dy++)
@@ -329,7 +369,6 @@ namespace Claude4_5Terraria.Systems
                             {
                                 int oreX = currentX + dx;
                                 int oreY = currentY + dy;
-
                                 if (oreX >= 0 && oreX < Claude4_5Terraria.World.World.WORLD_WIDTH &&
                                     oreY >= 0 && oreY < Claude4_5Terraria.World.World.WORLD_HEIGHT)
                                 {
@@ -340,38 +379,130 @@ namespace Claude4_5Terraria.Systems
                             }
                         }
                     }
-
-                    // Wobble the direction slightly for natural curves
                     direction += (random.NextDouble() - 0.5) * 0.8;
-
-                    // Bias slightly downward for deeper veins
-                    if (random.NextDouble() < 0.3)
-                        direction += 0.1;
-
-                    int moveStep = random.Next(1, 3);  // Step size for connection
+                    if (random.NextDouble() < 0.3) direction += 0.1;
+                    int moveStep = random.Next(1, 3);
                     currentX += (int)(Math.Cos(direction) * moveStep);
                     currentY += (int)(Math.Sin(direction) * moveStep);
-
-                    // Bounds check to stay in world
                     if (currentX < 0 || currentX >= Claude4_5Terraria.World.World.WORLD_WIDTH ||
-                        currentY < minDepth || currentY > maxDepth)
-                        break;
+                        currentY < minDepth || currentY > maxDepth) break;
                 }
             }
         }
 
+        private void GenerateChests()
+        {
+            if (chestSystem == null)
+            {
+                Logger.Log("[WORLDGEN] Warning: ChestSystem is null, skipping chest generation");
+                return;
+            }
+
+            int woodChestsPlaced = 0;
+            int silverChestsPlaced = 0;
+            int magicChestsPlaced = 0;
+
+            // Updated Wood Chest attempts to 1200
+            for (int attempt = 0; attempt < 1200; attempt++)
+            {
+                int x = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
+                int y = random.Next(250, 500);
+                Point? floorPos = FindCaveFloor(x, y, 250);
+                if (floorPos.HasValue && IsValidChestSpot(floorPos.Value))
+                {
+                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new Claude4_5Terraria.World.Tile(TileType.WoodChest));
+                    chestSystem.PlaceChest(floorPos.Value, ChestTier.Wood, true);
+                    Chest chest = chestSystem.GetChest(floorPos.Value);
+                    if (chest != null) chestSystem.GenerateChestLoot(chest, random);
+                    woodChestsPlaced++;
+                }
+            }
+
+            // Updated Silver Chest attempts to 500
+            for (int attempt = 0; attempt < 500; attempt++)
+            {
+                int x = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
+                int y = random.Next(1250, 1500);
+                Point? floorPos = FindCaveFloor(x, y, 1250);
+                if (floorPos.HasValue && IsValidChestSpot(floorPos.Value))
+                {
+                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new Claude4_5Terraria.World.Tile(TileType.SilverChest));
+                    chestSystem.PlaceChest(floorPos.Value, ChestTier.Silver, true);
+                    Chest chest = chestSystem.GetChest(floorPos.Value);
+                    if (chest != null) chestSystem.GenerateChestLoot(chest, random);
+                    silverChestsPlaced++;
+                }
+            }
+
+            // Magic Chest attempts remain at 50 (rare)
+            for (int attempt = 0; attempt < 50; attempt++)
+            {
+                int x = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
+                int y = random.Next(2000, Math.Min(2300, Claude4_5Terraria.World.World.WORLD_HEIGHT - 150));
+                Point? floorPos = FindCaveFloor(x, y, 2000);
+                if (floorPos.HasValue && IsValidChestSpot(floorPos.Value))
+                {
+                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new Claude4_5Terraria.World.Tile(TileType.MagicChest));
+                    chestSystem.PlaceChest(floorPos.Value, ChestTier.Magic, true);
+                    Chest chest = chestSystem.GetChest(floorPos.Value);
+                    if (chest != null) chestSystem.GenerateChestLoot(chest, random);
+                    magicChestsPlaced++;
+                }
+            }
+
+            Logger.Log($"[WORLDGEN] Placed {woodChestsPlaced} random wood chests, {silverChestsPlaced} random silver chests, {magicChestsPlaced} random magic chests");
+        }
+
+        private Point? FindCaveFloor(int startX, int startY, int maxY)
+        {
+            for (int checkY = startY; checkY <= maxY && checkY < Claude4_5Terraria.World.World.WORLD_HEIGHT - 1; checkY++)
+            {
+                var currentTile = world.GetTile(startX, checkY);
+                var belowTile = world.GetTile(startX, checkY + 1);
+                var aboveTile = world.GetTile(startX, checkY - 1);
+                if ((currentTile == null || !currentTile.IsActive) &&
+                    belowTile != null && belowTile.IsActive &&
+                    aboveTile != null && !aboveTile.IsActive)
+                {
+                    return new Point(startX, checkY);
+                }
+            }
+            return null;
+        }
+
+        private bool IsValidChestSpot(Point position)
+        {
+            var tile = world.GetTile(position.X, position.Y);
+            var above = world.GetTile(position.X, position.Y - 1);
+            var below = world.GetTile(position.X, position.Y + 1);
+            if (tile != null && tile.IsActive) return false;
+            if (above != null && above.IsActive) return false;
+            if (below == null || !below.IsActive) return false;
+
+            for (int dx = -10; dx <= 10; dx++)
+            {
+                for (int dy = -10; dy <= 10; dy++)
+                {
+                    var checkTile = world.GetTile(position.X + dx, position.Y + dy);
+                    if (checkTile != null && (checkTile.Type == TileType.WoodChest ||
+                        checkTile.Type == TileType.SilverChest ||
+                        checkTile.Type == TileType.MagicChest))
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
         private void GenerateTrees()
         {
-            int treeAttempts = 200;
             int treesPlaced = 0;
-
-            for (int i = 0; i < treeAttempts; i++)
+            for (int i = 0; i < 200; i++)
             {
                 int x = random.Next(10, Claude4_5Terraria.World.World.WORLD_WIDTH - 10);
                 int surfaceY = world.GetSurfaceHeight(x);
-
                 var groundTile = world.GetTile(x, surfaceY);
-
                 if (groundTile != null && (groundTile.Type == TileType.Grass || groundTile.Type == TileType.Dirt))
                 {
                     bool hasSpace = true;
@@ -380,16 +511,13 @@ namespace Claude4_5Terraria.Systems
                         var checkTile = world.GetTile(x, checkY);
                         if (checkTile != null && checkTile.IsActive) { hasSpace = false; break; }
                     }
-
                     if (!hasSpace) continue;
-
                     bool tooClose = false;
                     for (int checkX = x - 4; checkX <= x + 4; checkX++)
                     {
                         var checkTile = world.GetTile(checkX, surfaceY - 1);
                         if (checkTile != null && checkTile.Type == TileType.Wood) { tooClose = true; break; }
                     }
-
                     if (!tooClose)
                     {
                         PlaceTree(x, surfaceY);
@@ -397,7 +525,6 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-
             Logger.Log($"[WORLDGEN] Generated {treesPlaced} trees");
         }
 
@@ -405,17 +532,14 @@ namespace Claude4_5Terraria.Systems
         {
             int trunkHeight = random.Next(8, 15);
             var tree = new Claude4_5Terraria.World.Tree(baseX, baseY, trunkHeight);
-
             for (int y = 0; y < trunkHeight; y++)
             {
                 int treeY = baseY - 1 - y;
                 world.SetTile(baseX, treeY, new Claude4_5Terraria.World.Tile(TileType.Wood, true));
                 tree.AddTile(baseX, treeY);
             }
-
             int canopyY = baseY - trunkHeight;
             int canopyRadius = random.Next(2, 4);
-
             for (int dx = -canopyRadius; dx <= canopyRadius; dx++)
             {
                 for (int dy = -canopyRadius; dy <= canopyRadius; dy++)
@@ -424,7 +548,6 @@ namespace Claude4_5Terraria.Systems
                     {
                         int leafX = baseX + dx;
                         int leafY = canopyY + dy;
-
                         var existingTile = world.GetTile(leafX, leafY);
                         if (existingTile == null || !existingTile.IsActive || existingTile.Type != TileType.Wood)
                         {
@@ -434,7 +557,6 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-
             world.AddTree(tree);
         }
 
@@ -444,7 +566,6 @@ namespace Claude4_5Terraria.Systems
             {
                 int surfaceY = world.GetSurfaceHeight(x);
                 var surfaceTile = world.GetTile(x, surfaceY);
-
                 if (surfaceTile != null && surfaceTile.Type == TileType.Dirt)
                 {
                     var aboveTile = world.GetTile(x, surfaceY - 1);
@@ -458,10 +579,8 @@ namespace Claude4_5Terraria.Systems
         {
             int spawnX = Claude4_5Terraria.World.World.WORLD_WIDTH / 2;
             int surfaceY = world.GetSurfaceHeight(spawnX);
-
             Logger.Log($"[SPAWN] Initial spawn X: {spawnX}, Surface tile Y: {surfaceY}");
 
-            // Clear any trees at spawn point (5 tile radius)
             for (int dx = -5; dx <= 5; dx++)
             {
                 for (int dy = -15; dy <= 1; dy++)
@@ -472,7 +591,6 @@ namespace Claude4_5Terraria.Systems
                     if (tile != null && (tile.Type == TileType.Wood || tile.Type == TileType.Leaves))
                     {
                         world.RemoveTree(clearX, clearY);
-                        Logger.Log($"[SPAWN] Cleared tree at spawn area: ({clearX}, {clearY})");
                     }
                 }
             }
@@ -487,39 +605,24 @@ namespace Claude4_5Terraria.Systems
                         int checkX = spawnX + dx;
                         int checkY = world.GetSurfaceHeight(checkX);
                         Claude4_5Terraria.World.Tile checkGround = world.GetTile(checkX, checkY);
-
                         if (checkGround != null && checkGround.IsActive &&
                             (checkGround.Type == TileType.Grass || checkGround.Type == TileType.Dirt || checkGround.Type == TileType.Stone))
                         {
                             spawnX = checkX;
                             surfaceY = checkY;
                             groundTile = checkGround;
-                            Logger.Log($"[SPAWN] Found valid ground at X: {spawnX}, Surface tile Y: {surfaceY}");
                             goto SpawnFound;
                         }
                     }
                 }
-
             SpawnFound:
-                if (groundTile == null || !groundTile.IsActive)
-                {
-                    surfaceY = SURFACE_LEVEL;
-                    Logger.Log($"[SPAWN] No ground found, using default surface level: {surfaceY}");
-                }
+                if (groundTile == null || !groundTile.IsActive) surfaceY = SURFACE_LEVEL;
             }
 
-            // Place player so bottom edge sits exactly on top of surface tile
-            // Subtract 2 pixels to ensure player is clearly above ground and not stuck
             int surfacePixelY = surfaceY * Claude4_5Terraria.World.World.TILE_SIZE;
-            int spawnPixelY = surfacePixelY - playerPixelHeight - 2; // -2 to ensure clearance
+            int spawnPixelY = surfacePixelY - playerPixelHeight - 2;
             int spawnPixelX = spawnX * Claude4_5Terraria.World.World.TILE_SIZE;
-
-            Vector2 spawnPos = new Vector2(spawnPixelX, spawnPixelY);
-
-            Logger.Log($"[SPAWN] Final spawn position: {spawnPos}");
-            Logger.Log($"[SPAWN] Player bottom: {spawnPixelY + playerPixelHeight}, Surface top: {surfacePixelY}");
-
-            return spawnPos;
+            return new Vector2(spawnPixelX, spawnPixelY);
         }
     }
 }

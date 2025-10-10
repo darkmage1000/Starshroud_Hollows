@@ -10,13 +10,13 @@ namespace Claude4_5Terraria.Systems
 
         public InventorySlot()
         {
-            ItemType = ItemType.Dirt;
+            ItemType = ItemType.None;
             Count = 0;
         }
 
         public bool IsEmpty()
         {
-            return Count == 0;
+            return Count == 0 || ItemType == ItemType.None;
         }
     }
 
@@ -34,8 +34,9 @@ namespace Claude4_5Terraria.Systems
             }
 
             // Give starter items
-            AddItem(ItemType.PlatinumPickaxe, 1);
+            AddItem(ItemType.RunicPickaxe, 1);
             AddItem(ItemType.Torch, 50);
+            AddItem(ItemType.RecallPotion, 5);  // NEW: 5 starter Recall Potions
         }
 
         public bool AddItem(ItemType itemType, int amount = 1)
@@ -96,7 +97,7 @@ namespace Claude4_5Terraria.Systems
 
                     if (slots[i].Count <= 0)
                     {
-                        slots[i].ItemType = ItemType.Dirt;
+                        slots[i].ItemType = ItemType.None;
                         slots[i].Count = 0;
                     }
                 }
@@ -115,6 +116,26 @@ namespace Claude4_5Terraria.Systems
         public int GetSlotCount()
         {
             return INVENTORY_SIZE;
+        }
+
+        // NEW: Swap two inventory slots
+        public void SwapSlots(int slot1Index, int slot2Index)
+        {
+            if (slot1Index < 0 || slot1Index >= INVENTORY_SIZE || 
+                slot2Index < 0 || slot2Index >= INVENTORY_SIZE)
+            {
+                return;
+            }
+
+            // Swap the contents
+            ItemType tempType = slots[slot1Index].ItemType;
+            int tempCount = slots[slot1Index].Count;
+
+            slots[slot1Index].ItemType = slots[slot2Index].ItemType;
+            slots[slot1Index].Count = slots[slot2Index].Count;
+
+            slots[slot2Index].ItemType = tempType;
+            slots[slot2Index].Count = tempCount;
         }
     }
 }

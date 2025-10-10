@@ -2,6 +2,7 @@
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Claude4_5Terraria.World;
+using Claude4_5Terraria.Enums; // Added for ItemType
 
 namespace Claude4_5Terraria.Player
 {
@@ -9,6 +10,7 @@ namespace Claude4_5Terraria.Player
     {
         public Vector2 Position { get; set; }
         public Vector2 Velocity { get; set; }
+        public Vector2 SpawnPosition { get; set; }  // NEW: Remember spawn point
 
         public const int PLAYER_WIDTH = 32;   // 1 block wide
         public const int PLAYER_HEIGHT = 64;  // 2 blocks tall (32 * 2)
@@ -49,8 +51,17 @@ namespace Claude4_5Terraria.Player
         {
             this.world = world;
             Position = startPosition;
+            SpawnPosition = startPosition;  // NEW: Set spawn position
             Velocity = Vector2.Zero;
             isOnGround = false;
+        }
+
+        // NEW: Teleport to spawn
+        public void TeleportToSpawn()
+        {
+            Position = SpawnPosition;
+            Velocity = Vector2.Zero;
+            Systems.Logger.Log($"[PLAYER] Teleported to spawn: {SpawnPosition}");
         }
 
         public void LoadContent(Texture2D playerSpriteSheet)
@@ -179,7 +190,7 @@ namespace Claude4_5Terraria.Player
                 }
                 Velocity = new Vector2(Velocity.X, 0);
             }
-            
+
             // Always check if we're actually on ground (even when stationary)
             Vector2 groundCheckPos = new Vector2(Position.X, Position.Y + 1);
             if (CheckCollision(groundCheckPos))
@@ -193,17 +204,17 @@ namespace Claude4_5Terraria.Player
             int tileSize = World.World.TILE_SIZE;
 
             // Check points with small margin from edges to allow 2-block passage
-            // Top points are 2 pixels down, bottom points are 1 pixel up
+            // Reduce top margin to allow fitting through 2-block spaces
             Vector2[] checkPoints = new Vector2[]
             {
-                new Vector2(position.X + 1, position.Y + 2),  // Top-left (with margin)
-                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + 2),  // Top-right (with margin)
-                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT - 1),  // Bottom-left
-                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT - 1),  // Bottom-right
-                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + 2),  // Top-center (with margin)
+                new Vector2(position.X + 2, position.Y + 1),  // Top-left (minimal margin)
+                new Vector2(position.X + PLAYER_WIDTH - 2, position.Y + 1),  // Top-right (minimal margin)
+                new Vector2(position.X + 2, position.Y + PLAYER_HEIGHT - 1),  // Bottom-left
+                new Vector2(position.X + PLAYER_WIDTH - 2, position.Y + PLAYER_HEIGHT - 1),  // Bottom-right
+                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + 1),  // Top-center (minimal margin)
                 new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + PLAYER_HEIGHT - 1),  // Bottom-center
-                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT / 2),  // Left-center
-                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT / 2)  // Right-center
+                new Vector2(position.X + 2, position.Y + PLAYER_HEIGHT / 2),  // Left-center
+                new Vector2(position.X + PLAYER_WIDTH - 2, position.Y + PLAYER_HEIGHT / 2)  // Right-center
             };
 
             foreach (Vector2 point in checkPoints)
@@ -222,9 +233,10 @@ namespace Claude4_5Terraria.Player
 
         private bool hasLoggedDraw = false;
 
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
+        // UPDATED: Logic to correctly read the 3-frame spritesheet
+        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, ItemType heldItemType, Texture2D itemSpriteSheet, int animationFrame)
         {
-            // Draw player at actual position
+            // --- 1. Draw Player (Currently a yellow box) ---
             Rectangle playerRect = new Rectangle(
                 (int)Position.X,
                 (int)Position.Y,
@@ -232,6 +244,87 @@ namespace Claude4_5Terraria.Player
                 PLAYER_HEIGHT
             );
             spriteBatch.Draw(pixelTexture, playerRect, Color.Yellow);
+
+            // --- 2. Draw Held Item (Pickaxe) ---
+            if (heldItemType == ItemType.RunicPickaxe && itemSpriteSheet != null)
+            {
+                // CRITICAL FIX: Calculate frame dimensions based on 3 frames in a 2x2 grid layout.
+                // Assuming the spritesheet is roughly 2 frames wide and 2 frames tall (4 total frame slots)
+                int cols = 2; // Assuming the pickaxes take up 2 horizontal slots
+                int rows = 2; // Assuming the pickaxes take up 2 vertical slots
+                int itemFrameWidth = itemSpriteSheet.Width / cols;
+                int itemFrameHeight = itemSpriteSheet.Height / rows;
+
+                // Map the 0, 1, 2 animationFrame index to the correct pixel coordinates:
+                // Frame 0: (0, 0)
+                // Frame 1: (itemFrameWidth, 0)
+                // Frame 2: (0, itemFrameHeight)
+
+                int sourceX = 0;
+                int sourceY = 0;
+
+                if (animationFrame == 0)
+                {
+                    sourceX = 0;
+                    sourceY = 0;
+                }
+                else if (animationFrame == 1)
+                {
+                    sourceX = itemFrameWidth;
+                    sourceY = 0;
+                }
+                else if (animationFrame == 2)
+                {
+                    sourceX = 0;
+                    sourceY = itemFrameHeight;
+                }
+
+                Rectangle sourceRect = new Rectangle(
+                    sourceX,
+                    sourceY,
+                    itemFrameWidth,
+                    itemFrameHeight
+                );
+
+                // Calculate the position for the pickaxe (relative to the player's hand/shoulder)
+                Vector2 origin = new Vector2(itemFrameWidth / 2f, itemFrameHeight / 2f);
+
+                // Positioned near the right shoulder/hand, scaled down for pickaxe size
+                Vector2 drawPosition = new Vector2(
+                    Position.X + (PLAYER_WIDTH * 0.75f),
+                    Position.Y + (PLAYER_HEIGHT * 0.35f)
+                );
+
+                float rotation = 0f;
+                // Adjust rotation to simulate swinging
+                if (animationFrame == 1) // Mid-swing frame
+                {
+                    rotation = facingRight ? MathHelper.PiOver4 * 0.5f : MathHelper.PiOver4 * 1.5f;
+                }
+                else if (animationFrame == 2) // End-swing frame / contact
+                {
+                    rotation = facingRight ? MathHelper.PiOver4 * 1.5f : -MathHelper.PiOver4 * 0.5f; // Slight adjustment for left swing visual
+                }
+                else // Idle/Start frame (Frame 0)
+                {
+                    rotation = facingRight ? -MathHelper.PiOver4 * 0.25f : MathHelper.PiOver4 * 0.25f;
+                }
+
+                SpriteEffects flip = facingRight ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
+
+                // Draw the pickaxe
+                spriteBatch.Draw(
+                    itemSpriteSheet,
+                    drawPosition,
+                    sourceRect,
+                    Color.White,
+                    rotation,
+                    origin,
+                    0.5f, // Scale down to a reasonable size (e.g., 50%)
+                    flip,
+                    0f
+                );
+            }
         }
 
         public Vector2 GetCenterPosition()

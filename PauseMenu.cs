@@ -31,6 +31,10 @@ namespace Claude4_5Terraria.UI
         private Action toggleFullscreenMapCallback;
         private HUD hud;
 
+        // NEW: Auto-Mine fields and action
+        private Action<bool?> toggleAutoMiningCallback;
+        private bool isAutoMiningActive;
+
         // Sliders for options
         private Slider musicVolumeSlider;
         private Slider minimapOpacitySlider;
@@ -41,8 +45,9 @@ namespace Claude4_5Terraria.UI
         private Button saveButton;
         private Button quitButton;
 
-        // NEW: Button for Fullscreen Map
+        // NEW: Buttons for Fullscreen Map and Auto-Mine
         private Button fullscreenMapButton;
+        private Button autoMineButton; // NEW
 
         // Store previous mouse state for click detection (CRITICAL FIX)
         private MouseState previousMouseState;
@@ -174,8 +179,8 @@ namespace Claude4_5Terraria.UI
             spriteBatch.Draw(pixelTexture, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
         }
 
-        // UPDATED CONSTRUCTOR SIGNATURE (7 arguments): Removed the unnecessary zoom toggle action
-        public PauseMenu(Action openSaveMenu, Action quitToMenu, Action<float> musicCallback, float musicVol, Action toggleFullscreen, Action toggleFullscreenMap, HUD hud)
+        // UPDATED CONSTRUCTOR SIGNATURE (9 arguments)
+        public PauseMenu(Action openSaveMenu, Action quitToMenu, Action<float> musicCallback, float musicVol, Action toggleFullscreen, Action toggleFullscreenMap, HUD hud, Action<bool?> toggleAutoMining, bool initialAutoMineState)
         {
             openSaveMenuCallback = openSaveMenu;
             quitToMenuCallback = quitToMenu;
@@ -184,6 +189,10 @@ namespace Claude4_5Terraria.UI
             toggleFullscreenCallback = toggleFullscreen;
             toggleFullscreenMapCallback = toggleFullscreenMap; // <-- Fullscreen Map Toggle
             this.hud = hud;
+
+            // NEW: Auto-Mine setup
+            toggleAutoMiningCallback = toggleAutoMining;
+            isAutoMiningActive = initialAutoMineState;
 
             IsPaused = false;
             CurrentState = MenuState.Paused;
@@ -216,8 +225,14 @@ namespace Claude4_5Terraria.UI
             });
 
             // NEW: Initialize Fullscreen Map Button
-            // Positioned later in options panel
             fullscreenMapButton = new Button("Toggle Fullscreen Map", new Rectangle(0, 0, 400, 40), toggleFullscreenMap);
+
+            // NEW: Initialize Auto-Mine Button
+            autoMineButton = new Button("Toggle Auto-Mine (L)", new Rectangle(0, 0, 400, 40), () =>
+            {
+                isAutoMiningActive = !isAutoMiningActive;
+                toggleAutoMiningCallback?.Invoke(isAutoMiningActive);
+            });
         }
 
         public void Update()
@@ -267,21 +282,27 @@ namespace Claude4_5Terraria.UI
             // --- COMMON MOUSE CLICK LOGIC (Only runs if not fullscreen map) ---
             // The definition of isNewClick MUST NOT be repeated here (it is on line 239).
 
-            // Define options area (Panel height increased to 300)
-            Rectangle optionsPanel = new Rectangle((1920 - 500) / 2, 200, 500, 300);
+            // Define options area (Panel height increased to 350 to fit new button)
+            Rectangle optionsPanel = new Rectangle((1920 - 500) / 2, 200, 500, 350);
             Rectangle backButtonRect = new Rectangle(optionsPanel.X + 10, optionsPanel.Y + 10, 80, 30);
 
             // Define button/slider areas inside the Options Panel
             Rectangle fullscreenButtonRect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 60, 400, 40);
             Rectangle fullscreenMapButtonRect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 110, 460, 40);
-            Rectangle musicSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 160, 400, 40);
-            Rectangle minimapSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 210, 400, 40);
+            Rectangle autoMineButtonRect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 160, 460, 40); // NEW POSITION
+            Rectangle musicSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 210, 400, 40); // MOVED DOWN
+            Rectangle minimapSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 260, 400, 40); // MOVED DOWN
 
             if (showOptions)
             {
                 // Update buttons/sliders that are NOT sliders
                 fullscreenMapButton.Rect = fullscreenMapButtonRect;
                 fullscreenMapButton.Update(mouseState);
+
+                // NEW: Update Auto-Mine button
+                autoMineButton.Rect = autoMineButtonRect;
+                autoMineButton.Update(mouseState);
+
 
                 // Update sliders 
                 musicVolumeSlider.Update(mouseState, musicSliderArea);
@@ -308,6 +329,12 @@ namespace Claude4_5Terraria.UI
                     if (fullscreenMapButtonRect.Contains(mouseState.Position))
                     {
                         fullscreenMapButton.OnClick?.Invoke();
+                    }
+
+                    // NEW: Auto-Mine toggle click
+                    if (autoMineButtonRect.Contains(mouseState.Position))
+                    {
+                        autoMineButton.OnClick?.Invoke();
                     }
                 }
             }
@@ -350,7 +377,7 @@ namespace Claude4_5Terraria.UI
             if (showOptions)
             {
                 // Define panel area (matching Update's size)
-                Rectangle optionsPanel = new Rectangle((screenWidth - 500) / 2, 200, 500, 300);
+                Rectangle optionsPanel = new Rectangle((screenWidth - 500) / 2, 200, 500, 350); // HEIGHT ADJUSTED
                 spriteBatch.Draw(pixelTexture, optionsPanel, Color.Gray * 0.8f);
                 DrawBorder(spriteBatch, pixelTexture, optionsPanel, 2, Color.White);
 
@@ -376,11 +403,17 @@ namespace Claude4_5Terraria.UI
                 fullscreenMapButton.Rect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 110, 460, 40);
                 fullscreenMapButton.Draw(spriteBatch, pixelTexture, font);
 
+                // NEW: Auto-Mine button
+                string autoMineText = "Auto-Mine (L): " + (isAutoMiningActive ? "On" : "Off");
+                autoMineButton.Text = autoMineText;
+                autoMineButton.Rect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 160, 460, 40); // NEW POSITION
+                autoMineButton.Draw(spriteBatch, pixelTexture, font);
+
                 // Draw sliders
-                Rectangle musicSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 160, 400, 40);
+                Rectangle musicSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 210, 400, 40); // MOVED DOWN
                 musicVolumeSlider.Draw(spriteBatch, pixelTexture, font, musicSliderArea);
 
-                Rectangle minimapSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 210, 400, 40);
+                Rectangle minimapSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 260, 400, 40); // MOVED DOWN
                 minimapOpacitySlider.Draw(spriteBatch, pixelTexture, font, minimapSliderArea);
             }
             // --- Main Menu Drawing ---

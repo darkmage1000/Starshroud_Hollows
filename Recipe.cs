@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Claude4_5Terraria.Enums;
 
 namespace Claude4_5Terraria.Systems
@@ -56,7 +56,7 @@ namespace Claude4_5Terraria.Systems
             recipes.Add(stick);
 
             Recipe torch = new Recipe(ItemType.Torch, 3);
-            torch.AddIngredient(ItemType.Wood, 1);
+            torch.AddIngredient(ItemType.Stick, 1);
             torch.AddIngredient(ItemType.Coal, 1);
             recipes.Add(torch);
 
@@ -78,6 +78,11 @@ namespace Claude4_5Terraria.Systems
             stonePickaxe.AddIngredient(ItemType.Stone, 15);
             stonePickaxe.AddIngredient(ItemType.Stick, 4);
             recipes.Add(stonePickaxe);
+
+            // Chest recipes
+            Recipe woodChest = new Recipe(ItemType.WoodChest, 1, requiresWoodBench: true);
+            woodChest.AddIngredient(ItemType.Wood, 15);
+            recipes.Add(woodChest);
 
             // Smelting recipes (wood bench)
             Recipe copperBar = new Recipe(ItemType.CopperBar, 1, requiresWoodBench: true);
@@ -113,6 +118,13 @@ namespace Claude4_5Terraria.Systems
             platinumPickaxe.AddIngredient(ItemType.PlatinumBar, 12);
             platinumPickaxe.AddIngredient(ItemType.Stick, 4);
             recipes.Add(platinumPickaxe);
+
+            Recipe silverChest = new Recipe(ItemType.SilverChest, 1, requiresCopperBench: true);
+            silverChest.AddIngredient(ItemType.SilverBar, 15);
+            recipes.Add(silverChest);
+
+            // Note: Magic chests are NOT craftable - they can only be found
+            // Note: Runic pickaxe is NOT craftable - only found in Magic chests
         }
 
         public static List<Recipe> GetAvailableRecipes(bool nearWoodBench, bool nearCopperBench)

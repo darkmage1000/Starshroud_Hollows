@@ -1,4 +1,4 @@
-﻿namespace Claude4_5Terraria.Enums
+namespace Claude4_5Terraria.Enums
 {
     public enum ItemType
     {
@@ -21,8 +21,14 @@
         // Placeable
         Torch,
         WoodCraftingBench,
-        CopperCraftingBench,  // ✅ NEW
+        CopperCraftingBench,
         Acorn,
+        WoodChest,
+        SilverChest,
+        MagicChest,
+
+        // Consumables
+        RecallPotion,  // Teleports to spawn, 3 uses
 
         // Tools
         None,
@@ -31,6 +37,7 @@
         CopperPickaxe,
         SilverPickaxe,
         PlatinumPickaxe,
+        RunicPickaxe,  // Best pickaxe tier
 
         // Weapons
         WoodSword
@@ -53,6 +60,9 @@
                 case ItemType.Torch: return TileType.Torch;
                 case ItemType.WoodCraftingBench: return TileType.WoodCraftingBench;
                 case ItemType.CopperCraftingBench: return TileType.CopperCraftingBench;
+                case ItemType.WoodChest: return TileType.WoodChest;
+                case ItemType.SilverChest: return TileType.SilverChest;
+                case ItemType.MagicChest: return TileType.MagicChest;
                 default: return TileType.Air;
             }
         }
@@ -71,7 +81,10 @@
                 case TileType.Coal: return ItemType.Coal;
                 case TileType.Torch: return ItemType.Torch;
                 case TileType.WoodCraftingBench: return ItemType.WoodCraftingBench;
-                case TileType.CopperCraftingBench: return ItemType.CopperCraftingBench;  // ✅ NEW
+                case TileType.CopperCraftingBench: return ItemType.CopperCraftingBench;
+                case TileType.WoodChest: return ItemType.WoodChest;
+                case TileType.SilverChest: return ItemType.SilverChest;
+                case TileType.MagicChest: return ItemType.MagicChest;
                 default: return ItemType.Dirt;
             }
         }
@@ -86,7 +99,10 @@
                 case ItemType.Wood:
                 case ItemType.Torch:
                 case ItemType.WoodCraftingBench:
-                case ItemType.CopperCraftingBench:  // ✅ NEW
+                case ItemType.CopperCraftingBench:
+                case ItemType.WoodChest:
+                case ItemType.SilverChest:
+                case ItemType.MagicChest:
                     return true;
                 default:
                     return false;

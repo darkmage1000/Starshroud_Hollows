@@ -185,7 +185,8 @@ namespace Claude4_5Terraria.UI
         }
 
         // Main Draw entry point
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world)
+        // UPDATED: Added isAutoMiningActive parameter
+        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive)
         {
             if (font == null) return;
 
@@ -207,22 +208,41 @@ namespace Claude4_5Terraria.UI
             spriteBatch.Draw(pixelTexture, coordBgRect, Color.Black * 0.7f);
             spriteBatch.DrawString(font, coordText, coordPosition, Color.Yellow);
 
-            // Draw block outline hint in top-right
-            string hintText = showBlockOutlines ? "T: Hide Outlines" : "T: Show Outlines";
-            Vector2 textSize = font.MeasureString(hintText);
-            Vector2 textPosition = new Vector2(screenWidth - textSize.X - 20, 10);
+            // --- Draw block outline hint in top-right ---
+            string outlineHint = showBlockOutlines ? "T: Hide Outlines" : "T: Show Outlines";
+            Vector2 outlineSize = font.MeasureString(outlineHint);
+            Vector2 outlinePosition = new Vector2(screenWidth - outlineSize.X - 20, 10);
 
             // Background
-            Rectangle bgRect = new Rectangle(
-                (int)textPosition.X - 10,
-                (int)textPosition.Y - 5,
-                (int)textSize.X + 20,
-                (int)textSize.Y + 10
+            Rectangle outlineBgRect = new Rectangle(
+                (int)outlinePosition.X - 10,
+                (int)outlinePosition.Y - 5,
+                (int)outlineSize.X + 20,
+                (int)outlineSize.Y + 10
             );
-            spriteBatch.Draw(pixelTexture, bgRect, Color.Black * 0.6f);
+            spriteBatch.Draw(pixelTexture, outlineBgRect, Color.Black * 0.6f);
 
             // Text
-            spriteBatch.DrawString(font, hintText, textPosition, Color.White);
+            spriteBatch.DrawString(font, outlineHint, outlinePosition, Color.White);
+
+            // --- Draw Auto-Mine Status in top-right, just below outlines ---
+            string autoMineStatus = $"L: Auto-Mine {(isAutoMiningActive ? "ON" : "OFF")}";
+            Color autoMineColor = isAutoMiningActive ? Color.LimeGreen : Color.Gray;
+            Vector2 autoMineSize = font.MeasureString(autoMineStatus);
+            // Position 5 pixels below the outline text
+            Vector2 autoMinePosition = new Vector2(screenWidth - autoMineSize.X - 20, outlinePosition.Y + outlineSize.Y + 5);
+
+            // Background
+            Rectangle autoMineBgRect = new Rectangle(
+                (int)autoMinePosition.X - 10,
+                (int)autoMinePosition.Y - 5,
+                (int)autoMineSize.X + 20,
+                (int)autoMineSize.Y + 10
+            );
+            spriteBatch.Draw(pixelTexture, autoMineBgRect, Color.Black * 0.6f);
+
+            // Text
+            spriteBatch.DrawString(font, autoMineStatus, autoMinePosition, autoMineColor);
 
             // Draw minimap in bottom left
             DrawMinimap(spriteBatch, pixelTexture, font, screenWidth, screenHeight, playerPosition, world);

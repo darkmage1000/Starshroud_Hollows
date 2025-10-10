@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
@@ -25,7 +25,8 @@ namespace Claude4_5Terraria.Systems
         }
 
         public List<InventorySlotData> InventorySlots { get; set; }
-        public List<TileChangeData> TileChanges { get; set; }  // NEW: Track tile changes
+        public List<TileChangeData> TileChanges { get; set; }
+        public List<ChestData> Chests { get; set; }  // NEW: Store chest data
         public float GameTime { get; set; }
         public string SaveDate { get; set; }
         public int WorldWidth { get; set; }
@@ -36,6 +37,7 @@ namespace Claude4_5Terraria.Systems
         {
             InventorySlots = new List<InventorySlotData>();
             TileChanges = new List<TileChangeData>();
+            Chests = new List<ChestData>();  // Initialize chest list
             SaveDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             SaveName = "Unnamed Save";
             PlayerPositionX = 0;
@@ -57,6 +59,29 @@ namespace Claude4_5Terraria.Systems
         public int Y { get; set; }
         public int TileType { get; set; }
         public bool IsActive { get; set; }
+    }
+
+    [Serializable]
+    public class ChestData
+    {
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Tier { get; set; }  // 0 = Wood, 1 = Silver, 2 = Magic
+        public bool IsNaturallyGenerated { get; set; }
+        public List<ChestItemData> Items { get; set; }
+
+        public ChestData()
+        {
+            Items = new List<ChestItemData>();
+        }
+    }
+
+    [Serializable]
+    public class ChestItemData
+    {
+        public int SlotIndex { get; set; }
+        public int ItemType { get; set; }
+        public int Count { get; set; }
     }
 
     [Serializable]

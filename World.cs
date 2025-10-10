@@ -13,8 +13,8 @@ namespace Claude4_5Terraria.World
 {
     public class World
     {
-        public const int WORLD_WIDTH = 1500;
-        public const int WORLD_HEIGHT = 3000;
+        public const int WORLD_WIDTH = 6500;
+        public const int WORLD_HEIGHT = 2700;
         public const int TILE_SIZE = 32;
 
         public Dictionary<Point, Chunk> loadedChunks;
@@ -556,6 +556,9 @@ namespace Claude4_5Terraria.World
                 case TileType.CopperCraftingBench: return new Color(200, 100, 20);
                 case TileType.Torch: return new Color(255, 200, 100);
                 case TileType.Sapling: return new Color(100, 200, 100);
+                case TileType.WoodChest: return new Color(139, 69, 19);
+                case TileType.SilverChest: return new Color(192, 192, 192);
+                case TileType.MagicChest: return new Color(138, 43, 226);
                 default: return Color.White;
             }
         }

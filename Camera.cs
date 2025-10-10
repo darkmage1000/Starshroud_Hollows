@@ -32,6 +32,13 @@ namespace Claude4_5Terraria
             Position = Vector2.Lerp(Position, targetPosition, smoothing);
         }
 
+        // NEW: Convert screen coordinates to world coordinates
+        public Vector2 ScreenToWorld(Vector2 screenPosition)
+        {
+            Matrix inverseTransform = Matrix.Invert(GetTransformMatrix());
+            return Vector2.Transform(screenPosition, inverseTransform);
+        }
+
         // ✅ FIXED: Returns world coordinates in PIXELS, not tiles
         public Rectangle GetVisibleArea(int tileSize)
         {

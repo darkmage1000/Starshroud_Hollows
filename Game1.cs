@@ -1,12 +1,13 @@
-﻿using Claude4_5Terraria.Entities;
+using Claude4_5Terraria.Entities;
 using Claude4_5Terraria.Player;
 using Claude4_5Terraria.Systems;
 using Claude4_5Terraria.UI;
 using Claude4_5Terraria.World;
+using Claude4_5Terraria.Enums;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Microsoft.Xna.Framework.Media;
+using Microsoft.Xna.Framework.Media; // CORRECTED using statement
 using System;
 using System.Threading.Tasks;
 
@@ -30,6 +31,7 @@ namespace Claude4_5Terraria
         private LightingSystem lightingSystem;
         private TimeSystem timeSystem;
         private WorldGenerator worldGenerator;
+        private ChestSystem chestSystem; // NEW: Chest system
 
         private InventoryUI inventoryUI;
         private PauseMenu pauseMenu;
@@ -38,8 +40,10 @@ namespace Claude4_5Terraria
         private SaveMenu saveMenu;
         private LoadMenu loadMenu;
         private HUD hud;
+        private ChestUI chestUI; // NEW: Chest UI
 
         private KeyboardState previousKeyboardState;
+        private MouseState previousMouseState; // NEW: Track mouse state
 
         private Song backgroundMusic;
         private float musicVolume = 0.1f;
@@ -49,6 +53,13 @@ namespace Claude4_5Terraria
         private bool worldGenerated = false;
         private int currentWorldSeed;
         private float totalPlayTime;
+
+        // NEW: Auto-Mining Control
+        private bool isAutoMiningActive = false;
+        private Vector2 lastPlayerDirection = Vector2.Zero; // Tracks movement direction for auto-mine
+
+        // NEW: Field to hold the Runic Pickaxe Texture for animation
+        private Texture2D runicPickaxeTexture;
 
 
         public Game1()
@@ -66,6 +77,7 @@ namespace Claude4_5Terraria
         protected override void Initialize()
         {
             previousKeyboardState = Keyboard.GetState();
+            previousMouseState = Mouse.GetState(); // NEW
             totalPlayTime = 0f;
             base.Initialize();
         }
@@ -80,6 +92,17 @@ namespace Claude4_5Terraria
 
             font = Content.Load<SpriteFont>("Font");
             menuBackgroundTexture = Content.Load<Texture2D>("MenuBackground");
+
+            // NEW: Load Runic Pickaxe Texture for animation
+            try
+            {
+                runicPickaxeTexture = Content.Load<Texture2D>("runicpickaxe");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GAME] Could not load runicpickaxe sprite: {ex.Message}");
+            }
+            // --- END NEW ---
 
             backgroundMusic = Content.Load<Song>("CozyBackground");
             MediaPlayer.IsRepeating = true;
@@ -101,9 +124,25 @@ namespace Claude4_5Terraria
             base.UnloadContent();
         }
 
+        // NEW: Public method for PauseMenu to toggle auto-mining state
+        public void ToggleAutoMining(bool? newState = null)
+        {
+            if (newState.HasValue)
+            {
+                isAutoMiningActive = newState.Value;
+            }
+            else
+            {
+                isAutoMiningActive = !isAutoMiningActive;
+            }
+            Logger.Log($"[INPUT] Auto-Mining is now {(isAutoMiningActive ? "ON" : "OFF")}");
+        }
+
+
         protected override void Update(GameTime gameTime)
         {
             KeyboardState keyboardState = Keyboard.GetState();
+            MouseState mouseState = Mouse.GetState(); // NEW
 
             if (startMenu.GetState() == MenuState.MainMenu ||
                 startMenu.GetState() == MenuState.Options ||
@@ -120,6 +159,7 @@ namespace Claude4_5Terraria
                 }
 
                 previousKeyboardState = keyboardState;
+                previousMouseState = mouseState; // NEW
                 base.Update(gameTime);
                 return;
             }
@@ -132,17 +172,29 @@ namespace Claude4_5Terraria
                 }
 
                 previousKeyboardState = keyboardState;
+                previousMouseState = mouseState; // NEW
                 base.Update(gameTime);
                 return;
             }
 
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
+            // Update chest UI if open (HIGHEST PRIORITY)
+            if (chestUI != null && chestUI.IsOpen)
+            {
+                chestUI.Update();
+                previousKeyboardState = keyboardState;
+                previousMouseState = mouseState;
+                base.Update(gameTime);
+                return;
+            }
+
             // Update save menu if open
             if (saveMenu != null && saveMenu.IsOpen)
             {
                 saveMenu.Update(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
                 previousKeyboardState = keyboardState;
+                previousMouseState = mouseState;
                 base.Update(gameTime);
                 return;
             }
@@ -150,7 +202,7 @@ namespace Claude4_5Terraria
             // Only update pause menu if it exists (after world is generated)
             if (pauseMenu != null)
             {
-                // FIX: Check for Escape key press to toggle pause state (Opens/Closes the menu)
+                // Check for Escape key press to toggle pause state
                 if (keyboardState.IsKeyDown(Keys.Escape) && !previousKeyboardState.IsKeyDown(Keys.Escape))
                 {
                     pauseMenu.TogglePause();
@@ -185,6 +237,7 @@ namespace Claude4_5Terraria
                 }
 
                 previousKeyboardState = keyboardState;
+                previousMouseState = mouseState;
                 base.Update(gameTime);
                 return;
             }
@@ -193,6 +246,7 @@ namespace Claude4_5Terraria
             if (timeSystem == null || player == null || world == null)
             {
                 previousKeyboardState = keyboardState;
+                previousMouseState = mouseState;
                 base.Update(gameTime);
                 return;
             }
@@ -217,40 +271,159 @@ namespace Claude4_5Terraria
                 Logger.Log($"[INPUT] Mining outlines {(showMiningOutlines ? "enabled" : "disabled")}");
             }
 
-            player.Update(gameTime);
+            // NEW AUTO-MINE TOGGLE: Press L to toggle auto-mining
+            if (keyboardState.IsKeyDown(Keys.L) && !previousKeyboardState.IsKeyDown(Keys.L))
+            {
+                ToggleAutoMining();
+            }
 
+            // Execute player update before position calculations
+            player.Update(gameTime);
             camera.Position = player.Position;
 
+            // SINGLE DECLARATION OF playerCenter for the entire remaining scope
             Vector2 playerCenter = new Vector2(
                 player.Position.X + Claude4_5Terraria.Player.Player.PLAYER_WIDTH / 2,
                 player.Position.Y + Claude4_5Terraria.Player.Player.PLAYER_HEIGHT / 2
             );
 
+            // NEW: Capture last player direction for auto-mine
+            Vector2 currentMovement = Vector2.Zero;
+            if (keyboardState.IsKeyDown(Keys.A)) currentMovement.X -= 1;
+            if (keyboardState.IsKeyDown(Keys.D)) currentMovement.X += 1;
+            if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Space)) currentMovement.Y -= 1; // Jumping or going up
+            if (keyboardState.IsKeyDown(Keys.S)) currentMovement.Y += 1; // Going down (not used for jumping)
+
+            if (currentMovement.LengthSquared() > 0)
+            {
+                // Prioritize/flatten to cardinal directions as requested.
+                if (currentMovement.X != 0)
+                {
+                    lastPlayerDirection = new Vector2(currentMovement.X, 0);
+                }
+                else
+                {
+                    lastPlayerDirection = new Vector2(0, currentMovement.Y);
+                }
+                // Ensure the direction is a unit vector for consistent targeting
+                if (lastPlayerDirection.LengthSquared() > 0)
+                {
+                    lastPlayerDirection.Normalize();
+                }
+            }
+
+            // CRITICAL FIX: Block manual left-click if auto-mine is active and we are moving
+            if (isAutoMiningActive && lastPlayerDirection.LengthSquared() > 0)
+            {
+                mouseState = new MouseState(mouseState.X, mouseState.Y, mouseState.ScrollWheelValue, mouseState.LeftButton, ButtonState.Released, mouseState.MiddleButton, mouseState.XButton1, mouseState.XButton2);
+            }
+
+
+            // NEW: Handle right-click to open chests OR use Recall Potion
+            if (mouseState.RightButton == ButtonState.Pressed && previousMouseState.RightButton == ButtonState.Released)
+            {
+                // Check if player is using Recall Potion from hotbar
+                var selectedSlot = miningSystem.GetSelectedHotbarSlot();
+                var slot = inventory.GetSlot(selectedSlot);
+                if (slot != null && slot.ItemType == ItemType.RecallPotion && slot.Count > 0)
+                {
+                    // Use Recall Potion - teleport to spawn
+                    player.TeleportToSpawn();
+                    slot.Count--;
+                    if (slot.Count <= 0)
+                    {
+                        slot.ItemType = ItemType.None;
+                        slot.Count = 0;
+                    }
+                    Logger.Log("[GAME] Used Recall Potion - teleported to spawn!");
+                }
+                else
+                {
+                    // Try to open chest
+                    HandleChestInteraction(mouseState);
+                }
+            }
+
+            // NOTE: player.Update() and camera.Position update were moved up.
+
             world.UpdateLoadedChunks(camera);
             world.Update(deltaTime, worldGenerator);
             world.MarkAreaAsExplored(playerCenter);
 
+            // Pass auto-mine state and direction to MiningSystem
             miningSystem.Update(
                 gameTime,
                 playerCenter,
                 camera,
                 player.Position,
                 Claude4_5Terraria.Player.Player.PLAYER_WIDTH,
-                Claude4_5Terraria.Player.Player.PLAYER_HEIGHT
+                Claude4_5Terraria.Player.Player.PLAYER_HEIGHT,
+                isAutoMiningActive, // NEW PARAMETER
+                lastPlayerDirection  // NEW PARAMETER
             );
 
-            // FIX: Call the updated minimap method
+            // Update minimap
             if (hud != null)
             {
-                // Calls the simplified UpdateMinimapData(world)
                 hud.UpdateMinimapData(world);
             }
 
             inventoryUI.Update(gameTime, player.Position, world, GraphicsDevice.Viewport.Height);
 
             previousKeyboardState = keyboardState;
+            previousMouseState = mouseState;
 
             base.Update(gameTime);
+        }
+
+        // NEW: Handle chest mining callback
+        private void HandleChestMined(Point position, TileType tileType)
+        {
+            if (chestSystem != null)
+            {
+                // Remove chest and give items to player
+                chestSystem.RemoveChest(position, inventory);
+                world.SetTile(position.X, position.Y, new Tile(TileType.Air));
+                Logger.Log($"[GAME] Chest mined at ({position.X}, {position.Y})");
+            }
+        }
+
+        // NEW: Handle chest placement callback
+        private void HandleChestPlaced(Point position, ItemType itemType)
+        {
+            if (chestSystem != null)
+            {
+                ChestTier tier = ChestTier.Wood;
+                if (itemType == ItemType.SilverChest) tier = ChestTier.Silver;
+                else if (itemType == ItemType.MagicChest) tier = ChestTier.Magic;
+
+                chestSystem.PlaceChest(position, tier, false);
+                Logger.Log($"[GAME] Placed {tier} chest at ({position.X}, {position.Y})");
+            }
+        }
+
+        // NEW: Handle chest interaction
+        private void HandleChestInteraction(MouseState mouseState)
+        {
+            // Get world position from mouse position
+            Vector2 worldPos = camera.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
+            int tileX = (int)(worldPos.X / World.World.TILE_SIZE);
+            int tileY = (int)(worldPos.Y / World.World.TILE_SIZE);
+
+            // Check if clicked tile is a chest
+            var tile = world.GetTile(tileX, tileY);
+            if (tile != null && (tile.Type == TileType.WoodChest ||
+                tile.Type == TileType.SilverChest ||
+                tile.Type == TileType.MagicChest))
+            {
+                Point tilePos = new Point(tileX, tileY);
+                Chest chest = chestSystem.GetChest(tilePos);
+                if (chest != null && chestUI != null)
+                {
+                    chestUI.OpenChest(chest, inventory);
+                    Logger.Log($"[GAME] Opened {chest.Tier} chest at ({tileX}, {tileY})");
+                }
+            }
         }
 
         private void OpenSaveMenu()
@@ -263,7 +436,6 @@ namespace Claude4_5Terraria
 
         private void LoadTileSprites(World.World world)
         {
-            // Dictionary of sprite names to tile types
             var spriteMap = new System.Collections.Generic.Dictionary<string, Enums.TileType>
             {
                 { "dirt", Enums.TileType.Dirt },
@@ -276,7 +448,10 @@ namespace Claude4_5Terraria
                 { "torch", Enums.TileType.Torch },
                 { "saplingplanteddirt", Enums.TileType.Sapling },
                 { "woodcraftingtable", Enums.TileType.WoodCraftingBench },
-                { "coppercraftingtable", Enums.TileType.CopperCraftingBench }
+                { "coppercraftingtable", Enums.TileType.CopperCraftingBench },
+                { "woodchest", Enums.TileType.WoodChest },
+                { "silverchest", Enums.TileType.SilverChest },
+                { "magicchest", Enums.TileType.MagicChest }
             };
 
             foreach (var sprite in spriteMap)
@@ -295,37 +470,29 @@ namespace Claude4_5Terraria
 
         private void LoadItemSprites(InventoryUI inventoryUI)
         {
-            // Dictionary of sprite names to item types
             var spriteMap = new System.Collections.Generic.Dictionary<string, Enums.ItemType>
             {
-                // Tools
                 { "woodpickaxe", Enums.ItemType.WoodPickaxe },
                 { "stonepickaxe", Enums.ItemType.StonePickaxe },
                 { "copperpickaxe", Enums.ItemType.CopperPickaxe },
                 { "silverpickaxe", Enums.ItemType.SilverPickaxe },
                 { "platinumpickaxe", Enums.ItemType.PlatinumPickaxe },
-                
-                // Workbenches
+                { "runicpickaxe", Enums.ItemType.RunicPickaxe },
                 { "woodcraftingtable", Enums.ItemType.WoodCraftingBench },
                 { "coppercraftingtable", Enums.ItemType.CopperCraftingBench },
-                
-                // Ores (inventory items)
+                { "woodchest", Enums.ItemType.WoodChest },
+                { "silverchest", Enums.ItemType.SilverChest },
+                { "magicchest", Enums.ItemType.MagicChest },
                 { "copperore", Enums.ItemType.Copper },
                 { "silverore", Enums.ItemType.Silver },
                 { "platinumore", Enums.ItemType.Platinum },
                 { "coal", Enums.ItemType.Coal },
-                
-                // Bars
                 { "copperbar", Enums.ItemType.CopperBar },
                 { "silverbar", Enums.ItemType.SilverBar },
                 { "platinumbar", Enums.ItemType.PlatinumBar },
-                
-                // Misc
                 { "torch", Enums.ItemType.Torch },
                 { "acorn", Enums.ItemType.Acorn },
                 { "stick", Enums.ItemType.Stick },
-                
-                // Use block textures for dirt and stone in inventory
                 { "dirt", Enums.ItemType.Dirt },
                 { "stone", Enums.ItemType.Stone },
                 { "grass", Enums.ItemType.Grass }
@@ -344,34 +511,29 @@ namespace Claude4_5Terraria
                 }
             }
         }
+
         private void LoadCraftingItemSprites(InventoryUI inventoryUI)
         {
-            // Load sprites for the crafting UI
             var spriteMap = new System.Collections.Generic.Dictionary<string, Enums.ItemType>
             {
-                // Tools
                 { "woodpickaxe", Enums.ItemType.WoodPickaxe },
                 { "stonepickaxe", Enums.ItemType.StonePickaxe },
                 { "copperpickaxe", Enums.ItemType.CopperPickaxe },
                 { "silverpickaxe", Enums.ItemType.SilverPickaxe },
                 { "platinumpickaxe", Enums.ItemType.PlatinumPickaxe },
-                
-                // Workbenches
+                { "runicpickaxe", Enums.ItemType.RunicPickaxe },
                 { "woodcraftingtable", Enums.ItemType.WoodCraftingBench },
                 { "coppercraftingtable", Enums.ItemType.CopperCraftingBench },
-                
-                // Ores
+                { "woodchest", Enums.ItemType.WoodChest },
+                { "silverchest", Enums.ItemType.SilverChest },
+                { "magicchest", Enums.ItemType.MagicChest },
                 { "copperore", Enums.ItemType.Copper },
                 { "silverore", Enums.ItemType.Silver },
                 { "platinumore", Enums.ItemType.Platinum },
                 { "coal", Enums.ItemType.Coal },
-                
-                // Bars
                 { "copperbar", Enums.ItemType.CopperBar },
                 { "silverbar", Enums.ItemType.SilverBar },
                 { "platinumbar", Enums.ItemType.PlatinumBar },
-                
-                // Misc
                 { "torch", Enums.ItemType.Torch },
                 { "acorn", Enums.ItemType.Acorn },
                 { "stick", Enums.ItemType.Stick },
@@ -400,13 +562,11 @@ namespace Claude4_5Terraria
 
             if (graphics.IsFullScreen)
             {
-                // Going to fullscreen - use native resolution
                 graphics.PreferredBackBufferWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
                 graphics.PreferredBackBufferHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
             }
             else
             {
-                // Going to windowed - use default size
                 graphics.PreferredBackBufferWidth = 1920;
                 graphics.PreferredBackBufferHeight = 1080;
             }
@@ -418,11 +578,7 @@ namespace Claude4_5Terraria
         private void QuitToMenu()
         {
             Logger.Log("[GAME] Quitting to main menu");
-
-            // Reset game state flags
             worldGenerated = false;
-
-            // Clear game objects (they'll be recreated when starting/loading a new game)
             world = null;
             player = null;
             camera = null;
@@ -431,15 +587,14 @@ namespace Claude4_5Terraria
             lightingSystem = null;
             timeSystem = null;
             worldGenerator = null;
+            chestSystem = null;
             inventoryUI = null;
             pauseMenu = null;
             saveMenu = null;
             miningOverlay = null;
             hud = null;
-
-            // Return to main menu
+            chestUI = null;
             startMenu.SetState(MenuState.MainMenu);
-
             Logger.Log("[GAME] Returned to main menu");
         }
 
@@ -456,10 +611,12 @@ namespace Claude4_5Terraria
                 WorldWidth = World.World.WORLD_WIDTH,
                 WorldHeight = World.World.WORLD_HEIGHT,
                 PlayTimeSeconds = (int)totalPlayTime,
-                TileChanges = world.GetModifiedTiles()
+                TileChanges = world.GetModifiedTiles(),
+                Chests = chestSystem.GetSaveData()
             };
 
             Logger.Log($"[GAME] SaveData.PlayerPosition = {data.PlayerPosition}");
+            Logger.Log($"[GAME] Saving {data.Chests.Count} chests");
 
             for (int i = 0; i < inventory.GetSlotCount(); i++)
             {
@@ -486,51 +643,34 @@ namespace Claude4_5Terraria
             Logger.Log($"[GAME] Game saved to slot {slotIndex + 1}");
         }
 
-
         private void LoadGameFromSave(SaveData data)
         {
             currentWorldSeed = data.WorldSeed;
             totalPlayTime = data.PlayTimeSeconds;
-
-            // FIX 1: Create HUD FIRST
             hud = new HUD();
-            // FIX 2: Initialize HUD with GraphicsDevice
             hud.Initialize(GraphicsDevice);
-            // FIX 3: Pass HUD to World constructor
             world = new World.World(hud);
-
             timeSystem = new TimeSystem();
             timeSystem.SetCurrentTime(data.GameTime);
             lightingSystem = new LightingSystem(world, timeSystem);
-
-
-            // Load all tile sprites
+            chestSystem = new ChestSystem();
             LoadTileSprites(world);
-
-            worldGenerator = new WorldGenerator(world, data.WorldSeed);
-
+            worldGenerator = new WorldGenerator(world, data.WorldSeed, chestSystem);
             worldGenerator.OnProgressUpdate = (progress, message) =>
             {
                 startMenu.SetLoadingProgress(progress, message);
             };
-
             worldGenerator.Generate();
             world.EnableChunkUnloading();
-            world.EnableTileChangeTracking();  // CRITICAL FIX: Enable tracking BEFORE applying changes
-
+            world.EnableTileChangeTracking();
             player = new Claude4_5Terraria.Player.Player(world, data.PlayerPosition);
-
-            // APPLY SAVED TILE CHANGES after world generation
             world.ApplyTileChanges(data.TileChanges);
-
-            // Disable world updates to prevent saplings/trees from regenerating
+            chestSystem.LoadFromData(data.Chests);
+            Logger.Log($"[GAME] Loaded {chestSystem.GetChestCount()} chests from save");
             world.DisableWorldUpdates();
-
             camera = new Camera(GraphicsDevice.Viewport);
             camera.Position = player.Position;
-
             inventory = new Inventory();
-
             for (int i = 0; i < data.InventorySlots.Count && i < inventory.GetSlotCount(); i++)
             {
                 var slotData = data.InventorySlots[i];
@@ -541,26 +681,25 @@ namespace Claude4_5Terraria
                     slot.Count = slotData.Count;
                 }
             }
-
             miningSystem = new MiningSystem(world, inventory);
+
+            // NEW: Subscribe to chest events
+            miningSystem.OnChestMined += HandleChestMined;
+            miningSystem.OnChestPlaced += HandleChestPlaced;
+
             inventoryUI = new InventoryUI(inventory, miningSystem);
             inventoryUI.Initialize(pixelTexture, font);
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
-
-            // CRITICAL FIX: REMOVED redundant 'hud = new HUD()' here.
-
-            // FIX CS1729: Corrected constructor call to match 7 arguments (removed zoom toggle)
+            chestUI = new ChestUI();
             pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
             {
                 musicVolume = newVolume;
                 if (!isMusicMuted)
                     MediaPlayer.Volume = musicVolume;
-            }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud);
-
+            }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud, ToggleAutoMining, isAutoMiningActive); // ADDED: ToggleAutoMining & initial state
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
-
             worldGenerated = true;
             Logger.Log("[GAME] Game loaded successfully");
         }
@@ -572,20 +711,16 @@ namespace Claude4_5Terraria
                 Logger.Log("[GAME] ===== LOADING SAVED GAME =====");
                 int slotIndex = startMenu.GetLoadingSlotIndex();
                 Logger.Log($"[GAME] Attempting to load from slot: {slotIndex}");
-
                 SaveData saveData = SaveSystem.LoadGame(slotIndex);
                 if (saveData != null)
                 {
                     Logger.Log($"[GAME] Save data loaded successfully!");
-                    Logger.Log($"[GAME] Save name: {saveData.SaveName}");
-                    Logger.Log($"[GAME] Player position: {saveData.PlayerPosition}");
-                    Logger.Log($"[GAME] World seed: {saveData.WorldSeed}");
                     LoadGameFromSave(saveData);
                     return;
                 }
                 else
                 {
-                    Logger.Log("[GAME] ERROR: Failed to load save data - saveData is NULL");
+                    Logger.Log("[GAME] ERROR: Failed to load save data");
                     Logger.Log("[GAME] Starting new game instead");
                 }
             }
@@ -594,61 +729,49 @@ namespace Claude4_5Terraria
                 Logger.Log("[GAME] ===== STARTING NEW GAME =====");
             }
 
-            // FIX 1: Create HUD FIRST
             hud = new HUD();
-            // FIX 2: Initialize HUD with GraphicsDevice
             hud.Initialize(GraphicsDevice);
-
             currentWorldSeed = System.Environment.TickCount;
             totalPlayTime = 0f;
-
-            // FIX 3: Pass HUD to World constructor
             world = new World.World(hud);
             timeSystem = new TimeSystem();
             lightingSystem = new LightingSystem(world, timeSystem);
-
-            // Load all tile sprites
+            chestSystem = new ChestSystem();
             LoadTileSprites(world);
-
-            worldGenerator = new WorldGenerator(world, currentWorldSeed);
-
+            worldGenerator = new WorldGenerator(world, currentWorldSeed, chestSystem);
             worldGenerator.OnProgressUpdate = (progress, message) =>
             {
                 startMenu.SetLoadingProgress(progress, message);
             };
-
             worldGenerator.Generate();
             world.EnableChunkUnloading();
-            world.EnableTileChangeTracking();  // CRITICAL FIX: Enable tracking for new games
-
+            world.EnableTileChangeTracking();
             Vector2 spawnPosition = worldGenerator.GetSpawnPosition(64);
             player = new Claude4_5Terraria.Player.Player(world, spawnPosition);
-
             camera = new Camera(GraphicsDevice.Viewport);
             camera.Position = player.Position;
-
             inventory = new Inventory();
             miningSystem = new MiningSystem(world, inventory);
+
+            // NEW: Subscribe to chest events
+            miningSystem.OnChestMined += HandleChestMined;
+            miningSystem.OnChestPlaced += HandleChestPlaced;
+
             inventoryUI = new InventoryUI(inventory, miningSystem);
             inventoryUI.Initialize(pixelTexture, font);
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
-
-            // CRITICAL FIX: REMOVED redundant 'hud = new HUD()' here.
-
-            // FIX CS1729: Corrected constructor call to match 7 arguments (removed zoom toggle)
+            chestUI = new ChestUI();
             pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu, (newVolume) =>
             {
                 musicVolume = newVolume;
                 if (!isMusicMuted)
                     MediaPlayer.Volume = musicVolume;
-            }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud);
-            // ADDED hud.ToggleFullscreenMap (6th arg) AND hud (7th arg) to match the new constructor.
-
+            }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud, ToggleAutoMining, isAutoMiningActive); // ADDED: ToggleAutoMining & initial state
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem);
-
             worldGenerated = true;
+            Logger.Log($"[GAME] World generated with {chestSystem.GetChestCount()} chests");
         }
 
         protected override void Draw(GameTime gameTime)
@@ -687,7 +810,15 @@ namespace Claude4_5Terraria
 
             world.Draw(spriteBatch, camera, pixelTexture, lightingSystem, miningSystem);
             miningSystem.DrawItems(spriteBatch, pixelTexture);
-            player.Draw(spriteBatch, pixelTexture);
+
+            // UPDATED: Pass item data for animation
+            player.Draw(
+                spriteBatch,
+                pixelTexture,
+                ItemType.RunicPickaxe,
+                runicPickaxeTexture,
+                miningSystem.CurrentAnimationFrame // Get the current frame from the mining system
+            );
 
             Vector2 playerCenter = new Vector2(
                 player.Position.X + Claude4_5Terraria.Player.Player.PLAYER_WIDTH / 2,
@@ -712,26 +843,32 @@ namespace Claude4_5Terraria
                 GraphicsDevice.Viewport.Height
             );
 
-            // Draw HUD with world param for minimap
             if (hud != null)
             {
+                // UPDATED: Passed the new isAutoMiningActive parameter to HUD.Draw
                 hud.Draw(spriteBatch, pixelTexture, font,
                     GraphicsDevice.Viewport.Width,
                     GraphicsDevice.Viewport.Height,
                     player.Position,
-                    world);
+                    world,
+                    isAutoMiningActive // NEW PARAMETER
+                );
             }
 
             pauseMenu.Draw(spriteBatch, pixelTexture, font,
                 GraphicsDevice.Viewport.Width,
                 GraphicsDevice.Viewport.Height);
 
-            // Draw save menu on top of everything
             if (saveMenu != null)
             {
                 saveMenu.Draw(spriteBatch, pixelTexture, font,
                     GraphicsDevice.Viewport.Width,
                     GraphicsDevice.Viewport.Height);
+            }
+
+            if (chestUI != null && chestUI.IsOpen)
+            {
+                chestUI.Draw(spriteBatch, pixelTexture, font);
             }
 
             spriteBatch.End();

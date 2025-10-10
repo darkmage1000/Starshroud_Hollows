@@ -1,4 +1,4 @@
-﻿using Claude4_5Terraria.Enums;
+using Claude4_5Terraria.Enums;
 
 namespace Claude4_5Terraria.Systems
 {
@@ -6,10 +6,13 @@ namespace Claude4_5Terraria.Systems
     {
         public static bool CanMine(ItemType tool, TileType tile)
         {
-            // Torches, benches - always mineable with anything
+            // Torches, benches, chests - always mineable with anything
             if (tile == TileType.Torch ||
                 tile == TileType.WoodCraftingBench ||
-                tile == TileType.CopperCraftingBench)
+                tile == TileType.CopperCraftingBench ||
+                tile == TileType.WoodChest ||
+                tile == TileType.SilverChest ||
+                tile == TileType.MagicChest)
             {
                 return true;
             }
@@ -48,6 +51,9 @@ namespace Claude4_5Terraria.Systems
                 case ItemType.PlatinumPickaxe:
                     return true;  // All blocks
 
+                case ItemType.RunicPickaxe:
+                    return true;  // All blocks - best tier
+
                 default:
                     return false;
             }
@@ -75,6 +81,8 @@ namespace Claude4_5Terraria.Systems
                     return 2.5f;
                 case ItemType.PlatinumPickaxe:
                     return 3.0f;
+                case ItemType.RunicPickaxe:
+                    return 4.0f;  // Fastest mining speed
                 default:
                     return 0f;
             }
@@ -86,7 +94,8 @@ namespace Claude4_5Terraria.Systems
                    tool == ItemType.StonePickaxe ||
                    tool == ItemType.CopperPickaxe ||
                    tool == ItemType.SilverPickaxe ||
-                   tool == ItemType.PlatinumPickaxe;
+                   tool == ItemType.PlatinumPickaxe ||
+                   tool == ItemType.RunicPickaxe;
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace Claude4_5Terraria.Enums
+namespace Claude4_5Terraria.Enums
 {
     public enum TileType
     {
@@ -14,7 +14,10 @@
         Coal,
         Torch,
         WoodCraftingBench,
-        CopperCraftingBench,  // ✅ NEW
-        Sapling
+        CopperCraftingBench,
+        Sapling,
+        WoodChest,
+        SilverChest,
+        MagicChest
     }
 }
