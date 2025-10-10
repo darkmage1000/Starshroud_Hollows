@@ -16,12 +16,32 @@ namespace Claude4_5Terraria.Systems
         private Dictionary<Point, float> lightMap;
         private List<Point> torchPositions;
 
+        // NEW: Dynamic light source for player's held torch
+        private Vector2 playerLightWorldPosition;
+        private bool isPlayerLightActive;
+
+
         public LightingSystem(World.World world, TimeSystem timeSystem)
         {
             this.world = world;
             this.timeSystem = timeSystem;
             lightMap = new Dictionary<Point, float>();
             torchPositions = new List<Point>();
+
+            playerLightWorldPosition = Vector2.Zero;
+            isPlayerLightActive = false;
+        }
+
+        // NEW: Public method for Game1 to control the player's light source
+        public void SetPlayerLight(Vector2 worldPosition, bool active)
+        {
+            if (isPlayerLightActive != active)
+            {
+                // Clear the cache if the light status changes
+                lightMap.Clear();
+            }
+            isPlayerLightActive = active;
+            playerLightWorldPosition = worldPosition;
         }
 
         public void UpdateTorchCache(Vector2 cameraPosition)
@@ -127,6 +147,7 @@ namespace Claude4_5Terraria.Systems
         {
             float maxTorchLight = 0f;
 
+            // --- 1. Check for Placed Torches ---
             foreach (Point torchPos in torchPositions)
             {
                 float distance = (float)Math.Sqrt(
@@ -148,6 +169,36 @@ namespace Claude4_5Terraria.Systems
                 lightStrength = (float)Math.Pow(lightStrength, 0.5);
 
                 maxTorchLight = Math.Max(maxTorchLight, lightStrength);
+            }
+
+            // --- 2. Check for Player's Held Torch ---
+            if (isPlayerLightActive)
+            {
+                // Convert world position to tile position for light path calculation
+                int playerTileX = (int)(playerLightWorldPosition.X / World.World.TILE_SIZE);
+                int playerTileY = (int)(playerLightWorldPosition.Y / World.World.TILE_SIZE);
+
+                float distance = (float)Math.Sqrt(
+                    Math.Pow(tileX - playerTileX, 2) +
+                    Math.Pow(tileY - playerTileY, 2)
+                );
+
+                if (distance <= TORCH_RADIUS)
+                {
+                    // For the held torch, we don't block the light path right at the player's immediate area 
+                    // to ensure it lights up the player directly.
+                    // However, blocking solid walls further out is still important.
+
+                    // We check if the target tile is blocked *from the player's light tile*.
+                    if (!IsLightPathBlocked(playerTileX, playerTileY, tileX, tileY))
+                    {
+                        float falloff = 1.0f - (distance / TORCH_RADIUS);
+                        float lightStrength = TORCH_BRIGHTNESS * falloff;
+                        lightStrength = (float)Math.Pow(lightStrength, 0.5);
+
+                        maxTorchLight = Math.Max(maxTorchLight, lightStrength);
+                    }
+                }
             }
 
             return maxTorchLight;

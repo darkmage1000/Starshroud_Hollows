@@ -233,7 +233,7 @@ namespace Claude4_5Terraria.Player
 
         private bool hasLoggedDraw = false;
 
-        // UPDATED: Logic to correctly read the 3-frame spritesheet
+        // UPDATED: Added specific logic for drawing the Torch
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, ItemType heldItemType, Texture2D itemSpriteSheet, int animationFrame)
         {
             // --- 1. Draw Player (Currently a yellow box) ---
@@ -245,39 +245,68 @@ namespace Claude4_5Terraria.Player
             );
             spriteBatch.Draw(pixelTexture, playerRect, Color.Yellow);
 
-            // --- 2. Draw Held Item (Pickaxe) ---
-            if (heldItemType == ItemType.RunicPickaxe && itemSpriteSheet != null)
+            // --- 2. Draw Held Item (Tool) ---
+            if (heldItemType != ItemType.None && itemSpriteSheet != null)
             {
-                // CRITICAL FIX: Calculate frame dimensions based on 3 frames in a 2x2 grid layout.
-                // Assuming the spritesheet is roughly 2 frames wide and 2 frames tall (4 total frame slots)
-                int cols = 2; // Assuming the pickaxes take up 2 horizontal slots
-                int rows = 2; // Assuming the pickaxes take up 2 vertical slots
-                int itemFrameWidth = itemSpriteSheet.Width / cols;
-                int itemFrameHeight = itemSpriteSheet.Height / rows;
+                int totalFrames = 1; // Default to single frame icon
+                int itemFrameWidth = itemSpriteSheet.Width;
+                int itemFrameHeight = itemSpriteSheet.Height;
+                int currentFrame = 0;
+                float rotation = 0f;
+                float scale = 0.5f;
+                SpriteEffects flip = facingRight ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
 
-                // Map the 0, 1, 2 animationFrame index to the correct pixel coordinates:
-                // Frame 0: (0, 0)
-                // Frame 1: (itemFrameWidth, 0)
-                // Frame 2: (0, itemFrameHeight)
+                // === A) Special Case: Runic Pickaxe Animation ===
+                if (heldItemType == ItemType.RunicPickaxe)
+                {
+                    // Based on your vertical 3-frame spritesheet (2 columns x 2 rows)
+                    totalFrames = 3;
+                    itemFrameWidth = itemSpriteSheet.Width / 2;
+                    itemFrameHeight = itemSpriteSheet.Height / 2;
+                    currentFrame = animationFrame; // Use progress-based frame
+                    scale = 0.5f; // Scale down for pickaxe size
 
+                    // Rotation to simulate swinging
+                    if (animationFrame == 1) // Mid-swing frame
+                    {
+                        rotation = facingRight ? MathHelper.PiOver4 * 0.5f : MathHelper.PiOver4 * 1.5f;
+                    }
+                    else if (animationFrame == 2) // End-swing frame / contact
+                    {
+                        rotation = facingRight ? MathHelper.PiOver4 * 1.5f : -MathHelper.PiOver4 * 0.5f;
+                    }
+                    else // Idle/Start frame (Frame 0)
+                    {
+                        rotation = facingRight ? -MathHelper.PiOver4 * 0.25f : MathHelper.PiOver4 * 0.25f;
+                    }
+                }
+                // === B) Special Case: Torch (Held upright) ===
+                else if (heldItemType == ItemType.Torch)
+                {
+                    // For static items, itemFrameWidth/Height remains the full texture size 
+                    // unless your torch texture is also a sheet. Assuming single 32x32 texture is loaded.
+                    scale = 0.6f;
+                    rotation = 0f;
+                    flip = SpriteEffects.None; // Torches shouldn't flip
+                }
+                // === C) General Item Drawing ===
+                else
+                {
+                    // Default static item settings (using default scale=0.5f)
+                    scale = 0.5f;
+                    rotation = 0f;
+                }
+
+                // Map the frame index to the correct pixel coordinates (Handles Runic pickaxe and defaults others to (0,0))
                 int sourceX = 0;
                 int sourceY = 0;
 
-                if (animationFrame == 0)
+                if (heldItemType == ItemType.RunicPickaxe)
                 {
-                    sourceX = 0;
-                    sourceY = 0;
+                    if (currentFrame == 1) sourceX = itemFrameWidth;
+                    if (currentFrame == 2) sourceY = itemFrameHeight;
                 }
-                else if (animationFrame == 1)
-                {
-                    sourceX = itemFrameWidth;
-                    sourceY = 0;
-                }
-                else if (animationFrame == 2)
-                {
-                    sourceX = 0;
-                    sourceY = itemFrameHeight;
-                }
+                // For other items, sourceX and sourceY remain 0.
 
                 Rectangle sourceRect = new Rectangle(
                     sourceX,
@@ -286,33 +315,23 @@ namespace Claude4_5Terraria.Player
                     itemFrameHeight
                 );
 
-                // Calculate the position for the pickaxe (relative to the player's hand/shoulder)
+                // Calculate the position for the tool (relative to the player's hand/shoulder)
                 Vector2 origin = new Vector2(itemFrameWidth / 2f, itemFrameHeight / 2f);
 
-                // Positioned near the right shoulder/hand, scaled down for pickaxe size
+                // Base position is near the right shoulder/hand
                 Vector2 drawPosition = new Vector2(
                     Position.X + (PLAYER_WIDTH * 0.75f),
                     Position.Y + (PLAYER_HEIGHT * 0.35f)
                 );
 
-                float rotation = 0f;
-                // Adjust rotation to simulate swinging
-                if (animationFrame == 1) // Mid-swing frame
+                // Adjust vertical position slightly for a smaller torch
+                if (heldItemType == ItemType.Torch)
                 {
-                    rotation = facingRight ? MathHelper.PiOver4 * 0.5f : MathHelper.PiOver4 * 1.5f;
-                }
-                else if (animationFrame == 2) // End-swing frame / contact
-                {
-                    rotation = facingRight ? MathHelper.PiOver4 * 1.5f : -MathHelper.PiOver4 * 0.5f; // Slight adjustment for left swing visual
-                }
-                else // Idle/Start frame (Frame 0)
-                {
-                    rotation = facingRight ? -MathHelper.PiOver4 * 0.25f : MathHelper.PiOver4 * 0.25f;
+                    drawPosition.Y += 5; // Move torch down slightly into the hand
                 }
 
-                SpriteEffects flip = facingRight ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
 
-                // Draw the pickaxe
+                // Draw the tool
                 spriteBatch.Draw(
                     itemSpriteSheet,
                     drawPosition,
@@ -320,7 +339,7 @@ namespace Claude4_5Terraria.Player
                     Color.White,
                     rotation,
                     origin,
-                    0.5f, // Scale down to a reasonable size (e.g., 50%)
+                    scale,
                     flip,
                     0f
                 );

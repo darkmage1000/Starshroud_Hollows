@@ -121,7 +121,7 @@ namespace Claude4_5Terraria.UI
             int playerScreenX, playerScreenY;
             Rectangle playerDot;
 
-            // Defines the size of the source rectangle for the zoomed view (100 tiles wide/high)
+            // Defines the size of the source rectangle for the zoomed view (100x100 tiles)
             int sourceTileSize = MINIMAP_ZOOM_RADIUS * 2;
             int sourceX = playerTileX - MINIMAP_ZOOM_RADIUS;
             int sourceY = playerTileY - MINIMAP_ZOOM_RADIUS;
@@ -185,12 +185,12 @@ namespace Claude4_5Terraria.UI
         }
 
         // Main Draw entry point
-        // UPDATED: Added isAutoMiningActive parameter
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive)
+        // UPDATED: Added isRaining parameter
+        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive, bool isRaining)
         {
             if (font == null) return;
 
-            // Draw coordinates, block outline hint, etc.
+            // --- Draw coordinates ---
             int tileX = (int)(playerPosition.X / World.World.TILE_SIZE);
             int tileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
             string coordText = $"X: {tileX}, Y: {tileY}";
@@ -207,6 +207,30 @@ namespace Claude4_5Terraria.UI
             );
             spriteBatch.Draw(pixelTexture, coordBgRect, Color.Black * 0.7f);
             spriteBatch.DrawString(font, coordText, coordPosition, Color.Yellow);
+
+            // --- NEW: Draw Weather Status (Below coordinates) ---
+            // FIXED: Removed emojis to prevent SpriteFont crash
+            string weatherText = isRaining ? "Weather: RAIN (R)" : "Weather: CLEAR (C)";
+            Color weatherColor = isRaining ? Color.SkyBlue : Color.White;
+            Vector2 weatherSize = font.MeasureString(weatherText);
+
+            // Position 5 pixels below coordinates
+            Vector2 weatherPosition = new Vector2(
+                coordPosition.X,
+                coordPosition.Y + coordSize.Y + 5
+            );
+
+            // Background
+            Rectangle weatherBgRect = new Rectangle(
+                (int)weatherPosition.X - 5,
+                (int)weatherPosition.Y - 5,
+                (int)weatherSize.X + 10,
+                (int)weatherSize.Y + 10
+            );
+            spriteBatch.Draw(pixelTexture, weatherBgRect, Color.Black * 0.7f);
+
+            // Text
+            spriteBatch.DrawString(font, weatherText, weatherPosition, weatherColor);
 
             // --- Draw block outline hint in top-right ---
             string outlineHint = showBlockOutlines ? "T: Hide Outlines" : "T: Show Outlines";

@@ -7,9 +7,10 @@ using Claude4_5Terraria.Enums;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Microsoft.Xna.Framework.Media; // CORRECTED using statement
+using Microsoft.Xna.Framework.Media;
 using System;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 
 namespace Claude4_5Terraria
@@ -58,8 +59,8 @@ namespace Claude4_5Terraria
         private bool isAutoMiningActive = false;
         private Vector2 lastPlayerDirection = Vector2.Zero; // Tracks movement direction for auto-mine
 
-        // NEW: Field to hold the Runic Pickaxe Texture for animation
-        private Texture2D runicPickaxeTexture;
+        // NEW: Dictionary to hold all loaded item textures for drawing
+        private Dictionary<ItemType, Texture2D> itemTextureMap;
 
 
         public Game1()
@@ -93,16 +94,8 @@ namespace Claude4_5Terraria
             font = Content.Load<SpriteFont>("Font");
             menuBackgroundTexture = Content.Load<Texture2D>("MenuBackground");
 
-            // NEW: Load Runic Pickaxe Texture for animation
-            try
-            {
-                runicPickaxeTexture = Content.Load<Texture2D>("runicpickaxe");
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[GAME] Could not load runicpickaxe sprite: {ex.Message}");
-            }
-            // --- END NEW ---
+            // Initialize item texture map
+            itemTextureMap = new Dictionary<ItemType, Texture2D>();
 
             backgroundMusic = Content.Load<Song>("CozyBackground");
             MediaPlayer.IsRepeating = true;
@@ -504,6 +497,8 @@ namespace Claude4_5Terraria
                 {
                     Texture2D texture = Content.Load<Texture2D>(sprite.Key);
                     inventoryUI.LoadItemSprite(sprite.Value, texture);
+                    // NEW: Store texture for Player Drawing
+                    itemTextureMap[sprite.Value] = texture;
                 }
                 catch (Exception ex)
                 {
@@ -811,14 +806,34 @@ namespace Claude4_5Terraria
             world.Draw(spriteBatch, camera, pixelTexture, lightingSystem, miningSystem);
             miningSystem.DrawItems(spriteBatch, pixelTexture);
 
-            // UPDATED: Pass item data for animation
+            // 1. Determine currently held item
+            ItemType heldItemType = inventory.GetSlot(miningSystem.GetSelectedHotbarSlot())?.ItemType ?? ItemType.None;
+            Texture2D heldItemTexture = null;
+            if (heldItemType != ItemType.None)
+            {
+                itemTextureMap.TryGetValue(heldItemType, out heldItemTexture);
+            }
+
+            // 2. Pass data to Player Draw method
             player.Draw(
                 spriteBatch,
                 pixelTexture,
-                ItemType.RunicPickaxe,
-                runicPickaxeTexture,
-                miningSystem.CurrentAnimationFrame // Get the current frame from the mining system
+                heldItemType,
+                heldItemTexture,
+                miningSystem.CurrentAnimationFrame
             );
+
+            // 3. Handle Torch Lighting
+            if (heldItemType == ItemType.Torch)
+            {
+                // Activate and position the dynamic light source at the player's center
+                lightingSystem.SetPlayerLight(player.GetCenterPosition(), true);
+            }
+            else
+            {
+                // Deactivate the dynamic light source
+                lightingSystem.SetPlayerLight(Vector2.Zero, false);
+            }
 
             Vector2 playerCenter = new Vector2(
                 player.Position.X + Claude4_5Terraria.Player.Player.PLAYER_WIDTH / 2,
@@ -845,13 +860,14 @@ namespace Claude4_5Terraria
 
             if (hud != null)
             {
-                // UPDATED: Passed the new isAutoMiningActive parameter to HUD.Draw
+                // UPDATED: Passed the isAutoMiningActive and the timeSystem.IsRaining parameters to HUD.Draw
                 hud.Draw(spriteBatch, pixelTexture, font,
                     GraphicsDevice.Viewport.Width,
                     GraphicsDevice.Viewport.Height,
                     player.Position,
                     world,
-                    isAutoMiningActive // NEW PARAMETER
+                    isAutoMiningActive, // Auto-mine state
+                    timeSystem.IsRaining // Weather state
                 );
             }
 

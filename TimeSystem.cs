@@ -7,9 +7,17 @@ namespace Claude4_5Terraria.Systems
         private float timeOfDay;  // 0.0 to 1.0 (0 = midnight, 0.5 = noon, 1.0 = midnight)
         private const float DAY_LENGTH_SECONDS = 600f;  // 10 minutes total (5 day + 5 night)
 
+        // NEW: Weather fields
+        private bool isRaining = false;
+        private const float RAIN_CHANCE_DAILY = 0.25f; // 25% chance of rain per day
+        private Random random = new Random();
+
+        public bool IsRaining => isRaining;
+
         public TimeSystem()
         {
             timeOfDay = 0.25f;  // Start at dawn (6am)
+            CheckNewDayWeather(); // Initialize weather state
         }
 
         public void Update(float deltaTime)
@@ -21,6 +29,23 @@ namespace Claude4_5Terraria.Systems
             if (timeOfDay >= 1.0f)
             {
                 timeOfDay -= 1.0f;
+                // NEW: Trigger the daily weather check when the day wraps around
+                CheckNewDayWeather();
+            }
+        }
+
+        // NEW: Method to check and set the daily weather state
+        private void CheckNewDayWeather()
+        {
+            if (random.NextDouble() < RAIN_CHANCE_DAILY)
+            {
+                isRaining = true;
+                Logger.Log("[WEATHER] The skies open up—it is now raining.");
+            }
+            else
+            {
+                isRaining = false;
+                Logger.Log("[WEATHER] The day is clear.");
             }
         }
 
@@ -52,6 +77,7 @@ namespace Claude4_5Terraria.Systems
         // Get ambient light level (0.0 = pitch black, 1.0 = full daylight)
         public float GetAmbientLight()
         {
+            // ... (rest of GetAmbientLight is unchanged)
             // Daytime (6am to 6pm) - 0.25 to 0.75
             if (timeOfDay >= 0.25f && timeOfDay < 0.75f)
             {
