@@ -33,24 +33,23 @@ namespace Claude4_5Terraria
         private LightingSystem lightingSystem;
         private TimeSystem timeSystem;
         private WorldGenerator worldGenerator;
-        private ChestSystem chestSystem; // NEW: Chest system
+        private ChestSystem chestSystem;
+        private LiquidSystem liquidSystem; // NEW: Liquid System Field
 
         private InventoryUI inventoryUI;
         private PauseMenu pauseMenu;
         private MiningOverlay miningOverlay;
         private StartMenu startMenu;
         private SaveMenu saveMenu;
-        private LoadMenu loadMenu;
         private HUD hud;
-        private ChestUI chestUI; // NEW: Chest UI
+        private ChestUI chestUI;
 
         private KeyboardState previousKeyboardState;
-        private MouseState previousMouseState; // NEW: Track mouse state
+        private MouseState previousMouseState;
 
         private Song backgroundMusic;
         private float musicVolume = 0.1f;
 
-        // NEW: Game Sounds Volume Field
         private float gameSoundsVolume = 0.5f;
 
         private bool isMusicMuted = false;
@@ -60,18 +59,16 @@ namespace Claude4_5Terraria
         private int currentWorldSeed;
         private float totalPlayTime;
 
-        // NEW: Auto-Mining Control
         private bool isAutoMiningActive = false;
-        private Vector2 lastPlayerDirection = Vector2.Zero; // Tracks movement direction for auto-mine
+        private Vector2 lastPlayerDirection = Vector2.Zero;
 
-        // NEW: Dictionary to hold all loaded item textures for drawing
         private Dictionary<ItemType, Texture2D> itemTextureMap;
 
         // --- NEW RAIN SYSTEM FIELDS (Unchanged) ---
         private List<Vector2> rainParticles;
         private Random random;
         private const int MAX_RAIN_DROPS = 1000;
-        private const float RAIN_SPEED = 800f;  // MUCH faster rain
+        private const float RAIN_SPEED = 800f;
         private const float RAIN_OFFSET_X = 500f;
         private const float RAIN_OFFSET_Y = 100f;
         // ------------------------------------------
@@ -82,6 +79,13 @@ namespace Claude4_5Terraria
         private SoundEffect mineTorchSound;
         private SoundEffect placeTorchSound;
         // -------------------------------
+
+        // --- NEW: Bed and Sleep fields ---
+        private bool isSleeping = false;
+        private float sleepProgress = 0f;
+        private const float SLEEP_DURATION = 5.0f; // 5 seconds to sleep
+        private Point? currentBedPosition = null;
+        // ---------------------------------
 
 
         public Game1()
@@ -95,8 +99,8 @@ namespace Claude4_5Terraria
             graphics.IsFullScreen = false;
             graphics.ApplyChanges();
 
-            random = new Random(); // Initialize Random
-            rainParticles = new List<Vector2>(); // Initialize particle list
+            random = new Random();
+            rainParticles = new List<Vector2>();
         }
 
         protected override void Initialize()
@@ -110,7 +114,7 @@ namespace Claude4_5Terraria
             catch { }
 
             previousKeyboardState = Keyboard.GetState();
-            previousMouseState = Mouse.GetState(); // NEW
+            previousMouseState = Mouse.GetState();
             totalPlayTime = 0f;
             base.Initialize();
         }
@@ -134,12 +138,11 @@ namespace Claude4_5Terraria
             {
                 mineDirtSound = Content.Load<SoundEffect>("a_pickaxe_hitting_dirt");
                 mineStoneSound = Content.Load<SoundEffect>("a_pickaxe_hitting_stone");
-                SoundEffect woodSound = Content.Load<SoundEffect>("hitting a tree");  // Load wood sound separately
-                mineTorchSound = woodSound;  // Use wood sound for torch
-                placeTorchSound = Content.Load<SoundEffect>("placing and mining a torch");  // FIXED: spaces
+                SoundEffect woodSound = Content.Load<SoundEffect>("hitting a tree");
+                mineTorchSound = woodSound;
+                placeTorchSound = Content.Load<SoundEffect>("placing and mining a torch");
 
                 // CRITICAL AUDIO FIX: Create a SoundEffectInstance immediately after loading
-                // This initializes the audio track resources, preventing late-game crashes/silence.
                 mineStoneSound?.CreateInstance().Dispose();
 
             }
@@ -155,14 +158,13 @@ namespace Claude4_5Terraria
             MediaPlayer.Play(backgroundMusic);
 
             // UPDATED: Pass SetGameSoundsVolume callback and initial volume, AND PlayTestSound
-            // CRITICAL FIX FOR CS1729: StartMenu constructor now includes PlayTestSound
             startMenu = new StartMenu(musicVolume,
                                       (newVolume) => { musicVolume = newVolume; if (!isMusicMuted) MediaPlayer.Volume = musicVolume; },
                                       gameSoundsVolume,
                                       SetGameSoundsVolume,
                                       ToggleFullscreen,
                                       menuBackgroundTexture,
-                                      PlayTestSound); // NEW: Pass the test sound action (7th argument)
+                                      PlayTestSound);
 
             Logger.Log("[GAME] Content loaded successfully");
         }
@@ -173,26 +175,20 @@ namespace Claude4_5Terraria
             base.UnloadContent();
         }
 
-        // NEW: Public method for PauseMenu/StartMenu to set sound volume
         public void SetGameSoundsVolume(float newVolume)
         {
             gameSoundsVolume = newVolume;
-            // Update the mining system immediately if it exists
-            // This ensures sound volume changes instantly even if the MiningSystem was created earlier.
             miningSystem?.SetSoundVolume(newVolume);
         }
 
-        // NEW: Plays a sound based on the current SFX volume level (for volume testing)
         private void PlayTestSound()
         {
             if (mineDirtSound != null)
             {
-                // Play the dirt sound at the current gameSoundsVolume level
                 mineDirtSound.Play(volume: gameSoundsVolume, pitch: 0.0f, pan: 0.0f);
             }
         }
 
-        // NEW: Public method for PauseMenu to toggle auto-mining state
         public void ToggleAutoMining(bool? newState = null)
         {
             if (newState.HasValue)
@@ -206,7 +202,6 @@ namespace Claude4_5Terraria
             Logger.Log($"[INPUT] Auto-Mining is now {(isAutoMiningActive ? "ON" : "OFF")}");
         }
 
-        // NEW: Rain particle update logic (Unchanged from previous step)
         private void UpdateRainParticles(float deltaTime, int screenWidth, int screenHeight)
         {
             if (timeSystem != null && timeSystem.IsRaining)
@@ -237,6 +232,7 @@ namespace Claude4_5Terraria
                     int tileY = (int)(worldPos.Y / World.World.TILE_SIZE);
 
                     // 2. Check for solid block collision (CRITICAL NEW LOGIC)
+                    // FIX: IsSolidAtPosition is now available in World.cs
                     if (world.IsSolidAtPosition(tileX, tileY))
                     {
                         // Collision detected: stop the rain particle and respawn it at the top
@@ -273,7 +269,7 @@ namespace Claude4_5Terraria
         protected override void Update(GameTime gameTime)
         {
             KeyboardState keyboardState = Keyboard.GetState();
-            MouseState mouseState = Mouse.GetState(); // NEW
+            MouseState mouseState = Mouse.GetState();
 
             if (startMenu.GetState() == MenuState.MainMenu ||
                 startMenu.GetState() == MenuState.Options ||
@@ -290,7 +286,7 @@ namespace Claude4_5Terraria
                 }
 
                 previousKeyboardState = keyboardState;
-                previousMouseState = mouseState; // NEW
+                previousMouseState = mouseState;
                 base.Update(gameTime);
                 return;
             }
@@ -303,12 +299,15 @@ namespace Claude4_5Terraria
                 }
 
                 previousKeyboardState = keyboardState;
-                previousMouseState = mouseState; // NEW
+                previousMouseState = mouseState;
                 base.Update(gameTime);
                 return;
             }
 
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+            // SINGLE DECLARATION OF playerCenter for the entire remaining scope
+            Vector2 playerCenter = player != null ? player.GetCenterPosition() : Vector2.Zero;
 
             // Update chest UI if open (HIGHEST PRIORITY)
             if (chestUI != null && chestUI.IsOpen)
@@ -382,12 +381,56 @@ namespace Claude4_5Terraria
                 return;
             }
 
+            // --- NEW: Handle Sleeping Logic (Before TimeSystem update) ---
+            if (isSleeping)
+            {
+                // A. Check if player has moved or is no longer on the bed tile
+                int playerTileX = (int)(playerCenter.X / World.World.TILE_SIZE);
+                int playerTileY = (int)(playerCenter.Y / World.World.TILE_SIZE);
+
+                // Check if player has moved far from the bed's tile
+                if (currentBedPosition.HasValue && (Math.Abs(playerTileX - currentBedPosition.Value.X) > 2 || Math.Abs(playerTileY - currentBedPosition.Value.Y) > 2))
+                {
+                    isSleeping = false;
+                    sleepProgress = 0f;
+                    Logger.Log("[GAME] Sleeping interrupted: player moved.");
+                }
+                else
+                {
+                    // B. Advance sleep progress
+                    sleepProgress += deltaTime;
+
+                    if (sleepProgress >= SLEEP_DURATION)
+                    {
+                        // C. Sleep is complete
+                        if (timeSystem != null)
+                        {
+                            timeSystem.AdvanceToMorning();
+                            Logger.Log("[GAME] Slept in bed - time advanced to morning!");
+                        }
+                        isSleeping = false;
+                        sleepProgress = 0f;
+                        currentBedPosition = null;
+                    }
+                }
+
+                // If sleeping, skip all other player/input updates
+                previousKeyboardState = keyboardState;
+                previousMouseState = mouseState;
+                base.Update(gameTime);
+                return;
+            }
+            // -----------------------------------------------------------------
+
+
             totalPlayTime += deltaTime;
 
             timeSystem.Update(deltaTime);
 
-            // NEW: Update rain particles (must run after timeSystem update)
             UpdateRainParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+
+            // NEW: Liquid System Update
+            liquidSystem.UpdateFlow();
 
 
             for (int i = 0; i < 10; i++)
@@ -406,13 +449,11 @@ namespace Claude4_5Terraria
                 Logger.Log($"[INPUT] Mining outlines {(showMiningOutlines ? "enabled" : "disabled")}");
             }
 
-            // NEW AUTO-MINE TOGGLE: Press L to toggle auto-mining
             if (keyboardState.IsKeyDown(Keys.L) && !previousKeyboardState.IsKeyDown(Keys.L))
             {
                 ToggleAutoMining();
             }
 
-            // NEW: Press Q to drop currently selected item (only when inventory is CLOSED)
             if (keyboardState.IsKeyDown(Keys.Q) && !previousKeyboardState.IsKeyDown(Keys.Q))
             {
                 if (inventoryUI != null && !inventoryUI.IsInventoryOpen)
@@ -425,18 +466,15 @@ namespace Claude4_5Terraria
             player.Update(gameTime);
             camera.Position = player.Position;
 
-            // SINGLE DECLARATION OF playerCenter for the entire remaining scope
-            Vector2 playerCenter = new Vector2(
-                player.Position.X + Claude4_5Terraria.Player.Player.PLAYER_WIDTH / 2,
-                player.Position.Y + Claude4_5Terraria.Player.Player.PLAYER_HEIGHT / 2
-            );
+            // Update player center position after player.Update()
+            playerCenter = player.GetCenterPosition();
 
             // NEW: Capture last player direction for auto-mine
             Vector2 currentMovement = Vector2.Zero;
             if (keyboardState.IsKeyDown(Keys.A)) currentMovement.X -= 1;
             if (keyboardState.IsKeyDown(Keys.D)) currentMovement.X += 1;
-            if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Space)) currentMovement.Y -= 1; // Jumping or going up
-            if (keyboardState.IsKeyDown(Keys.S)) currentMovement.Y += 1; // Going down (not used for jumping)
+            if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Space)) currentMovement.Y -= 1;
+            if (keyboardState.IsKeyDown(Keys.S)) currentMovement.Y += 1;
 
             if (currentMovement.LengthSquared() > 0)
             {
@@ -471,11 +509,11 @@ namespace Claude4_5Terraria
                 int tileX = (int)(worldPos.X / World.World.TILE_SIZE);
                 int tileY = (int)(worldPos.Y / World.World.TILE_SIZE);
                 var clickedTile = world.GetTile(tileX, tileY);
-                
+
                 // Check if player is using Recall Potion from hotbar
                 var selectedSlot = miningSystem.GetSelectedHotbarSlot();
                 var slot = inventory.GetSlot(selectedSlot);
-                
+
                 if (slot != null && slot.ItemType == ItemType.RecallPotion && slot.Count > 0)
                 {
                     // Use Recall Potion - teleport to spawn
@@ -493,22 +531,28 @@ namespace Claude4_5Terraria
                 {
                     HandleBucketUse(tileX, tileY, clickedTile, slot);
                 }
-                // Check if clicking on a bed
+                // Check if clicking on a bed (UPDATED logic)
                 else if (clickedTile != null && clickedTile.Type == TileType.Bed)
                 {
-                    // Set bed as spawn and speed up time
                     Point bedTilePos = new Point(tileX, tileY);
+                    Point playerTilePos = new Point((int)(playerCenter.X / World.World.TILE_SIZE), (int)(playerCenter.Y / World.World.TILE_SIZE));
+
+                    // 1. Set bed as spawn point
                     Vector2 bedSpawnPos = new Vector2(
                         bedTilePos.X * World.World.TILE_SIZE,
-                        (bedTilePos.Y - 2) * World.World.TILE_SIZE  // Spawn 2 tiles above bed
+                        (bedTilePos.Y - 2) * World.World.TILE_SIZE
                     );
                     player.SetBedSpawn(bedSpawnPos);
-                    
-                    // Speed up time (advance to morning)
-                    if (timeSystem != null)
+
+                    // 2. Check if player is near/on the bed's tile to start sleeping
+                    if (playerTilePos.X >= bedTilePos.X - 1 && playerTilePos.X <= bedTilePos.X + 1 &&
+                        playerTilePos.Y >= bedTilePos.Y - 2 && playerTilePos.Y <= bedTilePos.Y)
                     {
-                        timeSystem.AdvanceToMorning();
-                        Logger.Log("[GAME] Slept in bed - time advanced to morning!");
+                        // 3. Start sleeping
+                        isSleeping = true;
+                        currentBedPosition = bedTilePos;
+                        sleepProgress = 0f;
+                        Logger.Log("[GAME] Starting to sleep in bed.");
                     }
                 }
                 // Check if clicking on a chest
@@ -520,13 +564,10 @@ namespace Claude4_5Terraria
                 }
             }
 
-            // NOTE: player.Update() and camera.Position update were moved up.
-
             world.UpdateLoadedChunks(camera);
             world.Update(deltaTime, worldGenerator);
             world.MarkAreaAsExplored(playerCenter);
 
-            // Pass auto-mine state and direction to MiningSystem
             miningSystem.Update(
                 gameTime,
                 playerCenter,
@@ -534,11 +575,10 @@ namespace Claude4_5Terraria
                 player.Position,
                 Claude4_5Terraria.Player.Player.PLAYER_WIDTH,
                 Claude4_5Terraria.Player.Player.PLAYER_HEIGHT,
-                isAutoMiningActive, // NEW PARAMETER
-                lastPlayerDirection  // NEW PARAMETER
+                isAutoMiningActive,
+                lastPlayerDirection
             );
 
-            // Update minimap
             if (hud != null)
             {
                 hud.UpdateMinimapData(world);
@@ -552,23 +592,11 @@ namespace Claude4_5Terraria
             base.Update(gameTime);
         }
 
-        // NEW: Handle chest mining callback
-        private void HandleChestMined(Point position, TileType tileType)
-        {
-            if (chestSystem != null)
-            {
-                // Remove chest and give items to player
-                chestSystem.RemoveChest(position, inventory);
-                world.SetTile(position.X, position.Y, new Tile(TileType.Air));
-                Logger.Log($"[GAME] Chest mined at ({position.X}, {position.Y})");
-            }
-        }
-
-        // NEW: Handle bucket use
+        // FIX: The SetTile call now needs to reference the LiquidSystem to trigger flow
         private void HandleBucketUse(int tileX, int tileY, Tile clickedTile, InventorySlot slot)
         {
             if (slot == null) return;
-            
+
             // Empty bucket: try to pick up liquid
             if (slot.ItemType == ItemType.EmptyBucket)
             {
@@ -580,6 +608,7 @@ namespace Claude4_5Terraria
                         world.SetTile(tileX, tileY, new Tile(TileType.Air));
                         slot.ItemType = ItemType.WaterBucket;
                         Logger.Log("[GAME] Filled bucket with water!");
+                        liquidSystem.TriggerLocalFlow(tileX, tileY); // Trigger flow after removal
                     }
                     else if (clickedTile.Type == TileType.Lava)
                     {
@@ -587,6 +616,7 @@ namespace Claude4_5Terraria
                         world.SetTile(tileX, tileY, new Tile(TileType.Air));
                         slot.ItemType = ItemType.LavaBucket;
                         Logger.Log("[GAME] Filled bucket with lava!");
+                        liquidSystem.TriggerLocalFlow(tileX, tileY); // Trigger flow after removal
                     }
                 }
             }
@@ -599,6 +629,7 @@ namespace Claude4_5Terraria
                     world.SetTile(tileX, tileY, new Tile(TileType.Water));
                     slot.ItemType = ItemType.EmptyBucket;
                     Logger.Log("[GAME] Placed water!");
+                    liquidSystem.TriggerLocalFlow(tileX, tileY); // Trigger flow after placement
                 }
             }
             // Lava bucket: place lava
@@ -610,11 +641,24 @@ namespace Claude4_5Terraria
                     world.SetTile(tileX, tileY, new Tile(TileType.Lava));
                     slot.ItemType = ItemType.EmptyBucket;
                     Logger.Log("[GAME] Placed lava!");
+                    liquidSystem.TriggerLocalFlow(tileX, tileY); // Trigger flow after placement
                 }
             }
         }
 
-        // NEW: Handle chest placement callback
+        private void HandleChestMined(Point position, TileType tileType)
+        {
+            if (chestSystem != null)
+            {
+                // Remove chest and give items to player
+                chestSystem.RemoveChest(position, inventory);
+                world.SetTile(position.X, position.Y, new Tile(TileType.Air));
+                Logger.Log($"[GAME] Chest mined at ({position.X}, {position.Y})");
+                liquidSystem.TriggerLocalFlow(position.X, position.Y); // Trigger flow after mining
+            }
+        }
+
+        // UPDATED: Handle chest placement callback to include custom name
         private void HandleChestPlaced(Point position, ItemType itemType)
         {
             if (chestSystem != null)
@@ -623,12 +667,15 @@ namespace Claude4_5Terraria
                 if (itemType == ItemType.SilverChest) tier = ChestTier.Silver;
                 else if (itemType == ItemType.MagicChest) tier = ChestTier.Magic;
 
-                chestSystem.PlaceChest(position, tier, false);
-                Logger.Log($"[GAME] Placed {tier} chest at ({position.X}, {position.Y})");
+                // NEW: Custom name for player-placed chests
+                string customName = "Player's " + tier.ToString() + " Chest";
+
+                // UPDATED: Pass the custom name to PlaceChest
+                chestSystem.PlaceChest(position, tier, false, customName);
+                Logger.Log($"[GAME] Placed {tier} chest named '{customName}' at ({position.X}, {position.Y})");
             }
         }
 
-        // NEW: Handle chest interaction
         private void HandleChestInteraction(MouseState mouseState)
         {
             // Get world position from mouse position
@@ -647,7 +694,7 @@ namespace Claude4_5Terraria
                 if (chest != null && chestUI != null)
                 {
                     chestUI.OpenChest(chest, inventory);
-                    Logger.Log($"[GAME] Opened {chest.Tier} chest at ({tileX}, {tileY})");
+                    Logger.Log($"[GAME] Opened {chest.Tier} chest named '{chest.Name}' at ({tileX}, {tileY})");
                 }
             }
         }
@@ -730,7 +777,6 @@ namespace Claude4_5Terraria
                 {
                     Texture2D texture = Content.Load<Texture2D>(sprite.Key);
                     inventoryUI.LoadItemSprite(sprite.Value, texture);
-                    // NEW: Store texture for Player Drawing
                     itemTextureMap[sprite.Value] = texture;
                 }
                 catch (Exception ex)
@@ -803,7 +849,6 @@ namespace Claude4_5Terraria
             Logger.Log($"[GRAPHICS] Fullscreen {(graphics.IsFullScreen ? "enabled" : "disabled")}");
         }
 
-        // NEW: Drop currently selected item
         private void DropSelectedItem()
         {
             if (inventory == null || miningSystem == null || player == null)
@@ -834,9 +879,8 @@ namespace Claude4_5Terraria
             );
 
             // Add offset in direction player is facing (throw it forward)
-            // Throw it further away to prevent instant pickup
-            dropPosition.X += 64; // Drop 2 tiles away (was 32)
-            dropPosition.Y -= 32; // Drop higher above (was 16)
+            dropPosition.X += 64;
+            dropPosition.Y -= 32;
 
             Logger.Log($"[DROP] Dropping {slot.ItemType} from slot {selectedSlot} at {dropPosition}");
             miningSystem.DropItem(dropPosition, slot.ItemType, 1);
@@ -868,6 +912,8 @@ namespace Claude4_5Terraria
             miningOverlay = null;
             hud = null;
             chestUI = null;
+            liquidSystem = null; // NEW
+            isSleeping = false; // Reset sleeping state
             startMenu.SetState(MenuState.MainMenu);
             Logger.Log("[GAME] Returned to main menu");
         }
@@ -928,6 +974,7 @@ namespace Claude4_5Terraria
             timeSystem.SetCurrentTime(data.GameTime);
             lightingSystem = new LightingSystem(world, timeSystem);
             chestSystem = new ChestSystem();
+            liquidSystem = new LiquidSystem(world); // NEW: Initialize liquid system
             LoadTileSprites(world);
             worldGenerator = new WorldGenerator(world, data.WorldSeed, chestSystem);
             worldGenerator.OnProgressUpdate = (progress, message) =>
@@ -938,9 +985,33 @@ namespace Claude4_5Terraria
             world.EnableChunkUnloading();
             world.EnableTileChangeTracking();
             player = new Claude4_5Terraria.Player.Player(world, data.PlayerPosition);
+            world.SetPlayer(player); // Set player reference for World/HUD/Bed logic
+            // FIX: World now needs LiquidSystem reference for SetTile/TriggerLiquidSpreadCheck
+            world.SetLiquidSystem(liquidSystem);
+            
+            // CRITICAL FIX: Clear all generated liquids before applying save changes
+            // This prevents duplication of water from world generation
+            Logger.Log("[GAME] Clearing generated liquids before applying save...");
+            for (int x = 0; x < World.World.WORLD_WIDTH; x++)
+            {
+                for (int y = 0; y < World.World.WORLD_HEIGHT; y++)
+                {
+                    var tile = world.GetTile(x, y);
+                    if (tile != null && (tile.Type == TileType.Water || tile.Type == TileType.Lava))
+                    {
+                        tile.LiquidVolume = 0f;
+                        tile.Type = TileType.Air;
+                    }
+                }
+            }
+            
             world.ApplyTileChanges(data.TileChanges);
             chestSystem.LoadFromData(data.Chests);
             Logger.Log($"[GAME] Loaded {chestSystem.GetChestCount()} chests from save");
+            
+            // NEW: Activate all loaded liquid tiles for flow simulation
+            liquidSystem.ActivateAllLiquids();
+            
             world.DisableWorldUpdates();
             camera = new Camera(GraphicsDevice.Viewport);
             camera.Position = player.Position;
@@ -955,10 +1026,8 @@ namespace Claude4_5Terraria
                     slot.Count = slotData.Count;
                 }
             }
-            // CRITICAL FIX: Passing 6 arguments to MiningSystem constructor
             miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume);
 
-            // NEW: Subscribe to chest events
             miningSystem.OnChestMined += HandleChestMined;
             miningSystem.OnChestPlaced += HandleChestPlaced;
 
@@ -966,8 +1035,7 @@ namespace Claude4_5Terraria
             inventoryUI.Initialize(pixelTexture, font);
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
-            chestUI = new ChestUI();
-            // UPDATED: Pass SetGameSoundsVolume and initial volume to PauseMenu
+            chestUI = new ChestUI(world); // UPDATED: Pass world reference
             pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu,
                                       (newVolume) => { musicVolume = newVolume; if (!isMusicMuted) MediaPlayer.Volume = musicVolume; }, musicVolume,
                                       ToggleFullscreen, hud.ToggleFullscreenMap, hud,
@@ -1011,6 +1079,7 @@ namespace Claude4_5Terraria
             timeSystem = new TimeSystem();
             lightingSystem = new LightingSystem(world, timeSystem);
             chestSystem = new ChestSystem();
+            liquidSystem = new LiquidSystem(world); // NEW: Initialize liquid system
             LoadTileSprites(world);
             worldGenerator = new WorldGenerator(world, currentWorldSeed, chestSystem);
             worldGenerator.OnProgressUpdate = (progress, message) =>
@@ -1022,13 +1091,14 @@ namespace Claude4_5Terraria
             world.EnableTileChangeTracking();
             Vector2 spawnPosition = worldGenerator.GetSpawnPosition(64);
             player = new Claude4_5Terraria.Player.Player(world, spawnPosition);
+            world.SetPlayer(player); // Set player reference for World/HUD/Bed logic
+            // FIX: World now needs LiquidSystem reference for SetTile/TriggerLocalFlow
+            world.SetLiquidSystem(liquidSystem);
             camera = new Camera(GraphicsDevice.Viewport);
             camera.Position = player.Position;
             inventory = new Inventory();
-            // CRITICAL FIX: Passing 6 arguments to MiningSystem constructor
             miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume);
 
-            // NEW: Subscribe to chest events
             miningSystem.OnChestMined += HandleChestMined;
             miningSystem.OnChestPlaced += HandleChestPlaced;
 
@@ -1036,8 +1106,7 @@ namespace Claude4_5Terraria
             inventoryUI.Initialize(pixelTexture, font);
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
-            chestUI = new ChestUI();
-            // UPDATED: Pass SetGameSoundsVolume and initial volume to PauseMenu
+            chestUI = new ChestUI(world); // UPDATED: Pass world reference
             pauseMenu = new PauseMenu(OpenSaveMenu, QuitToMenu,
                                       (newVolume) => { musicVolume = newVolume; if (!isMusicMuted) MediaPlayer.Volume = musicVolume; }, musicVolume,
                                       ToggleFullscreen, hud.ToggleFullscreenMap, hud,
@@ -1083,7 +1152,9 @@ namespace Claude4_5Terraria
                 transformMatrix: transformMatrix
             );
 
+            // FIX: World.Draw signature is now correct
             world.Draw(spriteBatch, camera, pixelTexture, lightingSystem, miningSystem);
+
             miningSystem.DrawItems(spriteBatch, pixelTexture);
 
             // 1. Determine currently held item
@@ -1115,10 +1186,7 @@ namespace Claude4_5Terraria
                 lightingSystem.SetPlayerLight(Vector2.Zero, false);
             }
 
-            Vector2 playerCenter = new Vector2(
-                player.Position.X + Claude4_5Terraria.Player.Player.PLAYER_WIDTH / 2,
-                player.Position.Y + Claude4_5Terraria.Player.Player.PLAYER_HEIGHT / 2
-            );
+            Vector2 playerCenter = player.GetCenterPosition();
             miningOverlay.DrawBlockOutlines(spriteBatch, pixelTexture, camera, playerCenter, showMiningOutlines);
             miningOverlay.DrawMiningProgress(spriteBatch, pixelTexture);
 
@@ -1153,18 +1221,22 @@ namespace Claude4_5Terraria
 
             if (hud != null)
             {
-                // UPDATED: Passed player health parameters to HUD.Draw
+                // UPDATED: Passed bed/sleep state to HUD.Draw
                 hud.Draw(spriteBatch, pixelTexture, font,
                     GraphicsDevice.Viewport.Width,
                     GraphicsDevice.Viewport.Height,
                     player.Position,
                     world,
-                    isAutoMiningActive, // Auto-mine state
-                    timeSystem.IsRaining, // Weather state
-                    player.Health, // Player current health
-                    player.MaxHealth, // Player max health
-                    player.AirBubbles, // Player air
-                    player.MaxAirBubbles // Player max air
+                    isAutoMiningActive,
+                    timeSystem.IsRaining,
+                    player.Health,
+                    player.MaxHealth,
+                    player.AirBubbles,
+                    player.MaxAirBubbles,
+                    currentBedPosition,
+                    isSleeping,
+                    sleepProgress,
+                    SLEEP_DURATION
                 );
             }
 
@@ -1181,6 +1253,7 @@ namespace Claude4_5Terraria
 
             if (chestUI != null && chestUI.IsOpen)
             {
+                // FIX: ChestUI.Draw signature is now correct
                 chestUI.Draw(spriteBatch, pixelTexture, font);
             }
 

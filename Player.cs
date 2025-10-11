@@ -2,7 +2,8 @@
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Claude4_5Terraria.World;
-using Claude4_5Terraria.Enums; // Added for ItemType
+using Claude4_5Terraria.Enums;
+using System;
 
 namespace Claude4_5Terraria.Player
 {
@@ -10,26 +11,31 @@ namespace Claude4_5Terraria.Player
     {
         public Vector2 Position { get; set; }
         public Vector2 Velocity { get; set; }
-        public Vector2 SpawnPosition { get; set; }  // Spawn point (can be bed or world spawn)
-        public Vector2 BedSpawnPosition { get; set; }  // NEW: Bed spawn location
-        public bool HasBedSpawn { get; set; }  // NEW: Whether player has set a bed spawn
+        public Vector2 SpawnPosition { get; set; }  // World spawn
+        // NEW: Bed spawn location
+        public Vector2 BedSpawnPosition { get; private set; }
+        // NEW: Whether player has set a bed spawn
+        public bool HasBedSpawn { get; private set; }
+        // NEW: Timestamp for spawn message
+        private DateTime lastSpawnSetTime;
+        private const float SPAWN_MESSAGE_DURATION = 5.0f;
 
         // Health system
         public float Health { get; private set; }
         public float MaxHealth { get; private set; }
         private float lavaDamageTimer = 0f;
-        private const float LAVA_DAMAGE_INTERVAL = 0.5f; // Damage every 0.5 seconds
-        private const float LAVA_DAMAGE_AMOUNT = 10f; // 10 damage per tick
-        
+        private const float LAVA_DAMAGE_INTERVAL = 0.5f;
+        private const float LAVA_DAMAGE_AMOUNT = 10f;
+
         // NEW: Swimming and breathing
         public float AirBubbles { get; private set; }
         public float MaxAirBubbles { get; private set; }
-        private const float AIR_DEPLETE_RATE = 10f; // Air per second underwater
-        private const float AIR_RESTORE_RATE = 50f; // Air per second in air
-        private const float DROWN_DAMAGE = 5f; // Damage per second when no air
+        private const float AIR_DEPLETE_RATE = 10f;
+        private const float AIR_RESTORE_RATE = 50f;
+        private const float DROWN_DAMAGE = 5f;
 
-        public const int PLAYER_WIDTH = 30;   // Slightly less than 1 block for smoother movement
-        public const int PLAYER_HEIGHT = 62;  // Slightly less than 2 blocks to fit in 64px spaces
+        public const int PLAYER_WIDTH = 30;
+        public const int PLAYER_HEIGHT = 62;
 
         private const float GRAVITY = 0.5f;
         private const float MAX_FALL_SPEED = 15f;
@@ -48,13 +54,10 @@ namespace Claude4_5Terraria.Player
         private float animationTimer = 0f;
         private const float FRAME_TIME = 0.12f;
 
-        // Try 128x128 - many character creators use this size
         private const int FRAME_WIDTH = 128;
         private const int FRAME_HEIGHT = 128;
-        private const int FRAMES_PER_ROW = 6;  // 832 / 128 = 6.5, so 6 full frames
+        private const int FRAMES_PER_ROW = 6;
 
-        // With 26 frames per row, the animations are laid out differently
-        // Let's use the first row for idle animation
         private const int IDLE_DOWN_ROW = 0;
         private const int IDLE_LEFT_ROW = 1;
         private const int IDLE_RIGHT_ROW = 2;
@@ -67,26 +70,35 @@ namespace Claude4_5Terraria.Player
         {
             this.world = world;
             Position = startPosition;
-            SpawnPosition = startPosition;  // World spawn
-            BedSpawnPosition = Vector2.Zero;  // No bed spawn yet
+            SpawnPosition = startPosition;
+            BedSpawnPosition = Vector2.Zero;
             HasBedSpawn = false;
             Velocity = Vector2.Zero;
             isOnGround = false;
-            
+            lastSpawnSetTime = DateTime.MinValue;
+
             // Initialize health
             MaxHealth = 100f;
             Health = MaxHealth;
-            
+
             // Initialize air
             MaxAirBubbles = 100f;
             AirBubbles = MaxAirBubbles;
         }
+
+        // NEW: Getters for HUD
+        public Vector2 GetBedSpawnPosition() => BedSpawnPosition;
+        public DateTime GetLastSpawnSetTime() => lastSpawnSetTime;
+        public float GetSpawnMessageDuration() => SPAWN_MESSAGE_DURATION;
+        public float GetMaxHealth() => MaxHealth; // Utility getter for Game1
+        public float GetMaxAir() => MaxAirBubbles; // Utility getter for Game1
 
         // NEW: Set bed as spawn point
         public void SetBedSpawn(Vector2 bedPosition)
         {
             BedSpawnPosition = bedPosition;
             HasBedSpawn = true;
+            lastSpawnSetTime = DateTime.Now; // Set time for UI message
             Systems.Logger.Log($"[PLAYER] Bed spawn set at: {bedPosition}");
         }
 
@@ -94,6 +106,7 @@ namespace Claude4_5Terraria.Player
         public void ClearBedSpawn()
         {
             HasBedSpawn = false;
+            BedSpawnPosition = Vector2.Zero;
             Systems.Logger.Log("[PLAYER] Bed spawn cleared");
         }
 
@@ -111,6 +124,8 @@ namespace Claude4_5Terraria.Player
                 Systems.Logger.Log($"[PLAYER] Teleported to world spawn: {SpawnPosition}");
             }
             Velocity = Vector2.Zero;
+            AirBubbles = MaxAirBubbles; // Restore air upon spawn
+            lavaDamageTimer = 0f;
         }
 
         public void LoadContent(Texture2D playerSpriteSheet)
@@ -144,12 +159,11 @@ namespace Claude4_5Terraria.Player
         public void Update(GameTime gameTime)
         {
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
-            
-            // Check for lava damage
-            CheckLavaDamage(deltaTime);
-            
-            // NEW: Handle swimming and drowning
+
+            // NEW: Handle swimming and drowning/lava damage
             HandleSwimming(deltaTime);
+            CheckLavaDamage(deltaTime);
+
             KeyboardState keyState = Keyboard.GetState();
 
             float horizontalInput = 0;
@@ -196,19 +210,19 @@ namespace Claude4_5Terraria.Player
             UpdateAnimation(deltaTime);
         }
 
+        // UPDATED: Check for continuous lava damage
         private void CheckLavaDamage(float deltaTime)
         {
-            // Check if player is touching lava
             bool inLava = IsInLava();
-            
+
             if (inLava)
             {
                 lavaDamageTimer += deltaTime;
-                
+
                 if (lavaDamageTimer >= LAVA_DAMAGE_INTERVAL)
                 {
                     TakeDamage(LAVA_DAMAGE_AMOUNT);
-                    lavaDamageTimer = 0f;
+                    lavaDamageTimer -= LAVA_DAMAGE_INTERVAL; // Subtract interval to keep consistent damage rate
                     Systems.Logger.Log($"[PLAYER] Lava damage! Health: {Health}/{MaxHealth}");
                 }
             }
@@ -218,11 +232,11 @@ namespace Claude4_5Terraria.Player
             }
         }
 
+        // UPDATED: Check for any part of the player touching lava
         private bool IsInLava()
         {
             int tileSize = World.World.TILE_SIZE;
-            
-            // Check multiple points on the player
+
             Vector2[] checkPoints = new Vector2[]
             {
                 new Vector2(Position.X + 5, Position.Y + 5),
@@ -231,28 +245,28 @@ namespace Claude4_5Terraria.Player
                 new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + PLAYER_HEIGHT - 5),
                 new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + PLAYER_HEIGHT / 2)
             };
-            
+
             foreach (Vector2 point in checkPoints)
             {
                 int tileX = (int)(point.X / tileSize);
                 int tileY = (int)(point.Y / tileSize);
-                
+
                 var tile = world.GetTile(tileX, tileY);
-                if (tile != null && tile.IsActive && tile.Type == TileType.Lava)
+                // Check liquid type and minimum volume
+                if (tile != null && tile.Type == TileType.Lava && tile.LiquidVolume > 0.05f)
                 {
                     return true;
                 }
             }
-            
+
             return false;
         }
 
         public void TakeDamage(float amount)
         {
             Health -= amount;
-            if (Health < 0) Health = 0;
-            
-            // If health reaches 0, respawn at spawn point
+            Health = MathHelper.Clamp(Health, 0, MaxHealth);
+
             if (Health <= 0)
             {
                 Systems.Logger.Log("[PLAYER] Player died! Respawning...");
@@ -266,24 +280,24 @@ namespace Claude4_5Terraria.Player
             Health += amount;
             if (Health > MaxHealth) Health = MaxHealth;
         }
-        
+
         // NEW: Handle swimming, drowning, and slow fall in water
         private void HandleSwimming(float deltaTime)
         {
             bool inWater = IsInWater();
-            bool inLava = IsInLava();
-            
-            // Check if player's HEAD is underwater (top 1/3 of player)
             bool headUnderwater = IsHeadUnderwater();
-            
-            // In water: deplete air only if HEAD is underwater, slow fall
+            float WATER_DRAG_FACTOR = 0.5f;
+
             if (inWater)
             {
+                // Apply drag factor to velocity
+                Velocity = new Vector2(Velocity.X * WATER_DRAG_FACTOR, Velocity.Y);
+
                 // Only deplete air if head is underwater
                 if (headUnderwater)
                 {
                     AirBubbles -= AIR_DEPLETE_RATE * deltaTime;
-                    
+
                     if (AirBubbles <= 0)
                     {
                         AirBubbles = 0;
@@ -295,70 +309,56 @@ namespace Claude4_5Terraria.Player
                 {
                     // Head above water - restore air
                     AirBubbles += AIR_RESTORE_RATE * deltaTime;
-                    if (AirBubbles > MaxAirBubbles) AirBubbles = MaxAirBubbles;
                 }
-                
-                // Slow fall in water
+
+                // Slow fall in water (clamping max vertical speed)
                 if (Velocity.Y > 3f)
                 {
                     Velocity = new Vector2(Velocity.X, 3f);
                 }
-            }
-            // In lava: slow fall (no air bubbles, just burn)
-            else if (inLava)
-            {
-                // Slow fall in lava
-                if (Velocity.Y > 3f)
-                {
-                    Velocity = new Vector2(Velocity.X, 3f);
-                }
-                
-                // Restore air when in lava (not underwater)
-                AirBubbles += AIR_RESTORE_RATE * deltaTime;
-                if (AirBubbles > MaxAirBubbles) AirBubbles = MaxAirBubbles;
             }
             // Not in liquid: restore air
             else
             {
                 AirBubbles += AIR_RESTORE_RATE * deltaTime;
-                if (AirBubbles > MaxAirBubbles) AirBubbles = MaxAirBubbles;
             }
+
+            AirBubbles = MathHelper.Clamp(AirBubbles, 0, MaxAirBubbles);
         }
-        
+
+        // NEW: Check if the top 1/3 of the player is in water (must be mostly full to drown)
         private bool IsHeadUnderwater()
         {
             int tileSize = World.World.TILE_SIZE;
-            
-            // Check if the top 1/3 of the player (head area) is in water
             int headHeight = PLAYER_HEIGHT / 3;
-            
+
             Vector2[] checkPoints = new Vector2[]
             {
-                new Vector2(Position.X + 5, Position.Y + 5), // Top-left of head
-                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + 5), // Top-right of head
-                new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + headHeight / 2) // Center of head
+                new Vector2(Position.X + 5, Position.Y + 5),
+                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + 5),
+                new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + headHeight / 2)
             };
-            
+
             foreach (Vector2 point in checkPoints)
             {
                 int tileX = (int)(point.X / tileSize);
                 int tileY = (int)(point.Y / tileSize);
-                
+
                 var tile = world.GetTile(tileX, tileY);
-                if (tile != null && tile.IsActive && tile.Type == TileType.Water)
+                if (tile != null && tile.Type == TileType.Water && tile.LiquidVolume > 0.9f) // Must be nearly full
                 {
-                    return true; // Head is underwater
+                    return true;
                 }
             }
-            
-            return false; // Head is above water
+
+            return false;
         }
-        
+
+        // NEW: Check for any part of the player touching water (any volume)
         private bool IsInWater()
         {
             int tileSize = World.World.TILE_SIZE;
-            
-            // Check multiple points on the player
+
             Vector2[] checkPoints = new Vector2[]
             {
                 new Vector2(Position.X + 5, Position.Y + 5),
@@ -367,19 +367,19 @@ namespace Claude4_5Terraria.Player
                 new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + PLAYER_HEIGHT - 5),
                 new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + PLAYER_HEIGHT / 2)
             };
-            
+
             foreach (Vector2 point in checkPoints)
             {
                 int tileX = (int)(point.X / tileSize);
                 int tileY = (int)(point.Y / tileSize);
-                
+
                 var tile = world.GetTile(tileX, tileY);
-                if (tile != null && tile.IsActive && tile.Type == TileType.Water)
+                if (tile != null && tile.Type == TileType.Water && tile.LiquidVolume > 0.05f) // Minimal volume check
                 {
                     return true;
                 }
             }
-            
+
             return false;
         }
 
@@ -392,7 +392,6 @@ namespace Claude4_5Terraria.Player
                 animationTimer -= FRAME_TIME;
                 currentFrame++;
 
-                // With 13 frames per row, let's use first 6 for animation
                 if (currentFrame >= 6)
                 {
                     currentFrame = 0;
@@ -412,7 +411,7 @@ namespace Claude4_5Terraria.Player
             }
             else
             {
-                // Only stop horizontal velocity if there's actually a collision
+                // FIX 1: Immediately zero out horizontal velocity to stop "snagging" and freezing movement.
                 Velocity = new Vector2(0, Velocity.Y);
             }
 
@@ -428,6 +427,10 @@ namespace Claude4_5Terraria.Player
                 // Land on ground
                 if (Velocity.Y > 0)
                 {
+                    // Snap player to the top of the tile they hit
+                    int hitTileY = (int)((Position.Y + Velocity.Y + PLAYER_HEIGHT) / World.World.TILE_SIZE);
+                    Position = new Vector2(Position.X, hitTileY * World.World.TILE_SIZE - PLAYER_HEIGHT);
+
                     isOnGround = true;
                 }
                 Velocity = new Vector2(Velocity.X, 0);
@@ -445,18 +448,16 @@ namespace Claude4_5Terraria.Player
         {
             int tileSize = World.World.TILE_SIZE;
 
-            // FIXED: Use tighter margins so player fits exactly in 2-block (64px) spaces
-            // Player is 32x64, tiles are 32x32, so we need minimal padding
             Vector2[] checkPoints = new Vector2[]
             {
-                new Vector2(position.X + 1, position.Y + 0),  // Top-left (almost no margin)
-                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + 0),  // Top-right (almost no margin)
-                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT - 1),  // Bottom-left
-                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT - 1),  // Bottom-right
-                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + 0),  // Top-center (almost no margin)
-                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + PLAYER_HEIGHT - 1),  // Bottom-center
-                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT / 2),  // Left-center
-                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT / 2)  // Right-center
+                new Vector2(position.X + 1, position.Y + 0),
+                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + 0),
+                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT - 1),
+                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT - 1),
+                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + 0),
+                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + PLAYER_HEIGHT - 1),
+                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT / 2),
+                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT / 2)
             };
 
             foreach (Vector2 point in checkPoints)
@@ -464,6 +465,19 @@ namespace Claude4_5Terraria.Player
                 int tileX = (int)(point.X / tileSize);
                 int tileY = (int)(point.Y / tileSize);
 
+                // CRITICAL FIX: Ignore tiny liquid volumes that shouldn't block movement
+                var tile = world.GetTile(tileX, tileY);
+                if (tile != null && (tile.Type == TileType.Water || tile.Type == TileType.Lava))
+                {
+                    // Only treat liquid as solid if it has substantial volume (> 0.5)
+                    if (tile.LiquidVolume < 0.5f)
+                    {
+                        continue; // Skip this collision check - liquid too small to block
+                    }
+                }
+
+                // CRITICAL FIX: Only check solid tiles for player collision.
+                // World.IsSolidAtPosition handles ignoring liquid/air/non-solid blocks.
                 if (world.IsSolidAtPosition(tileX, tileY))
                 {
                     return true;
@@ -475,7 +489,6 @@ namespace Claude4_5Terraria.Player
 
         private bool hasLoggedDraw = false;
 
-        // UPDATED: Added specific logic for drawing the Torch
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, ItemType heldItemType, Texture2D itemSpriteSheet, int animationFrame)
         {
             // --- 1. Draw Player (Currently a yellow box) ---
@@ -490,7 +503,7 @@ namespace Claude4_5Terraria.Player
             // --- 2. Draw Held Item (Tool) ---
             if (heldItemType != ItemType.None && itemSpriteSheet != null)
             {
-                int totalFrames = 1; // Default to single frame icon
+                int totalFrames = 1;
                 int itemFrameWidth = itemSpriteSheet.Width;
                 int itemFrameHeight = itemSpriteSheet.Height;
                 int currentFrame = 0;
@@ -501,23 +514,21 @@ namespace Claude4_5Terraria.Player
                 // === A) Special Case: Runic Pickaxe Animation ===
                 if (heldItemType == ItemType.RunicPickaxe)
                 {
-                    // Based on your vertical 3-frame spritesheet (2 columns x 2 rows)
                     totalFrames = 3;
                     itemFrameWidth = itemSpriteSheet.Width / 2;
                     itemFrameHeight = itemSpriteSheet.Height / 2;
-                    currentFrame = animationFrame; // Use progress-based frame
-                    scale = 0.5f; // Scale down for pickaxe size
+                    currentFrame = animationFrame;
+                    scale = 0.5f;
 
-                    // Rotation to simulate swinging
-                    if (animationFrame == 1) // Mid-swing frame
+                    if (animationFrame == 1)
                     {
                         rotation = facingRight ? MathHelper.PiOver4 * 0.5f : MathHelper.PiOver4 * 1.5f;
                     }
-                    else if (animationFrame == 2) // End-swing frame / contact
+                    else if (animationFrame == 2)
                     {
                         rotation = facingRight ? MathHelper.PiOver4 * 1.5f : -MathHelper.PiOver4 * 0.5f;
                     }
-                    else // Idle/Start frame (Frame 0)
+                    else
                     {
                         rotation = facingRight ? -MathHelper.PiOver4 * 0.25f : MathHelper.PiOver4 * 0.25f;
                     }
@@ -525,21 +536,18 @@ namespace Claude4_5Terraria.Player
                 // === B) Special Case: Torch (Held upright) ===
                 else if (heldItemType == ItemType.Torch)
                 {
-                    // For static items, itemFrameWidth/Height remains the full texture size 
-                    // unless your torch texture is also a sheet. Assuming single 32x32 texture is loaded.
                     scale = 0.6f;
                     rotation = 0f;
-                    flip = SpriteEffects.None; // Torches shouldn't flip
+                    flip = SpriteEffects.None;
                 }
                 // === C) General Item Drawing ===
                 else
                 {
-                    // Default static item settings (using default scale=0.5f)
                     scale = 0.5f;
                     rotation = 0f;
                 }
 
-                // Map the frame index to the correct pixel coordinates (Handles Runic pickaxe and defaults others to (0,0))
+                // Map the frame index to the correct pixel coordinates
                 int sourceX = 0;
                 int sourceY = 0;
 
@@ -548,7 +556,6 @@ namespace Claude4_5Terraria.Player
                     if (currentFrame == 1) sourceX = itemFrameWidth;
                     if (currentFrame == 2) sourceY = itemFrameHeight;
                 }
-                // For other items, sourceX and sourceY remain 0.
 
                 Rectangle sourceRect = new Rectangle(
                     sourceX,

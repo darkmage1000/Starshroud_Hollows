@@ -59,6 +59,7 @@ namespace Claude4_5Terraria.Systems
         public int Y { get; set; }
         public int TileType { get; set; }
         public bool IsActive { get; set; }
+        public float LiquidVolume { get; set; } // NEW: Save liquid volume for proper flow restoration
     }
 
     [Serializable]
@@ -69,6 +70,8 @@ namespace Claude4_5Terraria.Systems
         public int Tier { get; set; }  // 0 = Wood, 1 = Silver, 2 = Magic
         public bool IsNaturallyGenerated { get; set; }
         public List<ChestItemData> Items { get; set; }
+        // FIX: ADDED MISSING PROPERTY
+        public string Name { get; set; } // - Added to fix CS0117/CS1061
 
         public ChestData()
         {

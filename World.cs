@@ -1,12 +1,13 @@
 ﻿using Claude4_5Terraria.Enums;
 using Claude4_5Terraria.Player;
 using Claude4_5Terraria.Systems;
-using Claude4_5Terraria.UI; // <-- REQUIRED for HUD reference
+using Claude4_5Terraria.UI;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 
 namespace Claude4_5Terraria.World
@@ -35,15 +36,20 @@ namespace Claude4_5Terraria.World
 
         private HashSet<Point> exploredTiles;
 
-        // FIX: Public getter to expose explored tiles for HUD/Minimap
         public HashSet<Point> ExploredTiles => exploredTiles;
 
-        // Tile sprites
         private Dictionary<TileType, Texture2D> tileSprites;
 
-        // FIX: HUD reference for flagging minimap updates
         private HUD hudReference;
 
+        // NEW: Player reference for access by HUD/Systems
+        private Claude4_5Terraria.Player.Player playerReference;
+
+        // NEW: Reference to the Liquid System
+        private LiquidSystem liquidSystemReference;
+
+        // Liquid spreading system fields (Kept for compatibility, but logic is delegated)
+        private const int MAX_LIQUID_UPDATES_PER_CHUNK = 20;
 
         public World(HUD hud)
         {
@@ -62,9 +68,27 @@ namespace Claude4_5Terraria.World
 
             random = new Random();
 
-            // STORE HUD REFERENCE
             hudReference = hud;
         }
+
+        // NEW: Setter for LiquidSystem reference
+        public void SetLiquidSystem(LiquidSystem liquidSystem)
+        {
+            this.liquidSystemReference = liquidSystem;
+        }
+
+        // NEW: Setter for player reference (used by Game1 on load/generation)
+        public void SetPlayer(Claude4_5Terraria.Player.Player player)
+        {
+            this.playerReference = player;
+        }
+
+        // NEW: Getter for player reference (used by HUD)
+        public Claude4_5Terraria.Player.Player GetPlayer()
+        {
+            return playerReference;
+        }
+
         public void LoadTileSprite(TileType tileType, Texture2D sprite)
         {
             tileSprites[tileType] = sprite;
@@ -128,14 +152,9 @@ namespace Claude4_5Terraria.World
             Logger.Log($"[WORLD] Planted sapling at ({x}, {y})");
         }
 
-        // NEW: Liquid spreading system
-        private float liquidUpdateTimer = 0f;
-        private const float LIQUID_UPDATE_INTERVAL = 0.5f; // INCREASED: Update liquids every 0.5 seconds (was 0.1)
-        private const int MAX_LIQUID_UPDATES_PER_FRAME = 10; // LIMIT: Only update 10 liquid tiles per frame
-        
+        // UPDATED: Now calls the time-sliced liquid update for smooth flow.
         public void Update(float deltaTime, WorldGenerator worldGenerator)
         {
-            // Don't update saplings/trees if world updates disabled (loaded save)
             if (!allowWorldUpdates) return;
 
             List<Sapling> grownSaplings = new List<Sapling>();
@@ -155,96 +174,18 @@ namespace Claude4_5Terraria.World
                 GrowSaplingIntoTree(sapling.Position.X, sapling.Position.Y);
                 saplings.Remove(sapling);
             }
-            
-            // NEW: Update liquid spreading (OPTIMIZED)
-            liquidUpdateTimer += deltaTime;
-            if (liquidUpdateTimer >= LIQUID_UPDATE_INTERVAL)
-            {
-                liquidUpdateTimer = 0f;
-                UpdateLiquidSpreading();
-            }
         }
-        
-        // NEW: Liquid spreading logic (HEAVILY OPTIMIZED)
-        private void UpdateLiquidSpreading()
+
+        // NEW: Method to stabilize liquids during world generation or loading (delegated)
+        public void StabilizeLiquids(float progressStart, float progressEnd, Action<float, string> updateCallback)
         {
-            List<Point> liquidsToSpread = new List<Point>();
-            
-            // OPTIMIZATION: Only check loaded chunks near camera/player
-            // Find all liquid tiles that need to spread (LIMIT TO LOADED CHUNKS ONLY)
-            int checkedChunks = 0;
-            foreach (var chunk in loadedChunks.Values)
+            if (liquidSystemReference != null)
             {
-                // CRITICAL OPTIMIZATION: Skip chunks that are too far from player
-                checkedChunks++;
-                if (checkedChunks > 20) break; // Only check 20 nearest chunks max
-                
-                for (int localX = 0; localX < Chunk.CHUNK_SIZE; localX += 2) // OPTIMIZATION: Check every other tile
-                {
-                    for (int localY = 0; localY < Chunk.CHUNK_SIZE; localY += 2) // OPTIMIZATION: Check every other tile
-                    {
-                        int worldX = chunk.ChunkX * Chunk.CHUNK_SIZE + localX;
-                        int worldY = chunk.ChunkY * Chunk.CHUNK_SIZE + localY;
-                        
-                        Tile tile = GetTile(worldX, worldY);
-                        if (tile != null && tile.IsActive && (tile.Type == TileType.Water || tile.Type == TileType.Lava))
-                        {
-                            liquidsToSpread.Add(new Point(worldX, worldY));
-                            
-                            // CRITICAL: Limit how many liquids we process
-                            if (liquidsToSpread.Count >= MAX_LIQUID_UPDATES_PER_FRAME)
-                            {
-                                goto FinishedSearching;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            FinishedSearching:
-            
-            // Spread each liquid (already limited to max 10)
-            foreach (Point liquid in liquidsToSpread)
-            {
-                SpreadLiquid(liquid.X, liquid.Y);
-            }
-        }
-        
-        private void SpreadLiquid(int x, int y)
-        {
-            Tile sourceTile = GetTile(x, y);
-            if (sourceTile == null || !sourceTile.IsActive) return;
-            
-            TileType liquidType = sourceTile.Type;
-            if (liquidType != TileType.Water && liquidType != TileType.Lava) return;
-            
-            // Try to spread down first (liquids fall)
-            Tile below = GetTile(x, y + 1);
-            if (below != null && !below.IsActive)
-            {
-                SetTile(x, y + 1, new Tile(liquidType));
-                return; // Only spread in one direction per update
-            }
-            
-            // If can't spread down, try spreading sideways
-            Tile left = GetTile(x - 1, y);
-            Tile right = GetTile(x + 1, y);
-            
-            // Spread left if possible
-            if (left != null && !left.IsActive && random.Next(2) == 0)
-            {
-                SetTile(x - 1, y, new Tile(liquidType));
-                return;
-            }
-            
-            // Spread right if possible
-            if (right != null && !right.IsActive)
-            {
-                SetTile(x + 1, y, new Tile(liquidType));
-                return;
+                liquidSystemReference.StabilizeLiquids(progressStart, progressEnd, updateCallback);
             }
         }
 
+        // FIX: Restoring the GrowSaplingIntoTree implementation here 
         private void GrowSaplingIntoTree(int x, int y)
         {
             // Check what's below the sapling
@@ -278,7 +219,7 @@ namespace Claude4_5Terraria.World
                         int leafY = canopyY + dy;
 
                         var existingTile = GetTile(leafX, leafY);
-                        if (existingTile == null || !existingTile.IsActive || existingTile.Type != TileType.Wood)
+                        if (existingTile == null || existingTile.Type != TileType.Wood)
                         {
                             SetTile(leafX, leafY, new Tile(TileType.Leaves, true));
                             tree.AddTile(leafX, leafY);
@@ -290,7 +231,7 @@ namespace Claude4_5Terraria.World
             AddTree(tree);
         }
 
-        // In World.cs, in the UpdateLoadedChunks method, comment out or remove the unloading section (around lines ~200-220 based on document):
+        // FIX: Restoring public UpdateLoadedChunks method 
         public void UpdateLoadedChunks(Camera camera)
         {
             Rectangle visibleArea = camera.GetVisibleArea(TILE_SIZE);
@@ -300,8 +241,6 @@ namespace Claude4_5Terraria.World
             int startChunkY = Math.Max(0, visibleArea.Top / pixelsPerChunk - preload);
             int endChunkX = Math.Min(chunksWide - 1, (visibleArea.Right + pixelsPerChunk - 1) / pixelsPerChunk + preload);
             int endChunkY = Math.Min(chunksHigh - 1, (visibleArea.Bottom + pixelsPerChunk - 1) / pixelsPerChunk + preload);
-
-            // Removed/Commented-out unloading logic (as per previous consensus)
 
             for (int cx = startChunkX; cx <= endChunkX; cx++)
             {
@@ -323,14 +262,21 @@ namespace Claude4_5Terraria.World
             if (worldX < 0 || worldX >= WORLD_WIDTH || worldY < 0 || worldY >= WORLD_HEIGHT)
                 return;
 
-            tile.IsActive = (tile.Type != TileType.Air);
-
-            // DEBUG: Log when player mines/ places
-            if (trackTileChanges && tile.Type == TileType.Air)
+            // CRITICAL FIX: If placing a SOLID tile over liquid/air, reset the target tile's volume to 0.
+            if (tile.Type != TileType.Air && tile.Type != TileType.Water && tile.Type != TileType.Lava)
             {
-                Logger.Log($"[WORLD] Player mined tile at ({worldX}, {worldY})");
-                
-                // CRITICAL: When a block is mined, check if liquids need to spread into the new space
+                Tile existingTile = GetTile(worldX, worldY);
+                if (existingTile != null)
+                {
+                    // Aggressively reset volume of the existing tile if it wasn't liquid
+                    existingTile.LiquidVolume = 0.0f;
+                    existingTile.Type = tile.Type;
+                }
+            }
+
+            // CRITICAL FIX: SetTile itself MUST NOT trigger recursion. Delegate to LiquidSystem.
+            if (trackTileChanges && (tile.Type == TileType.Air || tile.Type == TileType.Water || tile.Type == TileType.Lava))
+            {
                 TriggerLiquidSpreadCheck(worldX, worldY);
             }
 
@@ -348,6 +294,7 @@ namespace Claude4_5Terraria.World
                 loadedChunks[chunkPos] = chunk;
             }
 
+            // Note: Tile.IsActive/LiquidVolume is set by the constructor of the passed tile object.
             loadedChunks[chunkPos].SetTile(localX, localY, tile);
 
             if (trackTileChanges)
@@ -356,28 +303,17 @@ namespace Claude4_5Terraria.World
                 modifiedTiles[tilePos] = tile;
             }
         }
-        
-        // NEW: Trigger immediate liquid spread check when block is mined
-        private void TriggerLiquidSpreadCheck(int minedX, int minedY)
+
+        // NEW: Trigger immediate liquid spread check when block is mined/placed
+        private void TriggerLiquidSpreadCheck(int changedX, int changedY)
         {
-            // Check all 4 adjacent tiles for liquids that need to spread
-            CheckAndSpreadAdjacentLiquid(minedX - 1, minedY); // Left
-            CheckAndSpreadAdjacentLiquid(minedX + 1, minedY); // Right
-            CheckAndSpreadAdjacentLiquid(minedX, minedY - 1); // Above
-            CheckAndSpreadAdjacentLiquid(minedX, minedY + 1); // Below
-        }
-        
-        private void CheckAndSpreadAdjacentLiquid(int x, int y)
-        {
-            Tile tile = GetTile(x, y);
-            if (tile != null && tile.IsActive && (tile.Type == TileType.Water || tile.Type == TileType.Lava))
+            // Delegate triggering to the LiquidSystem
+            if (liquidSystemReference != null)
             {
-                // Found a liquid adjacent to the mined block - spread it immediately
-                SpreadLiquid(x, y);
+                liquidSystemReference.TriggerLocalFlow(changedX, changedY);
             }
         }
 
-        // CRITICAL FIX: Ensure chunk is loaded before accessing tile data
         public Tile GetTile(int worldX, int worldY)
         {
             if (worldX < 0 || worldX >= WORLD_WIDTH || worldY < 0 || worldY >= WORLD_HEIGHT)
@@ -390,7 +326,6 @@ namespace Claude4_5Terraria.World
 
             Point chunkPos = new Point(chunkX, chunkY);
 
-            // FIX: If the map is drawing a tile, we must load/create the chunk containing it.
             if (!loadedChunks.ContainsKey(chunkPos))
             {
                 Chunk chunk = new Chunk(chunkX, chunkY);
@@ -398,7 +333,6 @@ namespace Claude4_5Terraria.World
                 loadedChunks[chunkPos] = chunk;
             }
 
-            // Now we can safely return the tile
             return loadedChunks[chunkPos].GetTile(localX, localY);
         }
 
@@ -413,7 +347,8 @@ namespace Claude4_5Terraria.World
                     X = kvp.Key.X,
                     Y = kvp.Key.Y,
                     TileType = (int)kvp.Value.Type,
-                    IsActive = kvp.Value.IsActive
+                    IsActive = kvp.Value.IsActive,
+                    LiquidVolume = kvp.Value.LiquidVolume // NEW: Save liquid volume
                 });
             }
 
@@ -431,17 +366,16 @@ namespace Claude4_5Terraria.World
 
             Logger.Log($"[WORLD] Applying {changes.Count} tile changes from save file");
 
-            // CRITICAL FIX: Temporarily disable tracking while applying saved changes
             bool wasTracking = trackTileChanges;
             trackTileChanges = false;
 
             foreach (var change in changes)
             {
                 Tile tile = new Tile((TileType)change.TileType, change.IsActive);
+                tile.LiquidVolume = change.LiquidVolume; // NEW: Restore liquid volume
                 SetTile(change.X, change.Y, tile);
             }
 
-            // Re-enable tracking if it was enabled
             trackTileChanges = wasTracking;
 
             Logger.Log("[WORLD] Tile changes applied successfully");
@@ -461,7 +395,6 @@ namespace Claude4_5Terraria.World
                 {
                     if (dx * dx + dy * dy <= radius * radius)
                     {
-                        // Check if Add was successful (i.e., it's a new tile)
                         if (exploredTiles.Add(new Point(centerTileX + dx, centerTileY + dy)))
                         {
                             newlyExplored = true;
@@ -470,7 +403,6 @@ namespace Claude4_5Terraria.World
                 }
             }
 
-            // Flag update only if something new was explored
             if (newlyExplored && hudReference != null)
             {
                 hudReference.FlagMinimapUpdate();
@@ -479,7 +411,6 @@ namespace Claude4_5Terraria.World
 
         public void MarkTileAsExplored(int x, int y)
         {
-            // Check if the tile was actually added (i.e., it wasn't already explored)
             if (exploredTiles.Add(new Point(x, y)))
             {
                 if (hudReference != null)
@@ -560,7 +491,8 @@ namespace Claude4_5Terraria.World
                 {
                     Tile tile = GetTile(x, y);
 
-                    if (tile == null || !tile.IsActive)
+                    // Skip if the tile is pure air
+                    if (tile == null || tile.Type == TileType.Air)
                         continue;
 
                     Rectangle destRect = new Rectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
@@ -584,17 +516,44 @@ namespace Claude4_5Terraria.World
                         (byte)255
                     );
 
-                    // Draw tile - use sprite if available, otherwise use colored pixel
-                    if (tileSprites.ContainsKey(tile.Type))
+                    // NEW LIQUID DRAWING LOGIC: Handle drawing based on LiquidVolume
+                    if (tile.Type == TileType.Water || tile.Type == TileType.Lava)
                     {
-                        // Draw the tile sprite with lighting applied
-                        spriteBatch.Draw(tileSprites[tile.Type], destRect, Color.White * lightLevel);
+                        Color liquidColor = GetTileColor(tile.Type);
+
+                        // If volume is < 1.0, draw only the bottom portion of the tile
+                        int liquidHeight = (int)(TILE_SIZE * tile.LiquidVolume);
+                        Rectangle liquidRect = new Rectangle(
+                            destRect.X,
+                            destRect.Y + TILE_SIZE - liquidHeight,
+                            TILE_SIZE,
+                            liquidHeight
+                        );
+
+                        // Apply light to the liquid
+                        Color finalLiquidColor = new Color(
+                            (byte)(liquidColor.R * lightLevel),
+                            (byte)(liquidColor.G * lightLevel),
+                            (byte)(liquidColor.B * lightLevel)
+                        );
+
+                        spriteBatch.Draw(pixelTexture, liquidRect, finalLiquidColor);
                     }
                     else
                     {
-                        // Fallback to colored pixel
-                        spriteBatch.Draw(pixelTexture, destRect, litColor);
+                        // Draw solid tile - use sprite if available, otherwise use colored pixel
+                        if (tileSprites.ContainsKey(tile.Type))
+                        {
+                            // Draw the tile sprite with lighting applied
+                            spriteBatch.Draw(tileSprites[tile.Type], destRect, Color.White * lightLevel);
+                        }
+                        else
+                        {
+                            // Fallback to colored pixel
+                            spriteBatch.Draw(pixelTexture, destRect, litColor);
+                        }
                     }
+
 
                     // Draw mining overlay on top of tile
                     if (miningSystem != null && miningSystem.GetTargetedTile().HasValue)
@@ -654,7 +613,6 @@ namespace Claude4_5Terraria.World
             }
         }
 
-        // FIX: Change to public so HUD can use it for minimap
         public Color GetTileColor(TileType type)
         {
             switch (type)
@@ -675,18 +633,12 @@ namespace Claude4_5Terraria.World
                 case TileType.WoodChest: return new Color(139, 69, 19);
                 case TileType.SilverChest: return new Color(192, 192, 192);
                 case TileType.MagicChest: return new Color(138, 43, 226);
-                case TileType.Lava: return new Color(255, 100, 0); // Bright orange-red
-                case TileType.Water: return new Color(30, 144, 255); // Blue
-                case TileType.Obsidian: return new Color(20, 20, 30); // Very dark purple/black
-                case TileType.Bed: return new Color(200, 50, 50); // Red bed
+                case TileType.Lava: return new Color(255, 100, 0);
+                case TileType.Water: return new Color(30, 144, 255);
+                case TileType.Obsidian: return new Color(20, 20, 30);
+                case TileType.Bed: return new Color(200, 50, 50);
                 default: return Color.White;
             }
-        }
-        // DEPRECATED: This method is no longer used by the optimized HUD.
-        public Color[,] GetMinimapData()
-        {
-            // This method is left blank or removed as the HUD now updates data incrementally.
-            return new Color[0, 0];
         }
 
         public int GetSurfaceHeight(int x)
@@ -709,13 +661,19 @@ namespace Claude4_5Terraria.World
             if (y <= 0 || y >= WORLD_HEIGHT - 1) return true;
 
             Tile tile = GetTile(x, y);
-            if (tile == null || !tile.IsActive) return false;
-            if (tile.IsPartOfTree || tile.Type == TileType.Torch || tile.Type == TileType.Sapling) return false;
-            
-            // CRITICAL FIX: Water and lava are NOT solid - player can enter them
+            if (tile == null) return false;
+
+            // Solid if IsActive is true (i.e., not liquid and not air)
+            if (tile.IsActive)
+            {
+                if (tile.IsPartOfTree || tile.Type == TileType.Torch || tile.Type == TileType.Sapling) return false;
+                return true;
+            }
+
+            // If it's a liquid tile, it's not solid (unless its volume is high enough, but that logic is in LiquidSystem)
             if (tile.Type == TileType.Water || tile.Type == TileType.Lava) return false;
 
-            return true;
+            return false;
         }
 
         private void DrawLine(SpriteBatch spriteBatch, Texture2D pixel, Vector2 start, Vector2 end, Color color, int thickness)

@@ -16,28 +16,21 @@ namespace Claude4_5Terraria.UI
         private bool isMapFullscreen = false;
         public bool IsMapFullscreen => isMapFullscreen;
 
-        // NEW CONSTANT: Defines the fixed tile area visible in the zoomed view (100x100 tiles)
         private const int MINIMAP_ZOOM_RADIUS = 50;
 
-        // --- CONSTANTS FOR HEALTH/MANA BARS ---
         private const int BAR_WIDTH = 200;
         private const int BAR_HEIGHT = 18;
         private const int BAR_START_X = 10;
         private const int BAR_START_Y = 10;
-        // ------------------------------------------
 
-        // --- CONSOLIDATED AND CORRECTED FIELDS ---
         private Texture2D minimapTexture;
         private Color[] minimapColorData;
         private bool minimapNeedsUpdate = true;
-        // ------------------------------------------
 
         public HUD()
         {
             showBlockOutlines = false;
         }
-
-        // --- INITIALIZATION AND FLAGGING ---
 
         public void Initialize(GraphicsDevice graphicsDevice)
         {
@@ -60,8 +53,6 @@ namespace Claude4_5Terraria.UI
             minimapNeedsUpdate = true;
         }
 
-        // --- CONTROLS ---
-
         public void ToggleBlockOutlines()
         {
             showBlockOutlines = !showBlockOutlines;
@@ -76,10 +67,8 @@ namespace Claude4_5Terraria.UI
         public void ToggleFullscreenMap()
         {
             isMapFullscreen = !isMapFullscreen;
-            showMinimap = !isMapFullscreen; // Hide the small map when fullscreen
+            showMinimap = !isMapFullscreen;
         }
-
-        // --- UPDATE LOGIC ---
 
         public void UpdateMinimapData(Claude4_5Terraria.World.World world)
         {
@@ -117,18 +106,14 @@ namespace Claude4_5Terraria.UI
             minimapNeedsUpdate = false;
         }
 
-        // --- DRAWING LOGIC ---
-
         public void DrawMinimap(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world)
         {
-            // Declare player position variables ONCE here
             int playerTileX = (int)(playerPosition.X / World.World.TILE_SIZE);
             int playerTileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
             float scaleX, scaleY;
             int playerScreenX, playerScreenY;
             Rectangle playerDot;
 
-            // Defines the size of the source rectangle for the zoomed view (100x100 tiles)
             int sourceTileSize = MINIMAP_ZOOM_RADIUS * 2;
             int sourceX = playerTileX - MINIMAP_ZOOM_RADIUS;
             int sourceY = playerTileY - MINIMAP_ZOOM_RADIUS;
@@ -140,14 +125,10 @@ namespace Claude4_5Terraria.UI
                 // Draw a very low opacity background overlay so the game is still visible
                 spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, screenWidth, screenHeight), Color.Black * 0.1f);
 
-                // CRITICAL FIX: Fullscreen map uses a zoomed view, but stretched across the screen.
                 Rectangle fullScreenRect = new Rectangle(0, 0, screenWidth, screenHeight);
 
-                // Draw the zoomed portion (sourceRect) stretched to fill the fullScreenRect.
-                // This makes the map legible while fullscreen.
                 spriteBatch.Draw(minimapTexture, fullScreenRect, sourceRect, Color.White * minimapOpacity);
 
-                // Player dot position within the fullScreenRect (player is always centered)
                 int dotSize = 10;
                 playerScreenX = (screenWidth / 2);
                 playerScreenY = (screenHeight / 2);
@@ -161,22 +142,12 @@ namespace Claude4_5Terraria.UI
             // --- Small Minimap (Default Zoomed View) ---
             if (!showMinimap || minimapTexture == null) return;
 
-            // Small map size (200x400)
             Rectangle minimapRect = new Rectangle(10, screenHeight - MINIMAP_HEIGHT - 10, MINIMAP_WIDTH, MINIMAP_HEIGHT);
 
-            // Draw the CROPPED/ZOOMED portion of the full texture, scaled to minimapRect.
-            // This is the legible view for the small map.
-            // We draw the sourceRect (100x100 tiles) into the minimapRect (200x400 screen pixels).
             spriteBatch.Draw(minimapTexture, minimapRect, sourceRect, Color.White * minimapOpacity);
 
-            // Draw border
             DrawBorder(spriteBatch, pixelTexture, minimapRect, 2, Color.White * minimapOpacity);
 
-            // Player dot position within the small minimap (player is always centered in the zoomed view)
-            scaleX = (float)MINIMAP_WIDTH / sourceTileSize; // Scale 200px / 100 tiles = 2x
-            scaleY = (float)MINIMAP_HEIGHT / sourceTileSize; // Scale 400px / 100 tiles = 4x (will be stretched/cropped)
-
-            // Player is located at (MINIMAP_ZOOM_RADIUS, MINIMAP_ZOOM_RADIUS) in the sourceRect, which is the center.
             playerScreenX = minimapRect.X + (int)(MINIMAP_WIDTH * 0.5f);
             playerScreenY = minimapRect.Y + (int)(MINIMAP_HEIGHT * 0.5f);
 
@@ -191,13 +162,12 @@ namespace Claude4_5Terraria.UI
 
         }
 
-        // NEW: Method to draw health and mana bars
         private void DrawBars(SpriteBatch spriteBatch, Texture2D pixelTexture, float currentHealth, float maxHealth, float currentAir, float maxAir)
         {
             // --- Health Bar (Red) ---
             float healthPercent = currentHealth / maxHealth;
             int healthFillWidth = (int)(BAR_WIDTH * healthPercent);
-            
+
             Rectangle healthBgRect = new Rectangle(BAR_START_X, BAR_START_Y, BAR_WIDTH, BAR_HEIGHT);
             Rectangle healthFillRect = new Rectangle(BAR_START_X, BAR_START_Y, healthFillWidth, BAR_HEIGHT);
 
@@ -208,7 +178,7 @@ namespace Claude4_5Terraria.UI
             DrawBorder(spriteBatch, pixelTexture, healthBgRect, 1, Color.White);
 
             // --- Mana Bar (Blue) ---
-            int manaY = BAR_START_Y + BAR_HEIGHT + 4; // Offset 4 pixels below the health bar
+            int manaY = BAR_START_Y + BAR_HEIGHT + 4;
             Rectangle manaBgRect = new Rectangle(BAR_START_X, manaY, BAR_WIDTH, BAR_HEIGHT);
             Rectangle manaFillRect = new Rectangle(BAR_START_X, manaY, BAR_WIDTH, BAR_HEIGHT);
 
@@ -217,17 +187,17 @@ namespace Claude4_5Terraria.UI
             // Full Mana (Blue) - Not implemented yet, so full bar
             spriteBatch.Draw(pixelTexture, manaFillRect, Color.Blue);
             DrawBorder(spriteBatch, pixelTexture, manaBgRect, 1, Color.White);
-            
+
             // --- Air Bubbles Bar (Cyan) - Only show when underwater ---
             if (currentAir < maxAir)
             {
                 float airPercent = currentAir / maxAir;
                 int airFillWidth = (int)(BAR_WIDTH * airPercent);
-                
+
                 int airY = manaY + BAR_HEIGHT + 4;
                 Rectangle airBgRect = new Rectangle(BAR_START_X, airY, BAR_WIDTH, BAR_HEIGHT);
                 Rectangle airFillRect = new Rectangle(BAR_START_X, airY, airFillWidth, BAR_HEIGHT);
-                
+
                 // Background (Dark Cyan)
                 spriteBatch.Draw(pixelTexture, airBgRect, new Color(0, 100, 100));
                 // Air fill (Cyan)
@@ -236,11 +206,12 @@ namespace Claude4_5Terraria.UI
             }
         }
 
-        // Main Draw entry point
-        // UPDATED: Added isRaining parameter and player health
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive, bool isRaining, float playerHealth, float playerMaxHealth, float playerAir, float playerMaxAir)
+        // UPDATED: Added bed/sleep parameters
+        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive, bool isRaining, float playerHealth, float playerMaxHealth, float playerAir, float playerMaxAir, Point? currentBedPosition, bool isSleeping, float sleepProgress, float sleepDuration)
         {
             if (font == null) return;
+
+            var player = world.GetPlayer();
 
             // Draw Health and Mana Bars at the very top-left
             DrawBars(spriteBatch, pixelTexture, playerHealth, playerMaxHealth, playerAir, playerMaxAir);
@@ -250,7 +221,6 @@ namespace Claude4_5Terraria.UI
             int tileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
             string coordText = $"X: {tileX}, Y: {tileY}";
             Vector2 coordSize = font.MeasureString(coordText);
-            // Positioned below the mana bar (BAR_START_Y + BAR_HEIGHT * 2 + 15)
             Vector2 coordPosition = new Vector2(BAR_START_X, BAR_START_Y + BAR_HEIGHT * 2 + 15);
 
             // Background for coordinates
@@ -265,12 +235,10 @@ namespace Claude4_5Terraria.UI
             spriteBatch.DrawString(font, coordText, coordPosition, Color.Yellow);
 
             // --- Draw Weather Status (Below coordinates) ---
-            // FIXED: Removed emojis to prevent SpriteFont crash
             string weatherText = isRaining ? "Weather: RAIN (R)" : "Weather: CLEAR (C)";
             Color weatherColor = isRaining ? Color.SkyBlue : Color.White;
             Vector2 weatherSize = font.MeasureString(weatherText);
 
-            // Position 5 pixels below coordinates
             Vector2 weatherPosition = new Vector2(
                 coordPosition.X,
                 coordPosition.Y + coordSize.Y + 5
@@ -309,7 +277,6 @@ namespace Claude4_5Terraria.UI
             string autoMineStatus = $"L: Auto-Mine {(isAutoMiningActive ? "ON" : "OFF")}";
             Color autoMineColor = isAutoMiningActive ? Color.LimeGreen : Color.Gray;
             Vector2 autoMineSize = font.MeasureString(autoMineStatus);
-            // Position 5 pixels below the outline text
             Vector2 autoMinePosition = new Vector2(screenWidth - autoMineSize.X - 20, outlinePosition.Y + outlineSize.Y + 5);
 
             // Background
@@ -323,6 +290,57 @@ namespace Claude4_5Terraria.UI
 
             // Text
             spriteBatch.DrawString(font, autoMineStatus, autoMinePosition, autoMineColor);
+
+            // --- NEW: Draw Bed Spawn Message ---
+            if (player.GetLastSpawnSetTime() + TimeSpan.FromSeconds(player.GetSpawnMessageDuration()) > DateTime.Now)
+            {
+                string spawnMsg = "Spawn Point Set!";
+                Vector2 msgSize = font.MeasureString(spawnMsg);
+                Vector2 msgPosition = new Vector2((screenWidth - msgSize.X) / 2, (screenHeight / 2) - 100);
+
+                Rectangle msgBgRect = new Rectangle(
+                    (int)msgPosition.X - 10, (int)msgPosition.Y - 5, (int)msgSize.X + 20, (int)msgSize.Y + 10
+                );
+                spriteBatch.Draw(pixelTexture, msgBgRect, Color.Black * 0.7f);
+                spriteBatch.DrawString(font, spawnMsg, msgPosition, Color.LimeGreen);
+            }
+
+            // --- NEW: Draw Sleep Progress Bar (if sleeping) ---
+            if (isSleeping && currentBedPosition.HasValue)
+            {
+                float progress = sleepProgress / sleepDuration;
+                int barW = 300;
+                int barH = 20;
+                int barX = (screenWidth - barW) / 2;
+                int barY = (screenHeight - barH) / 2;
+
+                Rectangle barBg = new Rectangle(barX, barY, barW, barH);
+                spriteBatch.Draw(pixelTexture, barBg, Color.Black * 0.8f);
+
+                int fillW = (int)(barW * progress);
+                Rectangle barFill = new Rectangle(barX, barY, fillW, barH);
+                spriteBatch.Draw(pixelTexture, barFill, Color.LightBlue);
+                DrawBorder(spriteBatch, pixelTexture, barBg, 2, Color.White);
+
+                string sleepText = $"Sleeping... {progress * 100:F0}%";
+                Vector2 textSz = font.MeasureString(sleepText);
+                Vector2 textPos = new Vector2(barX + (barW - textSz.X) / 2, barY + (barH - textSz.Y) / 2);
+                spriteBatch.DrawString(font, sleepText, textPos, Color.White);
+            }
+
+            // --- NEW: Draw Bed Hover/Spawn Hint ---
+            if (player.HasBedSpawn)
+            {
+                string hintMsg = "Spawn: BED. Right-click on bed to set spawn / sleep to skip night.";
+                Vector2 hintSize = font.MeasureString(hintMsg);
+                Vector2 hintPosition = new Vector2((screenWidth - hintSize.X) / 2, screenHeight - 50);
+
+                Rectangle hintBgRect = new Rectangle(
+                    (int)hintPosition.X - 10, (int)hintPosition.Y - 5, (int)hintSize.X + 20, (int)hintSize.Y + 10
+                );
+                spriteBatch.Draw(pixelTexture, hintBgRect, Color.Black * 0.7f);
+                spriteBatch.DrawString(font, hintMsg, hintPosition, Color.LightBlue);
+            }
 
             // Draw minimap in bottom left
             DrawMinimap(spriteBatch, pixelTexture, font, screenWidth, screenHeight, playerPosition, world);

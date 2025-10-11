@@ -76,19 +76,27 @@ namespace Claude4_5Terraria.Systems
                 OnProgressUpdate?.Invoke(0.65f, "Placing random chests...");
                 GenerateChests(); // Renamed to "random chests" for clarity
 
+                // Liquid Generation Steps
                 OnProgressUpdate?.Invoke(0.7f, "Generating water...");
                 GenerateWater();
 
                 OnProgressUpdate?.Invoke(0.75f, "Generating lava caves...");
                 GenerateLava();
 
-                OnProgressUpdate?.Invoke(0.8f, "Converting lava+water to obsidian...");
+                OnProgressUpdate?.Invoke(0.80f, "Converting lava+water to obsidian...");
                 ConvertLavaWaterToObsidian();
 
-                OnProgressUpdate?.Invoke(0.85f, "Planting trees...");
+                // CRITICAL NEW STEP: Stabilize all liquids
+                float stabilizeStart = 0.85f;
+                float stabilizeEnd = 0.90f;
+                OnProgressUpdate?.Invoke(stabilizeStart, "Stabilizing liquid flow...");
+                world.StabilizeLiquids(stabilizeStart, stabilizeEnd, OnProgressUpdate); // Pass range and callback
+
+                // Final steps
+                OnProgressUpdate?.Invoke(0.92f, "Planting trees...");
                 GenerateTrees();
 
-                OnProgressUpdate?.Invoke(0.92f, "Growing grass...");
+                OnProgressUpdate?.Invoke(0.95f, "Growing grass...");
                 GenerateGrass();
 
                 OnProgressUpdate?.Invoke(1.0f, "Complete!");
@@ -541,26 +549,26 @@ namespace Claude4_5Terraria.Systems
         {
             int lavaCavesPlaced = 0;
             int lavaPoolsPlaced = 0;
-            
+
             // 1. Generate large lava caves at deep depths (1800-2500)
             for (int i = 0; i < 30; i++)
             {
                 int startX = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
                 int startY = random.Next(1800, Math.Min(2500, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200));
                 int caveLength = random.Next(60, 120);
-                
+
                 if (CarveLavaCave(startX, startY, caveLength))
                 {
                     lavaCavesPlaced++;
                 }
             }
-            
+
             // 2. Generate lava pools in existing caves (1500+)
             for (int attempt = 0; attempt < 200; attempt++)
             {
                 int x = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(1500, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200);
-                
+
                 // Check if this is an open cave area
                 var tile = world.GetTile(x, y);
                 if (tile == null || !tile.IsActive)
@@ -572,21 +580,21 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-            
+
             Logger.Log($"[WORLDGEN] Generated {lavaCavesPlaced} lava caves and {lavaPoolsPlaced} lava pools");
         }
-        
+
         private bool CarveLavaCave(int startX, int startY, int length)
         {
             double direction = random.NextDouble() * Math.PI * 2;
             int currentX = startX;
             int currentY = startY;
             bool lavaPlaced = false;
-            
+
             for (int step = 0; step < length; step++)
             {
                 int radius = random.Next(3, 6);
-                
+
                 // Carve out the cave
                 for (int dx = -radius; dx <= radius; dx++)
                 {
@@ -596,7 +604,7 @@ namespace Claude4_5Terraria.Systems
                         {
                             int tileX = currentX + dx;
                             int tileY = currentY + dy;
-                            
+
                             var tile = world.GetTile(tileX, tileY);
                             if (tile != null && tile.IsActive && tile.Type != TileType.Grass)
                             {
@@ -605,7 +613,7 @@ namespace Claude4_5Terraria.Systems
                         }
                     }
                 }
-                
+
                 // Fill bottom portion with lava
                 int lavaRadius = radius - 1;
                 for (int dx = -lavaRadius; dx <= lavaRadius; dx++)
@@ -615,7 +623,7 @@ namespace Claude4_5Terraria.Systems
                     {
                         int tileX = currentX + dx;
                         int tileY = currentY + dy;
-                        
+
                         var tile = world.GetTile(tileX, tileY);
                         if (tile == null || !tile.IsActive)
                         {
@@ -624,31 +632,31 @@ namespace Claude4_5Terraria.Systems
                         }
                     }
                 }
-                
+
                 // Random direction change
                 direction += (random.NextDouble() - 0.5) * 0.4;
                 // Slight tendency to go down
                 direction += 0.03;
-                
+
                 int moveSpeed = random.Next(2, 4);
                 currentX += (int)(Math.Cos(direction) * moveSpeed);
                 currentY += (int)(Math.Sin(direction) * moveSpeed);
-                
+
                 // Stop if out of bounds
                 if (currentX < 100 || currentX >= Claude4_5Terraria.World.World.WORLD_WIDTH - 100 ||
                     currentY < 1800 || currentY >= Claude4_5Terraria.World.World.WORLD_HEIGHT - 200)
                     break;
             }
-            
+
             return lavaPlaced;
         }
-        
+
         private bool CreateLavaPool(int centerX, int centerY)
         {
             // Find the floor below this position
             int floorY = centerY;
             bool foundFloor = false;
-            
+
             for (int checkY = centerY; checkY < Math.Min(centerY + 30, Claude4_5Terraria.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
@@ -659,21 +667,21 @@ namespace Claude4_5Terraria.Systems
                     break;
                 }
             }
-            
+
             if (!foundFloor) return false;
-            
+
             // Create a pool of lava on the floor
             int poolWidth = random.Next(4, 10);
             int poolDepth = random.Next(2, 4);
             bool lavaPlaced = false;
-            
+
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
                 for (int dy = -poolDepth; dy < 0; dy++)
                 {
                     int lavaX = centerX + dx;
                     int lavaY = floorY + dy;
-                    
+
                     var tile = world.GetTile(lavaX, lavaY);
                     if (tile == null || !tile.IsActive)
                     {
@@ -682,7 +690,7 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-            
+
             return lavaPlaced;
         }
 
@@ -692,13 +700,13 @@ namespace Claude4_5Terraria.Systems
             int smallUndergroundPoolsPlaced = 0;
             int mediumUndergroundPoolsPlaced = 0;
             int largeUndergroundPoolsPlaced = 0;
-            
+
             // 1. Generate surface water pools (small ponds)
             for (int attempt = 0; attempt < 50; attempt++)
             {
                 int x = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
                 int surfaceY = world.GetSurfaceHeight(x);
-                
+
                 // Only place on relatively flat areas
                 bool isFlat = true;
                 for (int checkX = x - 10; checkX <= x + 10; checkX++)
@@ -710,58 +718,58 @@ namespace Claude4_5Terraria.Systems
                         break;
                     }
                 }
-                
+
                 if (isFlat && CreateSurfaceWaterPool(x, surfaceY))
                 {
                     surfacePoolsPlaced++;
                 }
             }
-            
+
             // 2. Generate small underground pools (depth 300-1000)
             for (int attempt = 0; attempt < 150; attempt++)
             {
                 int x = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(300, 1000);
-                
+
                 if (CreateSmallUndergroundPool(x, y))
                 {
                     smallUndergroundPoolsPlaced++;
                 }
             }
-            
+
             // 3. Generate medium underground pools (depth 800-1800)
             for (int attempt = 0; attempt < 80; attempt++)
             {
                 int x = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(800, 1800);
-                
+
                 if (CreateMediumUndergroundPool(x, y))
                 {
                     mediumUndergroundPoolsPlaced++;
                 }
             }
-            
+
             // 4. Generate large underground pools/lakes (depth 1200-2200)
             for (int attempt = 0; attempt < 30; attempt++)
             {
                 int x = random.Next(150, Claude4_5Terraria.World.World.WORLD_WIDTH - 150);
                 int y = random.Next(1200, 2200);
-                
+
                 if (CreateLargeUndergroundPool(x, y))
                 {
                     largeUndergroundPoolsPlaced++;
                 }
             }
-            
+
             Logger.Log($"[WORLDGEN] Generated {surfacePoolsPlaced} surface pools, {smallUndergroundPoolsPlaced} small underground pools, {mediumUndergroundPoolsPlaced} medium pools, {largeUndergroundPoolsPlaced} large pools");
         }
-        
+
         private bool CreateSurfaceWaterPool(int centerX, int surfaceY)
         {
             int poolWidth = random.Next(8, 16);
             int poolDepth = random.Next(3, 6);
             bool waterPlaced = false;
-            
+
             // Dig out the pool area
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
@@ -771,12 +779,12 @@ namespace Claude4_5Terraria.Systems
                 {
                     edgeDepth = poolDepth / 2;
                 }
-                
+
                 for (int dy = 1; dy <= edgeDepth; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
-                    
+
                     var tile = world.GetTile(poolX, poolY);
                     if (tile != null && tile.IsActive)
                     {
@@ -784,7 +792,7 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-            
+
             // Fill with water
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
@@ -793,12 +801,12 @@ namespace Claude4_5Terraria.Systems
                 {
                     edgeDepth = poolDepth / 2;
                 }
-                
+
                 for (int dy = 1; dy <= edgeDepth; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
-                    
+
                     var tile = world.GetTile(poolX, poolY);
                     if (tile == null || !tile.IsActive)
                     {
@@ -807,20 +815,20 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-            
+
             return waterPlaced;
         }
-        
+
         private bool CreateSmallUndergroundPool(int centerX, int centerY)
         {
             int floorY = -1;
             bool foundCave = false;
-            
+
             for (int checkY = centerY; checkY < Math.Min(centerY + 50, Claude4_5Terraria.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
                 var tileBelow = world.GetTile(centerX, checkY + 1);
-                
+
                 if ((tile == null || !tile.IsActive) && tileBelow != null && tileBelow.IsActive)
                 {
                     floorY = checkY;
@@ -828,20 +836,20 @@ namespace Claude4_5Terraria.Systems
                     break;
                 }
             }
-            
+
             if (!foundCave) return false;
-            
+
             int poolWidth = random.Next(4, 8);
             int poolDepth = random.Next(2, 3);
             bool waterPlaced = false;
-            
+
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
                 for (int dy = -poolDepth; dy < 0; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = floorY + dy;
-                    
+
                     var tile = world.GetTile(poolX, poolY);
                     if (tile == null || !tile.IsActive)
                     {
@@ -850,20 +858,20 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-            
+
             return waterPlaced;
         }
-        
+
         private bool CreateMediumUndergroundPool(int centerX, int centerY)
         {
             int floorY = -1;
             bool foundCave = false;
-            
+
             for (int checkY = centerY; checkY < Math.Min(centerY + 50, Claude4_5Terraria.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
                 var tileBelow = world.GetTile(centerX, checkY + 1);
-                
+
                 if ((tile == null || !tile.IsActive) && tileBelow != null && tileBelow.IsActive)
                 {
                     floorY = checkY;
@@ -871,20 +879,20 @@ namespace Claude4_5Terraria.Systems
                     break;
                 }
             }
-            
+
             if (!foundCave) return false;
-            
+
             int poolWidth = random.Next(10, 16);
             int poolDepth = random.Next(4, 6);
             bool waterPlaced = false;
-            
+
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
                 for (int dy = -poolDepth; dy < 0; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = floorY + dy;
-                    
+
                     var tile = world.GetTile(poolX, poolY);
                     if (tile == null || !tile.IsActive)
                     {
@@ -893,20 +901,20 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-            
+
             return waterPlaced;
         }
-        
+
         private bool CreateLargeUndergroundPool(int centerX, int centerY)
         {
             int floorY = -1;
             bool foundCave = false;
-            
+
             for (int checkY = centerY; checkY < Math.Min(centerY + 60, Claude4_5Terraria.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
                 var tileBelow = world.GetTile(centerX, checkY + 1);
-                
+
                 if ((tile == null || !tile.IsActive) && tileBelow != null && tileBelow.IsActive)
                 {
                     floorY = checkY;
@@ -914,23 +922,23 @@ namespace Claude4_5Terraria.Systems
                     break;
                 }
             }
-            
+
             if (!foundCave) return false;
-            
+
             int poolWidth = random.Next(20, 35);
             int poolDepth = random.Next(8, 12);
             bool waterPlaced = false;
-            
+
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
                 float edgeFactor = 1.0f - (Math.Abs(dx) / (float)(poolWidth / 2));
                 int localDepth = (int)(poolDepth * (0.5f + edgeFactor * 0.5f));
-                
+
                 for (int dy = -localDepth; dy < 0; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = floorY + dy;
-                    
+
                     var tile = world.GetTile(poolX, poolY);
                     if (tile == null || !tile.IsActive)
                     {
@@ -939,29 +947,29 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-            
+
             return waterPlaced;
         }
-        
+
         private void ConvertLavaWaterToObsidian()
         {
             int obsidianCreated = 0;
-            
+
             for (int x = 1; x < Claude4_5Terraria.World.World.WORLD_WIDTH - 1; x++)
             {
                 for (int y = 1; y < Claude4_5Terraria.World.World.WORLD_HEIGHT - 1; y++)
                 {
                     var tile = world.GetTile(x, y);
-                    
+
                     if (tile != null && tile.IsActive && tile.Type == TileType.Lava)
                     {
                         bool hasAdjacentWater = false;
-                        
+
                         var left = world.GetTile(x - 1, y);
                         var right = world.GetTile(x + 1, y);
                         var up = world.GetTile(x, y - 1);
                         var down = world.GetTile(x, y + 1);
-                        
+
                         if ((left != null && left.IsActive && left.Type == TileType.Water) ||
                             (right != null && right.IsActive && right.Type == TileType.Water) ||
                             (up != null && up.IsActive && up.Type == TileType.Water) ||
@@ -969,7 +977,7 @@ namespace Claude4_5Terraria.Systems
                         {
                             hasAdjacentWater = true;
                         }
-                        
+
                         if (hasAdjacentWater)
                         {
                             world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.Obsidian));
@@ -978,7 +986,7 @@ namespace Claude4_5Terraria.Systems
                     }
                 }
             }
-            
+
             Logger.Log($"[WORLDGEN] Created {obsidianCreated} obsidian blocks from lava+water interactions");
         }
 

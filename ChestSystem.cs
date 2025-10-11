@@ -6,6 +6,8 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Claude4_5Terraria.Systems
 {
+    // === NOTE: This file assumes ChestItemData and ChestData are correctly defined in SaveData.cs. ===
+
     public enum ChestTier
     {
         Wood,
@@ -147,6 +149,8 @@ namespace Claude4_5Terraria.Systems
         public ChestTier Tier { get; set; }
         public ChestInventory Inventory { get; set; }
         public bool IsNaturallyGenerated { get; set; }
+        // NEW: Chest Name field
+        public string Name { get; set; }
 
         public Chest(Point position, ChestTier tier, bool naturallyGenerated = false)
         {
@@ -154,6 +158,8 @@ namespace Claude4_5Terraria.Systems
             Tier = tier;
             Inventory = new ChestInventory();
             IsNaturallyGenerated = naturallyGenerated;
+            // Default name if not explicitly set
+            this.Name = $"{tier} Chest";
         }
 
         public TileType GetTileType()
@@ -188,11 +194,19 @@ namespace Claude4_5Terraria.Systems
             chests = new Dictionary<Point, Chest>();
         }
 
-        public void PlaceChest(Point position, ChestTier tier, bool naturallyGenerated = false)
+        // UPDATED: Added customName parameter
+        public void PlaceChest(Point position, ChestTier tier, bool naturallyGenerated = false, string customName = null)
         {
             if (!chests.ContainsKey(position))
             {
                 Chest chest = new Chest(position, tier, naturallyGenerated);
+
+                // Apply custom name if provided (used by player placement)
+                if (!string.IsNullOrEmpty(customName))
+                {
+                    chest.Name = customName;
+                }
+
                 chests[position] = chest;
                 Logger.Log($"[CHEST] Placed {tier} chest at ({position.X}, {position.Y})");
             }
@@ -210,7 +224,7 @@ namespace Claude4_5Terraria.Systems
             if (chests.ContainsKey(position))
             {
                 Chest chest = chests[position];
-                
+
                 // Transfer all items to player inventory
                 for (int i = 0; i < ChestInventory.CHEST_SLOTS; i++)
                 {
@@ -268,6 +282,7 @@ namespace Claude4_5Terraria.Systems
             Logger.Log($"[CHEST] Generated loot for {chest.Tier} chest at ({chest.Position.X}, {chest.Position.Y})");
         }
 
+        // UPDATED: Save the chest name
         public List<ChestData> GetSaveData()
         {
             List<ChestData> data = new List<ChestData>();
@@ -279,12 +294,15 @@ namespace Claude4_5Terraria.Systems
                     Y = kvp.Key.Y,
                     Tier = (int)kvp.Value.Tier,
                     IsNaturallyGenerated = kvp.Value.IsNaturallyGenerated,
-                    Items = kvp.Value.Inventory.GetSaveData()
+                    Items = kvp.Value.Inventory.GetSaveData(),
+                    // FIX: This line now requires the Name property to exist in the external ChestData
+                    Name = kvp.Value.Name
                 });
             }
             return data;
         }
 
+        // UPDATED: Load the chest name
         public void LoadFromData(List<ChestData> data)
         {
             chests.Clear();
@@ -295,6 +313,8 @@ namespace Claude4_5Terraria.Systems
                     Point position = new Point(chestData.X, chestData.Y);
                     Chest chest = new Chest(position, (ChestTier)chestData.Tier, chestData.IsNaturallyGenerated);
                     chest.Inventory.LoadFromData(chestData.Items);
+                    // FIX: This line now requires the Name property to exist in the external ChestData
+                    chest.Name = chestData.Name ?? $"{chest.Tier} Chest";
                     chests[position] = chest;
                 }
             }

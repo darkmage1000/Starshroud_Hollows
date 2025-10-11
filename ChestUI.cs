@@ -12,7 +12,7 @@ namespace Claude4_5Terraria.UI
         private Chest currentChest;
         private Inventory playerInventory;
         private bool isOpen;
-        
+
         private const int SLOT_SIZE = 50;
         private const int PADDING = 10;
         private const int CHEST_COLS = 5;
@@ -22,10 +22,14 @@ namespace Claude4_5Terraria.UI
         private int? draggedPlayerSlot = null;
         private MouseState previousMouseState;
 
-        public ChestUI()
+        // NEW: Field to hold a reference to the World
+        private World.World worldRef;
+
+        public ChestUI(World.World world)
         {
             isOpen = false;
             previousMouseState = Mouse.GetState();
+            this.worldRef = world;
         }
 
         public void OpenChest(Chest chest, Inventory inventory)
@@ -33,7 +37,7 @@ namespace Claude4_5Terraria.UI
             currentChest = chest;
             playerInventory = inventory;
             isOpen = true;
-            Logger.Log($"[CHEST UI] Opened {chest.Tier} chest at ({chest.Position.X}, {chest.Position.Y})");
+            Logger.Log($"[CHEST UI] Opened {chest.Tier} chest named '{chest.Name}' at ({chest.Position.X}, {chest.Position.Y})");
         }
 
         public void Close()
@@ -78,7 +82,7 @@ namespace Claude4_5Terraria.UI
                 // Check chest slots
                 for (int i = 0; i < ChestInventory.CHEST_SLOTS; i++)
                 {
-                    Rectangle slotRect = GetChestSlotRect(i);
+                    Rectangle slotRect = GetChestSlotRect(i); // Error: GetChestSlotRect not found (was missing a closing brace before this point)
                     if (slotRect.Contains(mousePos))
                     {
                         var slot = currentChest.Inventory.GetSlot(i);
@@ -104,7 +108,7 @@ namespace Claude4_5Terraria.UI
                 // Check player inventory slots
                 for (int i = 0; i < playerInventory.GetSlotCount(); i++)
                 {
-                    Rectangle slotRect = GetPlayerSlotRect(i);
+                    Rectangle slotRect = GetPlayerSlotRect(i); // Error: GetPlayerSlotRect not found
                     if (slotRect.Contains(mousePos))
                     {
                         var slot = playerInventory.GetSlot(i);
@@ -138,11 +142,11 @@ namespace Claude4_5Terraria.UI
                 {
                     // Dragging from chest
                     var draggedSlot = currentChest.Inventory.GetSlot(draggedChestSlot.Value);
-                    
+
                     // Check if dropping in player inventory
                     for (int i = 0; i < playerInventory.GetSlotCount(); i++)
                     {
-                        Rectangle slotRect = GetPlayerSlotRect(i);
+                        Rectangle slotRect = GetPlayerSlotRect(i); // Error: GetPlayerSlotRect not found
                         if (slotRect.Contains(mousePos))
                         {
                             // Transfer to player
@@ -156,7 +160,7 @@ namespace Claude4_5Terraria.UI
                     // Check if swapping within chest
                     for (int i = 0; i < ChestInventory.CHEST_SLOTS; i++)
                     {
-                        Rectangle slotRect = GetChestSlotRect(i);
+                        Rectangle slotRect = GetChestSlotRect(i); // Error: GetChestSlotRect not found
                         if (slotRect.Contains(mousePos) && i != draggedChestSlot.Value)
                         {
                             // Swap slots
@@ -172,11 +176,11 @@ namespace Claude4_5Terraria.UI
                 {
                     // Dragging from player inventory
                     var draggedSlot = playerInventory.GetSlot(draggedPlayerSlot.Value);
-                    
+
                     // Check if dropping in chest
                     for (int i = 0; i < ChestInventory.CHEST_SLOTS; i++)
                     {
-                        Rectangle slotRect = GetChestSlotRect(i);
+                        Rectangle slotRect = GetChestSlotRect(i); // Error: GetChestSlotRect not found
                         if (slotRect.Contains(mousePos))
                         {
                             // Transfer to chest
@@ -208,14 +212,18 @@ namespace Claude4_5Terraria.UI
                 draggedChestSlot = null;
                 draggedPlayerSlot = null;
             }
-        }
+        } // FIX: Closing brace for HandleMouseInput was likely missing/misplaced, causing subsequent methods to be out of scope.
 
+        // FIX: Adjusted GetChestSlotRect to be horizontally centered relative to the screen (960)
         private Rectangle GetChestSlotRect(int index)
         {
             int col = index % CHEST_COLS;
             int row = index / CHEST_COLS;
-            int startX = 760 - (CHEST_COLS * SLOT_SIZE + (CHEST_COLS - 1) * PADDING) / 2; // Centered at 960
-            int startY = 230;
+            // Align with the center of the chest panel (960)
+            // Total slot row width: 5*50 + 4*10 = 290. 
+            // Panel start X: 560. Panel width: 400. Center slots at X: 560 + (400-290)/2 = 615.
+            int startX = 615;
+            int startY = 280; // Y position below the chest name/title area
             return new Rectangle(
                 startX + col * (SLOT_SIZE + PADDING),
                 startY + row * (SLOT_SIZE + PADDING),
@@ -250,11 +258,21 @@ namespace Claude4_5Terraria.UI
             spriteBatch.Draw(pixelTexture, chestPanel, Color.DarkSlateGray);
             DrawBorder(spriteBatch, pixelTexture, chestPanel, 2, Color.White);
 
-            // Draw chest title ABOVE the chest panel (centered)
-            string chestTitle = $"{currentChest.Tier} Chest";
-            Vector2 titleSize = font.MeasureString(chestTitle);
-            spriteBatch.DrawString(font, chestTitle, 
-                new Vector2(960 - titleSize.X / 2, 170), Color.White);
+            // FIX: Draw chest name and title *inside* the panel, moved for readability
+            int nameTextX = 570 + PADDING; // X position inside panel, aligned left
+            int nameTextY = 210; // Y position near top of panel
+
+            // NEW: Draw Chest Name
+            if (currentChest != null)
+            {
+                string chestName = currentChest.Name;
+                // Draw chest name
+                spriteBatch.DrawString(font, $"Chest: {chestName}", new Vector2(nameTextX, nameTextY), Color.White);
+
+                // Draw chest title slightly below the name
+                string chestTitle = $"{currentChest.Tier} Chest";
+                spriteBatch.DrawString(font, chestTitle, new Vector2(nameTextX, nameTextY + 25), Color.Gray);
+            }
 
             // Draw chest slots
             for (int i = 0; i < ChestInventory.CHEST_SLOTS; i++)
@@ -263,7 +281,7 @@ namespace Claude4_5Terraria.UI
                 var slot = currentChest.Inventory.GetSlot(i);
 
                 // Slot background
-                Color slotColor = (draggedChestSlot.HasValue && draggedChestSlot.Value == i) 
+                Color slotColor = (draggedChestSlot.HasValue && draggedChestSlot.Value == i)
                     ? Color.Gray * 0.5f : Color.Gray;
                 spriteBatch.Draw(pixelTexture, slotRect, slotColor);
                 DrawBorder(spriteBatch, pixelTexture, slotRect, 1, Color.White);
@@ -273,10 +291,10 @@ namespace Claude4_5Terraria.UI
                 {
                     string itemName = slot.ItemType.ToString();
                     if (itemName.Length > 6) itemName = itemName.Substring(0, 6);
-                    
+
                     Vector2 itemNameSize = font.MeasureString(itemName);
                     float scale = Math.Min(1.0f, (SLOT_SIZE - 10) / itemNameSize.X);
-                    
+
                     spriteBatch.DrawString(font, itemName,
                         new Vector2(slotRect.X + 5, slotRect.Y + 5),
                         Color.White, 0, Vector2.Zero, scale, SpriteEffects.None, 0);
