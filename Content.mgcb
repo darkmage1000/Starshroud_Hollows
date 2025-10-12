@@ -183,6 +183,18 @@
 /processorParam:Quality=Best
 /build:hitting a tree.mp3
 
+#begin MagicBolt.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:MagicBolt.png
+
 #begin magicchest.png
 /importer:TextureImporter
 /processor:TextureProcessor
@@ -194,6 +206,18 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:magicchest.png
+
+#begin OozeEnemy.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:OozeEnemy.png
 
 #begin placing and mining a torch.mp3
 /importer:Mp3Importer
@@ -381,6 +405,18 @@
 /processorParam:TextureFormat=Color
 /build:torch.png
 
+#begin wand.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:wand.png
+
 #begin woodchest.png
 /importer:TextureImporter
 /processor:TextureProcessor
@@ -416,4 +452,16 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:woodpickaxe.png
+
+#begin woodsword.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:woodsword.png
 

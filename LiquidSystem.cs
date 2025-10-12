@@ -24,10 +24,10 @@ namespace Claude4_5Terraria.Systems
         private const int MAX_MOVES_PER_FRAME = 50;
 
         // UPDATED CONSTANTS for volumetric flow
-        private const float MAX_FLOW_RATE = 0.08f; // INCREASED from 0.05f - faster but still controlled flow
-        private const float MIN_VOLUME_FOR_FLOW = 0.1f;
-        private const float MIN_VOLUME_FOR_EXISTENCE = 0.05f; // Aggressive cleanup
-        private const float HORIZONTAL_DECAY = 0.0008f; // REDUCED from 0.001f - less friction, faster spread
+        private const float MAX_FLOW_RATE = 0.10f; // INCREASED - faster flow
+        private const float MIN_VOLUME_FOR_FLOW = 0.05f; // LOWERED - allows smaller amounts to flow
+        private const float MIN_VOLUME_FOR_EXISTENCE = 0.03f; // Aggressive cleanup
+        private const float HORIZONTAL_DECAY = 0.0005f; // REDUCED - less friction, faster spread
 
         public LiquidSystem(World.World world)
         {
@@ -149,7 +149,8 @@ namespace Claude4_5Terraria.Systems
             Logger.Log("[LIQUID] Starting comprehensive flow stabilization...");
             int stabilizationIterations = 0;
 
-            for (int iteration = 0; iteration < 40; iteration++) // Increased iterations for stability
+            // INCREASED: More iterations for better stability (was 40, now 80)
+            for (int iteration = 0; iteration < 80; iteration++)
             {
                 stabilizationIterations = iteration + 1;
                 bool liquidMoved = false;
@@ -179,8 +180,8 @@ namespace Claude4_5Terraria.Systems
                 }
 
                 // Update progress for the UI
-                float currentProgress = progressStart + (progressEnd - progressStart) * (float)stabilizationIterations / 40f;
-                updateCallback?.Invoke(currentProgress, $"Stabilizing liquids (Pass {stabilizationIterations}/40)...");
+                float currentProgress = progressStart + (progressEnd - progressStart) * (float)stabilizationIterations / 80f;
+                updateCallback?.Invoke(currentProgress, $"Stabilizing liquids (Pass {stabilizationIterations}/80)...");
 
                 // If no liquid moved in a full pass, we are stable.
                 if (!liquidMoved)
@@ -189,7 +190,7 @@ namespace Claude4_5Terraria.Systems
                     return;
                 }
             }
-            Logger.Log($"[LIQUID] Stabilization completed after max 40 passes.");
+            Logger.Log($"[LIQUID] Stabilization completed after max 80 passes.");
         }
 
         // NEW: Activate all loaded liquids (call this after loading a save)
@@ -354,11 +355,12 @@ namespace Claude4_5Terraria.Systems
                     {
                         if (left.LiquidVolume < 1.0f)
                         {
-                            // IMPROVED: Better equalization - transfer 70% of difference
+                            // IMPROVED: More aggressive equalization - transfer 80% of difference
                             float volumeDifference = currentVolume - left.LiquidVolume;
-                            float flowLeft = volumeDifference * 0.7f;
+                            float flowLeft = volumeDifference * 0.8f;
 
-                            if (flowLeft > 0.02f && flowLeft > bestFlow) // Higher minimum threshold
+                            // LOWERED threshold for better spreading
+                            if (flowLeft > 0.01f && flowLeft > bestFlow)
                             {
                                 bestFlow = flowLeft;
                                 targetPos = new Point(x - 1, y);
@@ -375,11 +377,12 @@ namespace Claude4_5Terraria.Systems
                     {
                         if (right.LiquidVolume < 1.0f)
                         {
-                            // IMPROVED: Better equalization - transfer 70% of difference
+                            // IMPROVED: More aggressive equalization - transfer 80% of difference
                             float volumeDifference = currentVolume - right.LiquidVolume;
-                            float flowRight = volumeDifference * 0.7f;
+                            float flowRight = volumeDifference * 0.8f;
 
-                            if (flowRight > 0.02f && flowRight > bestFlow) // Higher minimum threshold
+                            // LOWERED threshold for better spreading
+                            if (flowRight > 0.01f && flowRight > bestFlow)
                             {
                                 bestFlow = flowRight;
                                 targetPos = new Point(x + 1, y);
@@ -398,7 +401,8 @@ namespace Claude4_5Terraria.Systems
                         Tile targetTile = world.GetTile(targetPos.X, targetPos.Y);
 
                         // Final check to prevent oscillation and ensure flow only happens if we have more volume
-                        if (targetTile.LiquidVolume < currentVolume)
+                        // IMPROVED: Added small threshold to prevent micro-oscillations
+                        if (targetTile.LiquidVolume < currentVolume - 0.01f)
                         {
                             targetTile.LiquidVolume += transferAmount;
 

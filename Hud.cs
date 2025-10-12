@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Claude4_5Terraria.World;
+using Claude4_5Terraria.Systems;
 using System;
 using System.Collections.Generic;
 
@@ -27,17 +28,24 @@ namespace Claude4_5Terraria.UI
         private Color[] minimapColorData;
         private bool minimapNeedsUpdate = true;
 
+        // FIX: Private field to store font
+        private SpriteFont font;
+
         public HUD()
         {
             showBlockOutlines = false;
         }
 
-        public void Initialize(GraphicsDevice graphicsDevice)
+        // FIX: Initialize requires SpriteFont argument
+        public void Initialize(GraphicsDevice graphicsDevice, SpriteFont spriteFont)
         {
+            this.font = spriteFont; // Store font locally
             int worldW = World.World.WORLD_WIDTH;
             int worldH = World.World.WORLD_HEIGHT;
 
             minimapTexture = new Texture2D(graphicsDevice, worldW, worldH);
+
+            // FIX: Allocate array size using both World Width and Height
             minimapColorData = new Color[worldW * worldH];
 
             for (int i = 0; i < minimapColorData.Length; i++)
@@ -47,6 +55,7 @@ namespace Claude4_5Terraria.UI
 
             minimapNeedsUpdate = true;
         }
+
 
         public void FlagMinimapUpdate()
         {
@@ -162,7 +171,7 @@ namespace Claude4_5Terraria.UI
 
         }
 
-        private void DrawBars(SpriteBatch spriteBatch, Texture2D pixelTexture, float currentHealth, float maxHealth, float currentAir, float maxAir)
+        private void DrawBars(SpriteBatch spriteBatch, Texture2D pixelTexture, float currentHealth, float maxHealth, float currentAir, float maxAir, MagicSystem magicSystem)
         {
             // --- Health Bar (Red) ---
             float healthPercent = currentHealth / maxHealth;
@@ -178,15 +187,30 @@ namespace Claude4_5Terraria.UI
             DrawBorder(spriteBatch, pixelTexture, healthBgRect, 1, Color.White);
 
             // --- Mana Bar (Blue) ---
+            float currentMana = magicSystem.GetCurrentMana();
+            float maxMana = magicSystem.GetMaxMana();
+            float manaPercent = currentMana / maxMana;
+            int manaFillWidth = (int)(BAR_WIDTH * manaPercent);
+
             int manaY = BAR_START_Y + BAR_HEIGHT + 4;
             Rectangle manaBgRect = new Rectangle(BAR_START_X, manaY, BAR_WIDTH, BAR_HEIGHT);
-            Rectangle manaFillRect = new Rectangle(BAR_START_X, manaY, BAR_WIDTH, BAR_HEIGHT);
+            Rectangle manaFillRect = new Rectangle(BAR_START_X, manaY, manaFillWidth, BAR_HEIGHT);
 
             // Background (Dark Blue)
             spriteBatch.Draw(pixelTexture, manaBgRect, Color.DarkBlue);
-            // Full Mana (Blue) - Not implemented yet, so full bar
+            // Mana fill (Blue)
             spriteBatch.Draw(pixelTexture, manaFillRect, Color.Blue);
             DrawBorder(spriteBatch, pixelTexture, manaBgRect, 1, Color.White);
+
+            // FIX: Draw Mana Text over bar - 'font' is a private field
+            string manaText = $"Mana: {(int)currentMana} / {(int)maxMana}";
+            Vector2 manaTextSize = this.font.MeasureString(manaText);
+            Vector2 manaTextPos = new Vector2(
+                BAR_START_X + (BAR_WIDTH - manaTextSize.X) / 2,
+                manaY + (BAR_HEIGHT - manaTextSize.Y) / 2
+            );
+            spriteBatch.DrawString(this.font, manaText, manaTextPos, Color.White);
+
 
             // --- Air Bubbles Bar (Cyan) - Only show when underwater ---
             if (currentAir < maxAir)
@@ -194,6 +218,7 @@ namespace Claude4_5Terraria.UI
                 float airPercent = currentAir / maxAir;
                 int airFillWidth = (int)(BAR_WIDTH * airPercent);
 
+                // Start Air Bar below Mana Bar
                 int airY = manaY + BAR_HEIGHT + 4;
                 Rectangle airBgRect = new Rectangle(BAR_START_X, airY, BAR_WIDTH, BAR_HEIGHT);
                 Rectangle airFillRect = new Rectangle(BAR_START_X, airY, airFillWidth, BAR_HEIGHT);
@@ -206,22 +231,28 @@ namespace Claude4_5Terraria.UI
             }
         }
 
-        // UPDATED: Added bed/sleep parameters
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive, bool isRaining, float playerHealth, float playerMaxHealth, float playerAir, float playerMaxAir, Point? currentBedPosition, bool isSleeping, float sleepProgress, float sleepDuration)
+        // MODIFIED: Added MagicSystem magicSystem parameter (21 arguments total)
+        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive, bool isRaining, float playerHealth, float playerMaxHealth, float playerAir, float playerMaxAir, Point? currentBedPosition, bool isSleeping, float sleepProgress, float sleepDuration, float bedHoldTime, float bedHoldRequired, TimeSystem timeSystem, MagicSystem magicSystem)
         {
-            if (font == null) return;
+            // FIX: Store the font locally for DrawBars and other helpers to access
+            if (this.font == null) this.font = font;
+
+            if (font == null || timeSystem == null || magicSystem == null) return;
 
             var player = world.GetPlayer();
 
             // Draw Health and Mana Bars at the very top-left
-            DrawBars(spriteBatch, pixelTexture, playerHealth, playerMaxHealth, playerAir, playerMaxAir);
+            DrawBars(spriteBatch, pixelTexture, playerHealth, playerMaxHealth, playerAir, playerMaxAir, magicSystem);
 
             // --- Draw coordinates (Moved down to account for bars) ---
             int tileX = (int)(playerPosition.X / World.World.TILE_SIZE);
             int tileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
             string coordText = $"X: {tileX}, Y: {tileY}";
             Vector2 coordSize = font.MeasureString(coordText);
-            Vector2 coordPosition = new Vector2(BAR_START_X, BAR_START_Y + BAR_HEIGHT * 2 + 15);
+            int manaBarY = BAR_START_Y + BAR_HEIGHT + 4; // Y position of the mana bar
+
+            // Start coord text below Mana Bar
+            Vector2 coordPosition = new Vector2(BAR_START_X, manaBarY + BAR_HEIGHT + 15);
 
             // Background for coordinates
             Rectangle coordBgRect = new Rectangle(
@@ -234,14 +265,40 @@ namespace Claude4_5Terraria.UI
             spriteBatch.Draw(pixelTexture, coordBgRect, Color.Black * 0.7f);
             spriteBatch.DrawString(font, coordText, coordPosition, Color.Yellow);
 
-            // --- Draw Weather Status (Below coordinates) ---
+
+            // --- Draw Time of Day Status (Below coordinates) ---
+            string timeText = $"Time: {timeSystem.GetTimeString()}";
+            Color timeColor = timeSystem.IsDaytime() ? Color.Yellow : Color.SkyBlue;
+            Vector2 timeSize = font.MeasureString(timeText);
+
+            // Positioned right below coordinates
+            Vector2 timePosition = new Vector2(
+                coordPosition.X,
+                coordPosition.Y + coordSize.Y + 5
+            );
+
+            // Background
+            Rectangle timeBgRect = new Rectangle(
+                (int)timePosition.X - 5,
+                (int)timePosition.Y - 5,
+                (int)timeSize.X + 10,
+                (int)timeSize.Y + 10
+            );
+            spriteBatch.Draw(pixelTexture, timeBgRect, Color.Black * 0.7f);
+
+            // Text
+            spriteBatch.DrawString(font, timeText, timePosition, timeColor);
+
+
+            // --- Draw Weather Status (Below Time) ---
             string weatherText = isRaining ? "Weather: RAIN (R)" : "Weather: CLEAR (C)";
             Color weatherColor = isRaining ? Color.SkyBlue : Color.White;
             Vector2 weatherSize = font.MeasureString(weatherText);
 
+            // Positioned right below time
             Vector2 weatherPosition = new Vector2(
-                coordPosition.X,
-                coordPosition.Y + coordSize.Y + 5
+                timePosition.X,
+                timePosition.Y + timeSize.Y + 5
             );
 
             // Background
@@ -303,6 +360,29 @@ namespace Claude4_5Terraria.UI
                 );
                 spriteBatch.Draw(pixelTexture, msgBgRect, Color.Black * 0.7f);
                 spriteBatch.DrawString(font, spawnMsg, msgPosition, Color.LimeGreen);
+            }
+
+            // --- NEW: Draw Bed Hold Progress Bar (while holding right-click on bed) ---
+            if (bedHoldTime > 0 && !isSleeping)
+            {
+                float progress = bedHoldTime / bedHoldRequired;
+                int barW = 300;
+                int barH = 20;
+                int barX = (screenWidth - barW) / 2;
+                int barY = (screenHeight - barH) / 2;
+
+                Rectangle barBg = new Rectangle(barX, barY, barW, barH);
+                spriteBatch.Draw(pixelTexture, barBg, Color.Black * 0.8f);
+
+                int fillW = (int)(barW * progress);
+                Rectangle barFill = new Rectangle(barX, barY, fillW, barH);
+                spriteBatch.Draw(pixelTexture, barFill, Color.Yellow);
+                DrawBorder(spriteBatch, pixelTexture, barBg, 2, Color.White);
+
+                string holdText = $"Hold to Sleep... {progress * 100:F0}%";
+                Vector2 textSz = font.MeasureString(holdText);
+                Vector2 textPos = new Vector2(barX + (barW - textSz.X) / 2, barY + (barH - textSz.Y) / 2);
+                spriteBatch.DrawString(font, holdText, textPos, Color.White);
             }
 
             // --- NEW: Draw Sleep Progress Bar (if sleeping) ---

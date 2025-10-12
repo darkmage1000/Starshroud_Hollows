@@ -42,10 +42,18 @@ namespace Claude4_5Terraria.Systems
 
                 case ItemType.CopperPickaxe:
                     return CanMine(ItemType.StonePickaxe, tile) ||
+                           tile == TileType.Iron;
+
+                case ItemType.IronPickaxe:  // NEW: Iron pickaxe
+                    return CanMine(ItemType.CopperPickaxe, tile) ||
                            tile == TileType.Silver;
 
                 case ItemType.SilverPickaxe:
-                    return CanMine(ItemType.CopperPickaxe, tile) ||
+                    return CanMine(ItemType.IronPickaxe, tile) ||
+                           tile == TileType.Gold;
+
+                case ItemType.GoldPickaxe:  // NEW: Gold pickaxe
+                    return CanMine(ItemType.SilverPickaxe, tile) ||
                            tile == TileType.Platinum;
 
                 case ItemType.PlatinumPickaxe:
@@ -77,8 +85,12 @@ namespace Claude4_5Terraria.Systems
                     return 1.5f;
                 case ItemType.CopperPickaxe:
                     return 2.0f;
+                case ItemType.IronPickaxe:  // NEW
+                    return 2.25f;
                 case ItemType.SilverPickaxe:
                     return 2.5f;
+                case ItemType.GoldPickaxe:  // NEW
+                    return 2.75f;
                 case ItemType.PlatinumPickaxe:
                     return 3.0f;
                 case ItemType.RunicPickaxe:
@@ -93,7 +105,9 @@ namespace Claude4_5Terraria.Systems
             return tool == ItemType.WoodPickaxe ||
                    tool == ItemType.StonePickaxe ||
                    tool == ItemType.CopperPickaxe ||
+                   tool == ItemType.IronPickaxe ||
                    tool == ItemType.SilverPickaxe ||
+                   tool == ItemType.GoldPickaxe ||
                    tool == ItemType.PlatinumPickaxe ||
                    tool == ItemType.RunicPickaxe;
         }

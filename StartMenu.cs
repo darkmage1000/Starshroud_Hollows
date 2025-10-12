@@ -37,17 +37,23 @@ namespace Claude4_5Terraria.UI
         private float initialGameSoundsVolume;
         private Action<float> onGameSoundsVolumeChanged;
 
+        // Debug mode
+        private bool debugModeEnabled = false;
+        public bool IsDebugModeEnabled => debugModeEnabled;
+
 
         private const int MENU_OPTION_PLAY = 0;
         private const int MENU_OPTION_LOAD = 1;
         private const int MENU_OPTION_OPTIONS = 2;
-        private const int MENU_OPTION_QUIT = 3;
-        private const int MENU_OPTIONS_COUNT = 4;
+        private const int MENU_OPTION_DEBUG = 3;
+        private const int MENU_OPTION_QUIT = 4;
+        private const int MENU_OPTIONS_COUNT = 5;
 
         // Button rectangles for click detection
         private Rectangle playButton;
         private Rectangle loadButton;
         private Rectangle optionsButton;
+        private Rectangle debugButton;
         private Rectangle quitButton;
 
         // CRITICAL FIX: Constructor now takes 7 arguments (including the test sound action)
@@ -153,6 +159,8 @@ namespace Claude4_5Terraria.UI
                 selectedOption = MENU_OPTION_LOAD;
             else if (optionsButton.Contains(mousePoint))
                 selectedOption = MENU_OPTION_OPTIONS;
+            else if (debugButton.Contains(mousePoint))
+                selectedOption = MENU_OPTION_DEBUG;
             else if (quitButton.Contains(mousePoint))
                 selectedOption = MENU_OPTION_QUIT;
 
@@ -172,6 +180,11 @@ namespace Claude4_5Terraria.UI
                 else if (optionsButton.Contains(mousePoint))
                 {
                     selectedOption = MENU_OPTION_OPTIONS;
+                    HandleMenuSelection();
+                }
+                else if (debugButton.Contains(mousePoint))
+                {
+                    selectedOption = MENU_OPTION_DEBUG;
                     HandleMenuSelection();
                 }
                 else if (quitButton.Contains(mousePoint))
@@ -228,6 +241,10 @@ namespace Claude4_5Terraria.UI
                     currentState = MenuState.Options;
                     optionsMenu.Open();
                     Logger.Log("[MENU] Opening options");
+                    break;
+                case MENU_OPTION_DEBUG:
+                    debugModeEnabled = !debugModeEnabled;
+                    Logger.Log($"[MENU] Debug Mode {(debugModeEnabled ? "ENABLED" : "DISABLED")}");
                     break;
                 case MENU_OPTION_QUIT:
                     Logger.Log("[MENU] Quitting game");
@@ -315,11 +332,13 @@ namespace Claude4_5Terraria.UI
             playButton = new Rectangle((screenWidth - buttonWidth) / 2, startY, buttonWidth, buttonHeight);
             loadButton = new Rectangle((screenWidth - buttonWidth) / 2, startY + spacing, buttonWidth, buttonHeight);
             optionsButton = new Rectangle((screenWidth - buttonWidth) / 2, startY + spacing * 2, buttonWidth, buttonHeight);
-            quitButton = new Rectangle((screenWidth - buttonWidth) / 2, startY + spacing * 3, buttonWidth, buttonHeight);
+            debugButton = new Rectangle((screenWidth - buttonWidth) / 2, startY + spacing * 3, buttonWidth, buttonHeight);
+            quitButton = new Rectangle((screenWidth - buttonWidth) / 2, startY + spacing * 4, buttonWidth, buttonHeight);
 
             DrawMenuButton(spriteBatch, pixelTexture, font, playButton, loadingSavedGame ? "Play (Load Save)" : "Play", selectedOption == MENU_OPTION_PLAY, screenWidth);
             DrawMenuButton(spriteBatch, pixelTexture, font, loadButton, "Load", selectedOption == MENU_OPTION_LOAD, screenWidth, !SaveSystem.AnySaveExists());
             DrawMenuButton(spriteBatch, pixelTexture, font, optionsButton, "Options", selectedOption == MENU_OPTION_OPTIONS, screenWidth);
+            DrawMenuButton(spriteBatch, pixelTexture, font, debugButton, debugModeEnabled ? "Debug: ON" : "Debug: OFF", selectedOption == MENU_OPTION_DEBUG, screenWidth);
             DrawMenuButton(spriteBatch, pixelTexture, font, quitButton, "Quit", selectedOption == MENU_OPTION_QUIT, screenWidth);
 
             string instructions = "Click buttons or use Arrow Keys + Enter";

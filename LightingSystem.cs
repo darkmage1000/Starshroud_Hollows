@@ -67,13 +67,15 @@ namespace Claude4_5Terraria.Systems
                     int checkY = cameraTileY + dy;
 
                     World.Tile tile = world.GetTile(checkX, checkY);
-                    if (tile != null && tile.IsActive)
+                    if (tile != null)
                     {
-                        if (tile.Type == TileType.Torch)
+                        // Check for torches
+                        if (tile.IsActive && tile.Type == TileType.Torch)
                         {
                             torchPositions.Add(new Point(checkX, checkY));
                         }
-                        else if (tile.Type == TileType.Lava)
+                        // CRITICAL FIX: Check for lava regardless of IsActive (lava uses LiquidVolume)
+                        else if (tile.Type == TileType.Lava && tile.LiquidVolume > 0.05f)
                         {
                             lavaPositions.Add(new Point(checkX, checkY));
                         }

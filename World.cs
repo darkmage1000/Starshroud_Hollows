@@ -202,7 +202,10 @@ namespace Claude4_5Terraria.World
             for (int dy = 0; dy < trunkHeight; dy++)
             {
                 int treeY = y - dy;
-                SetTile(x, treeY, new Tile(TileType.Wood, true));
+                // CRITICAL FIX: Mark tree parts so they don't get background tiles
+                var newTile = new Tile(TileType.Wood, true);
+                newTile.IsPartOfTree = true;
+                SetTile(x, treeY, newTile);
                 tree.AddTile(x, treeY);
             }
 
@@ -221,7 +224,10 @@ namespace Claude4_5Terraria.World
                         var existingTile = GetTile(leafX, leafY);
                         if (existingTile == null || existingTile.Type != TileType.Wood)
                         {
-                            SetTile(leafX, leafY, new Tile(TileType.Leaves, true));
+                            // CRITICAL FIX: Mark leaves so they don't get background tiles
+                            var newTile = new Tile(TileType.Leaves, true);
+                            newTile.IsPartOfTree = true;
+                            SetTile(leafX, leafY, newTile);
                             tree.AddTile(leafX, leafY);
                         }
                     }
@@ -425,7 +431,7 @@ namespace Claude4_5Terraria.World
             return exploredTiles.Contains(new Point(x, y));
         }
 
-        public void Draw(SpriteBatch spriteBatch, Camera camera, Texture2D pixelTexture, LightingSystem lightingSystem, MiningSystem miningSystem)
+        public void Draw(SpriteBatch spriteBatch, Camera camera, Texture2D pixelTexture, LightingSystem lightingSystem, MiningSystem miningSystem, bool debugMode = false)
         {
             lightingSystem.UpdateTorchCache(camera.Position);
 
@@ -440,6 +446,13 @@ namespace Claude4_5Terraria.World
             {
                 for (int y = startTileY; y <= endTileY; y++)
                 {
+                    // CRITICAL FIX: Skip background rendering for tree tiles
+                    Tile currentTile = GetTile(x, y);
+                    if (currentTile != null && currentTile.IsPartOfTree)
+                    {
+                        continue; // Don't draw background behind trees
+                    }
+
                     // Check if there are solid blocks above (underground)
                     bool hasBlocksAbove = false;
                     for (int checkY = y - 1; checkY >= 0; checkY--)
@@ -555,6 +568,69 @@ namespace Claude4_5Terraria.World
                     }
 
 
+                    // NEW: Debug Mode highlighting for ores and chests
+                    if (debugMode && tile.IsActive)
+                    {
+                        Color highlightColor = Color.Transparent;
+                        bool shouldHighlight = false;
+
+                        // Highlight ores
+                        if (tile.Type == TileType.Coal)
+                        {
+                            highlightColor = new Color(255, 255, 255, 100); // White
+                            shouldHighlight = true;
+                        }
+                        else if (tile.Type == TileType.Copper)
+                        {
+                            highlightColor = new Color(255, 140, 0, 120); // Orange
+                            shouldHighlight = true;
+                        }
+                        else if (tile.Type == TileType.Iron)
+                        {
+                            highlightColor = new Color(169, 169, 169, 120); // Dark gray
+                            shouldHighlight = true;
+                        }
+                        else if (tile.Type == TileType.Silver)
+                        {
+                            highlightColor = new Color(192, 192, 192, 120); // Silver
+                            shouldHighlight = true;
+                        }
+                        else if (tile.Type == TileType.Gold)
+                        {
+                            highlightColor = new Color(255, 215, 0, 120); // Gold yellow
+                            shouldHighlight = true;
+                        }
+                        else if (tile.Type == TileType.Platinum)
+                        {
+                            highlightColor = new Color(144, 238, 144, 120); // Light green
+                            shouldHighlight = true;
+                        }
+                        // Highlight chests
+                        else if (tile.Type == TileType.WoodChest)
+                        {
+                            highlightColor = new Color(139, 69, 19, 150); // Brown
+                            shouldHighlight = true;
+                        }
+                        else if (tile.Type == TileType.SilverChest)
+                        {
+                            highlightColor = new Color(192, 192, 192, 150); // Silver
+                            shouldHighlight = true;
+                        }
+                        else if (tile.Type == TileType.MagicChest)
+                        {
+                            highlightColor = new Color(138, 43, 226, 150); // Purple
+                            shouldHighlight = true;
+                        }
+
+                        if (shouldHighlight)
+                        {
+                            Rectangle highlightRect = new Rectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                            spriteBatch.Draw(pixelTexture, highlightRect, highlightColor);
+                            // Draw a bright border for extra visibility
+                            DrawBorder(spriteBatch, pixelTexture, highlightRect, 2, new Color(highlightColor, 200));
+                        }
+                    }
+
                     // Draw mining overlay on top of tile
                     if (miningSystem != null && miningSystem.GetTargetedTile().HasValue)
                     {
@@ -621,7 +697,9 @@ namespace Claude4_5Terraria.World
                 case TileType.Dirt: return new Color(150, 75, 0);
                 case TileType.Stone: return new Color(128, 128, 128);
                 case TileType.Copper: return new Color(255, 140, 0);
+                case TileType.Iron: return new Color(169, 169, 169); // Dark gray
                 case TileType.Silver: return new Color(192, 192, 192);
+                case TileType.Gold: return new Color(255, 215, 0); // Gold yellow
                 case TileType.Platinum: return new Color(144, 238, 144);
                 case TileType.Wood: return new Color(101, 67, 33);
                 case TileType.Leaves: return new Color(34, 139, 34);
@@ -637,6 +715,11 @@ namespace Claude4_5Terraria.World
                 case TileType.Water: return new Color(30, 144, 255);
                 case TileType.Obsidian: return new Color(20, 20, 30);
                 case TileType.Bed: return new Color(200, 50, 50);
+                case TileType.Snow: return new Color(240, 248, 255); // White/light blue snow
+                case TileType.SnowGrass: return new Color(230, 240, 255); // Slightly bluish white
+                case TileType.Ice: return new Color(175, 238, 238); // Light cyan ice
+                case TileType.Icicle: return new Color(200, 230, 255); // Pale blue icicle
+                case TileType.SnowyLeaves: return new Color(220, 240, 245); // Frosty white-blue leaves
                 default: return Color.White;
             }
         }

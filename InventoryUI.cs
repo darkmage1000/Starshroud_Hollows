@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
+using System.Collections.Generic;
 
 namespace Claude4_5Terraria.UI
 {
@@ -26,7 +27,7 @@ namespace Claude4_5Terraria.UI
 
         private Texture2D pixelTexture;
         private SpriteFont font;
-        
+
         // Item sprites
         private System.Collections.Generic.Dictionary<ItemType, Texture2D> itemSprites;
 
@@ -58,7 +59,7 @@ namespace Claude4_5Terraria.UI
         }
 
         public bool IsInventoryOpen => isInventoryOpen;
-        
+
         public CraftingUI GetCraftingUI() => craftingUI;
 
         public void Initialize(Texture2D pixel, SpriteFont spriteFont)
@@ -66,7 +67,7 @@ namespace Claude4_5Terraria.UI
             pixelTexture = pixel;
             font = spriteFont;
         }
-        
+
         public void LoadItemSprite(ItemType itemType, Texture2D sprite)
         {
             itemSprites[itemType] = sprite;
@@ -215,7 +216,7 @@ namespace Claude4_5Terraria.UI
             };
 
             // Clear the source slot
-            slot.ItemType = ItemType.Dirt;
+            slot.ItemType = ItemType.None;
             slot.Count = 0;
         }
 
@@ -348,6 +349,17 @@ namespace Claude4_5Terraria.UI
                     sourceSlot.Count = 0;
                     return;
                 }
+            }
+        }
+
+        // NEW: Helper method to retrieve weapon stats
+        private (float Damage, float Recovery) GetWeaponStats(ItemType type)
+        {
+            switch (type)
+            {
+                case ItemType.WoodSword: return (2f, 0.5f); // 2 Damage, 0.5s Recovery
+                // Add future weapon stats here
+                default: return (0f, 0f);
             }
         }
 
@@ -490,7 +502,7 @@ namespace Claude4_5Terraria.UI
             {
                 Texture2D itemTexture = itemSprites[draggedItem.ItemType];
                 Rectangle sourceRect;
-                
+
                 // FIXED: Special handling for Runic Pickaxe (animated spritesheet)
                 if (draggedItem.ItemType == ItemType.RunicPickaxe)
                 {
@@ -504,7 +516,7 @@ namespace Claude4_5Terraria.UI
                     // Regular items use full texture
                     sourceRect = new Rectangle(0, 0, itemTexture.Width, itemTexture.Height);
                 }
-                
+
                 spriteBatch.Draw(itemTexture, iconRect, sourceRect, Color.White * 0.8f);
             }
             else
@@ -512,7 +524,7 @@ namespace Claude4_5Terraria.UI
                 Color itemColor = GetItemColor(draggedItem.ItemType);
                 spriteBatch.Draw(pixelTexture, iconRect, itemColor * 0.8f);
             }
-            
+
             DrawBorder(spriteBatch, iconRect, 2, Color.White);
 
             if (font != null && draggedItem.Count > 1)
@@ -533,7 +545,19 @@ namespace Claude4_5Terraria.UI
             if (slot == null || slot.IsEmpty()) return;
 
             string itemName = GetItemName(slot.ItemType);
-            string tooltipText = $"{itemName} x{slot.Count}";
+
+            // Start tooltip with Name and Count
+            string tooltipText = $"{itemName} x{slot.Count}\n";
+
+            // Add Weapon Stats if applicable
+            if (slot.ItemType == ItemType.WoodSword)
+            {
+                var stats = GetWeaponStats(slot.ItemType);
+                float totalCycleTime = stats.Recovery + 0.3f; // 0.3s is ATTACK_DURATION
+                tooltipText += $"Damage: {stats.Damage}\n";
+                tooltipText += $"Speed: {totalCycleTime:F1}s cycle (Slow)";
+            }
+            // else if (slot.ItemType == ItemType.CopperSword) { ... }
 
             Vector2 textSize = font.MeasureString(tooltipText);
             int tooltipX = mouseState.X + 15;
@@ -600,7 +624,7 @@ namespace Claude4_5Terraria.UI
             {
                 Texture2D itemTexture = itemSprites[slot.ItemType];
                 Rectangle sourceRect;
-                
+
                 // FIXED: Special handling for Runic Pickaxe (animated spritesheet)
                 if (slot.ItemType == ItemType.RunicPickaxe)
                 {
@@ -615,7 +639,7 @@ namespace Claude4_5Terraria.UI
                     // Regular items use full texture
                     sourceRect = new Rectangle(0, 0, itemTexture.Width, itemTexture.Height);
                 }
-                
+
                 spriteBatch.Draw(itemTexture, iconRect, sourceRect, Color.White);
             }
             else
@@ -623,7 +647,7 @@ namespace Claude4_5Terraria.UI
                 Color itemColor = GetItemColor(slot.ItemType);
                 spriteBatch.Draw(pixelTexture, iconRect, itemColor);
             }
-            
+
             DrawBorder(spriteBatch, iconRect, 1, Color.White * 0.5f);
 
             if (slot.Count > 1 && font != null)

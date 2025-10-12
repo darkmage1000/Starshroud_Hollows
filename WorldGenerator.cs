@@ -16,8 +16,15 @@ namespace Claude4_5Terraria.Systems
         private const int DIRT_LAYER_THICKNESS = 10;
         private const int CAVE_START_DEPTH = 230;
 
+        // Snow biome fields
+        private int snowBiomeStartX;
+        private int snowBiomeEndX;
+        private const int SNOW_BIOME_DEPTH = 2000;
+
         public Action<float, string> OnProgressUpdate;
         public int GetSeed() => seed;
+        public int GetSnowBiomeStartX() => snowBiomeStartX;
+        public int GetSnowBiomeEndX() => snowBiomeEndX;
 
         public WorldGenerator(Claude4_5Terraria.World.World world, int seed = 0, ChestSystem chestSystem = null)
         {
@@ -93,11 +100,14 @@ namespace Claude4_5Terraria.Systems
                 world.StabilizeLiquids(stabilizeStart, stabilizeEnd, OnProgressUpdate); // Pass range and callback
 
                 // Final steps
-                OnProgressUpdate?.Invoke(0.92f, "Planting trees...");
+                OnProgressUpdate?.Invoke(0.95f, "Planting trees...");
                 GenerateTrees();
 
-                OnProgressUpdate?.Invoke(0.95f, "Growing grass...");
+                OnProgressUpdate?.Invoke(0.97f, "Growing grass...");
                 GenerateGrass();
+
+                OnProgressUpdate?.Invoke(0.99f, "Generating snow biome...");
+                GenerateSnowBiome();
 
                 OnProgressUpdate?.Invoke(1.0f, "Complete!");
 
@@ -360,7 +370,9 @@ namespace Claude4_5Terraria.Systems
         {
             PlaceOreType(TileType.Coal, 46800, 210, 1900, 5, 9);
             PlaceOreType(TileType.Copper, 42900, 210, 1800, 5, 7);
+            PlaceOreType(TileType.Iron, 39000, 400, 1900, 5, 7);     // NEW: Iron after copper
             PlaceOreType(TileType.Silver, 23400, 1150, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);
+            PlaceOreType(TileType.Gold, 21000, 1400, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);  // NEW: Gold after silver
             PlaceOreType(TileType.Platinum, 19500, 1900, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);
         }
 
@@ -997,7 +1009,10 @@ namespace Claude4_5Terraria.Systems
             for (int y = 0; y < trunkHeight; y++)
             {
                 int treeY = baseY - 1 - y;
-                world.SetTile(baseX, treeY, new Claude4_5Terraria.World.Tile(TileType.Wood, true));
+                // CRITICAL FIX: Don't set background tiles for tree parts
+                var newTile = new Claude4_5Terraria.World.Tile(TileType.Wood, true);
+                newTile.IsPartOfTree = true; // Mark as tree so lighting system doesn't add background
+                world.SetTile(baseX, treeY, newTile);
                 tree.AddTile(baseX, treeY);
             }
             int canopyY = baseY - trunkHeight;
@@ -1013,7 +1028,10 @@ namespace Claude4_5Terraria.Systems
                         var existingTile = world.GetTile(leafX, leafY);
                         if (existingTile == null || !existingTile.IsActive || existingTile.Type != TileType.Wood)
                         {
-                            world.SetTile(leafX, leafY, new Claude4_5Terraria.World.Tile(TileType.Leaves, true));
+                            // CRITICAL FIX: Don't set background tiles for leaves
+                            var newTile = new Claude4_5Terraria.World.Tile(TileType.Leaves, true);
+                            newTile.IsPartOfTree = true; // Mark as tree so lighting system doesn't add background
+                            world.SetTile(leafX, leafY, newTile);
                             tree.AddTile(leafX, leafY);
                         }
                     }
@@ -1035,6 +1053,113 @@ namespace Claude4_5Terraria.Systems
                         world.SetTile(x, surfaceY, new Claude4_5Terraria.World.Tile(TileType.Grass));
                 }
             }
+        }
+
+        private void GenerateSnowBiome()
+        {
+            const int WORLD_CENTER = Claude4_5Terraria.World.World.WORLD_WIDTH / 2; // 3250
+            const int MIN_DISTANCE_FROM_CENTER = 250;
+            const int MAX_DISTANCE_FROM_CENTER = 450;
+
+            // Randomly choose left or right side
+            bool spawnLeft = random.Next(0, 2) == 0;
+
+            // Calculate distance from center (250-450 blocks)
+            int distanceFromCenter = random.Next(MIN_DISTANCE_FROM_CENTER, MAX_DISTANCE_FROM_CENTER + 1);
+
+            // Calculate width of snow biome (250-450 blocks)
+            int biomeWidth = random.Next(250, 451);
+
+            if (spawnLeft)
+            {
+                // Left side: center - distance - width to center - distance
+                snowBiomeEndX = WORLD_CENTER - distanceFromCenter;
+                snowBiomeStartX = snowBiomeEndX - biomeWidth;
+            }
+            else
+            {
+                // Right side: center + distance to center + distance + width
+                snowBiomeStartX = WORLD_CENTER + distanceFromCenter;
+                snowBiomeEndX = snowBiomeStartX + biomeWidth;
+            }
+
+            // Ensure boundaries stay within world
+            snowBiomeStartX = Math.Max(0, snowBiomeStartX);
+            snowBiomeEndX = Math.Min(Claude4_5Terraria.World.World.WORLD_WIDTH - 1, snowBiomeEndX);
+
+            Logger.Log($"[WORLDGEN] Generating snow biome from X={snowBiomeStartX} to X={snowBiomeEndX} (width: {snowBiomeEndX - snowBiomeStartX}, side: {(spawnLeft ? "LEFT" : "RIGHT")})");
+
+            int snowTilesConverted = 0;
+            int iciclesPlaced = 0;
+
+            // Apply snow transformation
+            for (int x = snowBiomeStartX; x <= snowBiomeEndX; x++)
+            {
+                for (int y = 0; y < SNOW_BIOME_DEPTH; y++)
+                {
+                    var tile = world.GetTile(x, y);
+                    if (tile != null && tile.IsActive)
+                    {
+                        // Convert tiles to snow variants
+                        switch (tile.Type)
+                        {
+                            case TileType.Grass:
+                                world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.SnowGrass));
+                                snowTilesConverted++;
+                                break;
+                            case TileType.Dirt:
+                                world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.Snow));
+                                snowTilesConverted++;
+                                break;
+                            case TileType.Leaves:
+                                world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.SnowyLeaves));
+                                snowTilesConverted++;
+                                break;
+                            case TileType.Water:
+                                // Freeze top layer of water to ice
+                                var tileAbove = world.GetTile(x, y - 1);
+                                // If air above, this is the top layer - freeze it
+                                if (tileAbove == null || !tileAbove.IsActive)
+                                {
+                                    world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.Ice));
+                                    snowTilesConverted++;
+                                }
+                                break;
+                        }
+
+                        // Place icicles on cave ceilings (10% chance)
+                        if (tile.Type == TileType.Stone && random.Next(0, 100) < 10)
+                        {
+                            // Check if there's air below
+                            var tileBelow = world.GetTile(x, y + 1);
+                            if (tileBelow != null && !tileBelow.IsActive)
+                            {
+                                // Check if there's 2-3 blocks of space below for icicle
+                                int icicleLength = random.Next(2, 4);
+                                bool hasSpace = true;
+                                for (int i = 1; i <= icicleLength; i++)
+                                {
+                                    var checkTile = world.GetTile(x, y + i);
+                                    if (checkTile == null || checkTile.IsActive)
+                                    {
+                                        hasSpace = false;
+                                        break;
+                                    }
+                                }
+
+                                if (hasSpace)
+                                {
+                                    // Place icicle
+                                    world.SetTile(x, y + 1, new Claude4_5Terraria.World.Tile(TileType.Icicle));
+                                    iciclesPlaced++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Logger.Log($"[WORLDGEN] Snow biome complete: {snowTilesConverted} tiles converted, {iciclesPlaced} icicles placed");
         }
 
         public Vector2 GetSpawnPosition(int playerPixelHeight)

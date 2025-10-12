@@ -7,7 +7,9 @@ namespace Claude4_5Terraria.Enums
         Grass,
         Stone,
         Copper,
+        Iron,          // NEW: Iron ore
         Silver,
+        Gold,          // NEW: Gold ore
         Platinum,
         Wood,
         Coal,
@@ -15,8 +17,11 @@ namespace Claude4_5Terraria.Enums
         // Resources
         Stick,
         CopperBar,
+        IronBar,       // NEW: Iron bar
         SilverBar,
+        GoldBar,       // NEW: Gold bar
         PlatinumBar,
+        Slime,         // NEW: Slime drop from Ooze enemies
 
         // Placeable
         Torch,
@@ -36,7 +41,9 @@ namespace Claude4_5Terraria.Enums
         WoodPickaxe,
         StonePickaxe,
         CopperPickaxe,
+        IronPickaxe,   // NEW: Iron pickaxe
         SilverPickaxe,
+        GoldPickaxe,   // NEW: Gold pickaxe
         PlatinumPickaxe,
         RunicPickaxe,  // Best pickaxe tier
         EmptyBucket,
@@ -44,7 +51,8 @@ namespace Claude4_5Terraria.Enums
         LavaBucket,
 
         // Weapons
-        WoodSword
+        WoodSword,
+        WoodWand // NEW: Wood Wand for Magic System
     }
 
     public static class ItemTypeExtensions
@@ -57,7 +65,9 @@ namespace Claude4_5Terraria.Enums
                 case ItemType.Grass: return TileType.Grass;
                 case ItemType.Stone: return TileType.Stone;
                 case ItemType.Copper: return TileType.Copper;
+                case ItemType.Iron: return TileType.Iron;
                 case ItemType.Silver: return TileType.Silver;
+                case ItemType.Gold: return TileType.Gold;
                 case ItemType.Platinum: return TileType.Platinum;
                 case ItemType.Wood: return TileType.Wood;
                 case ItemType.Coal: return TileType.Coal;
@@ -80,7 +90,9 @@ namespace Claude4_5Terraria.Enums
                 case TileType.Grass: return ItemType.Grass;
                 case TileType.Stone: return ItemType.Stone;
                 case TileType.Copper: return ItemType.Copper;
+                case TileType.Iron: return ItemType.Iron;
                 case TileType.Silver: return ItemType.Silver;
+                case TileType.Gold: return ItemType.Gold;
                 case TileType.Platinum: return ItemType.Platinum;
                 case TileType.Wood: return ItemType.Wood;
                 case TileType.Coal: return ItemType.Coal;
@@ -112,7 +124,7 @@ namespace Claude4_5Terraria.Enums
                 case ItemType.Bed:
                     return true;
                 default:
-                    return false;
+                    return false; // WoodWand is not placeable and is caught here
             }
         }
     }

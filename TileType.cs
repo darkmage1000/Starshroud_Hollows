@@ -7,7 +7,9 @@ namespace Claude4_5Terraria.Enums
         Grass,
         Stone,
         Copper,
+        Iron,      // NEW: Iron ore block
         Silver,
+        Gold,      // NEW: Gold ore block
         Platinum,
         Wood,
         Leaves,
@@ -22,6 +24,11 @@ namespace Claude4_5Terraria.Enums
         Lava,
         Water,
         Obsidian,
-        Bed
+        Bed,
+        Snow,
+        SnowGrass,
+        Ice,
+        Icicle,
+        SnowyLeaves
     }
 }

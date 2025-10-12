@@ -89,9 +89,17 @@ namespace Claude4_5Terraria.Systems
             copperBar.AddIngredient(ItemType.Copper, 3);
             recipes.Add(copperBar);
 
+            Recipe ironBar = new Recipe(ItemType.IronBar, 1, requiresWoodBench: true);
+            ironBar.AddIngredient(ItemType.Iron, 3);
+            recipes.Add(ironBar);
+
             Recipe silverBar = new Recipe(ItemType.SilverBar, 1, requiresWoodBench: true);
             silverBar.AddIngredient(ItemType.Silver, 4);
             recipes.Add(silverBar);
+
+            Recipe goldBar = new Recipe(ItemType.GoldBar, 1, requiresWoodBench: true);
+            goldBar.AddIngredient(ItemType.Gold, 4);
+            recipes.Add(goldBar);
 
             Recipe platinumBar = new Recipe(ItemType.PlatinumBar, 1, requiresWoodBench: true);
             platinumBar.AddIngredient(ItemType.Platinum, 5);
@@ -109,10 +117,20 @@ namespace Claude4_5Terraria.Systems
             copperPickaxe.AddIngredient(ItemType.Stick, 4);
             recipes.Add(copperPickaxe);
 
+            Recipe ironPickaxe = new Recipe(ItemType.IronPickaxe, 1, requiresCopperBench: true);
+            ironPickaxe.AddIngredient(ItemType.IronBar, 12);
+            ironPickaxe.AddIngredient(ItemType.Stick, 4);
+            recipes.Add(ironPickaxe);
+
             Recipe silverPickaxe = new Recipe(ItemType.SilverPickaxe, 1, requiresCopperBench: true);
             silverPickaxe.AddIngredient(ItemType.SilverBar, 12);
             silverPickaxe.AddIngredient(ItemType.Stick, 4);
             recipes.Add(silverPickaxe);
+
+            Recipe goldPickaxe = new Recipe(ItemType.GoldPickaxe, 1, requiresCopperBench: true);
+            goldPickaxe.AddIngredient(ItemType.GoldBar, 12);
+            goldPickaxe.AddIngredient(ItemType.Stick, 4);
+            recipes.Add(goldPickaxe);
 
             Recipe platinumPickaxe = new Recipe(ItemType.PlatinumPickaxe, 1, requiresCopperBench: true);
             platinumPickaxe.AddIngredient(ItemType.PlatinumBar, 12);

@@ -25,6 +25,7 @@ namespace Claude4_5Terraria
         private Claude4_5Terraria.Player.Player player;
         private Camera camera;
         private Texture2D pixelTexture;
+        private Texture2D oozeEnemyTexture; // NEW: Ooze enemy sprite
         private SpriteFont font;
         private Texture2D menuBackgroundTexture;
 
@@ -35,6 +36,13 @@ namespace Claude4_5Terraria
         private WorldGenerator worldGenerator;
         private ChestSystem chestSystem;
         private LiquidSystem liquidSystem; // NEW: Liquid System Field
+        private CombatSystem combatSystem; // NEW: Combat System Field
+        private EnemySpawner enemySpawner; // NEW: Enemy Spawner Field
+
+        // NEW: Magic System Fields
+        private MagicSystem magicSystem;
+        private ProjectileSystem projectileSystem;
+        private Texture2D wandTexture;
 
         private InventoryUI inventoryUI;
         private PauseMenu pauseMenu;
@@ -73,6 +81,13 @@ namespace Claude4_5Terraria
         private const float RAIN_OFFSET_Y = 100f;
         // ------------------------------------------
 
+        // --- NEW SNOW SYSTEM FIELDS ---
+        private List<Vector2> snowParticles;
+        private const int MAX_SNOW_FLAKES = 1500;
+        private const float SNOW_SPEED = 200f;
+        private const float SNOW_DRIFT = 50f; // Horizontal drift
+        // -------------------------------
+
         // --- NEW SOUND EFFECT FIELDS ---
         private SoundEffect mineDirtSound;
         private SoundEffect mineStoneSound;
@@ -83,8 +98,10 @@ namespace Claude4_5Terraria
         // --- NEW: Bed and Sleep fields ---
         private bool isSleeping = false;
         private float sleepProgress = 0f;
-        private const float SLEEP_DURATION = 5.0f; // 5 seconds to sleep
+        private const float SLEEP_DURATION = 5.0f; // 5 seconds to sleep once started
         private Point? currentBedPosition = null;
+        private float bedHoldTime = 0f; // Track how long right-click has been held on bed
+        private const float BED_HOLD_REQUIRED = 3.0f; // Must hold for 3 seconds to start sleeping
         // ---------------------------------
 
 
@@ -101,6 +118,7 @@ namespace Claude4_5Terraria
 
             random = new Random();
             rainParticles = new List<Vector2>();
+            snowParticles = new List<Vector2>();
         }
 
         protected override void Initialize()
@@ -126,6 +144,32 @@ namespace Claude4_5Terraria
 
             pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
             pixelTexture.SetData(new[] { Color.White });
+
+            // NEW: Load enemy sprite
+            try
+            {
+                oozeEnemyTexture = Content.Load<Texture2D>("OozeEnemy");
+                Logger.Log("[GAME] Loaded OozeEnemy sprite successfully");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GAME] Could not load OozeEnemy sprite: {ex.Message}");
+                // DEBUG FIX: Fallback to a large, guaranteed visible color texture (not pixelTexture)
+                oozeEnemyTexture = pixelTexture;
+            }
+
+            // NEW: Load Wand sprite
+            try
+            {
+                wandTexture = Content.Load<Texture2D>("wand");
+                Logger.Log("[GAME] Loaded Wand sprite successfully");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GAME] Could not load Wand sprite: {ex.Message}");
+                wandTexture = pixelTexture;
+            }
+
 
             font = Content.Load<SpriteFont>("Font");
             menuBackgroundTexture = Content.Load<Texture2D>("MenuBackground");
@@ -265,11 +309,86 @@ namespace Claude4_5Terraria
             }
         }
 
+        private void UpdateSnowParticles(float deltaTime, int screenWidth, int screenHeight)
+        {
+            // Check if player is in snow biome
+            if (player == null || worldGenerator == null) return;
+
+            Vector2 playerCenter = player.GetCenterPosition();
+            int playerTileX = (int)(playerCenter.X / World.World.TILE_SIZE);
+
+            // Get snow biome bounds from world generator
+            int snowStartX = worldGenerator.GetSnowBiomeStartX();
+            int snowEndX = worldGenerator.GetSnowBiomeEndX();
+
+            bool inSnowBiome = playerTileX >= snowStartX && playerTileX <= snowEndX;
+
+            if (inSnowBiome)
+            {
+                // Add new snow particles up to MAX_SNOW_FLAKES
+                while (snowParticles.Count < MAX_SNOW_FLAKES)
+                {
+                    float spawnX = (float)random.NextDouble() * (screenWidth + (int)RAIN_OFFSET_X * 2) - RAIN_OFFSET_X;
+                    float spawnY = (float)random.NextDouble() * (screenHeight + (int)RAIN_OFFSET_Y * 2) - RAIN_OFFSET_Y;
+                    snowParticles.Add(new Vector2(spawnX, spawnY));
+                }
+
+                // Update particle positions (slower fall, gentle drift) - FIXED: Use screen coordinates
+                for (int i = snowParticles.Count - 1; i >= 0; i--)
+                {
+                    Vector2 p = snowParticles[i];
+                    p.Y += SNOW_SPEED * deltaTime;
+                    p.X += (float)Math.Sin(p.Y * 0.01f) * SNOW_DRIFT * deltaTime; // Gentle side-to-side drift
+
+                    // FIXED: Check bounds for respawn (no collision check - snow falls through everything in screen space)
+                    if (p.Y > screenHeight + RAIN_OFFSET_Y || p.X < -RAIN_OFFSET_X || p.X > screenWidth + RAIN_OFFSET_X)
+                    {
+                        // Fell off screen: respawn at top
+                        p.Y = -RAIN_OFFSET_Y;
+                        p.X = (float)random.NextDouble() * (screenWidth + (int)RAIN_OFFSET_X * 2) - RAIN_OFFSET_X;
+                    }
+
+                    snowParticles[i] = p;
+                }
+            }
+            else
+            {
+                // Not in snow biome - clear particles
+                if (snowParticles.Count > 0)
+                {
+                    snowParticles.Clear();
+                }
+            }
+        }
+
 
         protected override void Update(GameTime gameTime)
         {
             KeyboardState keyboardState = Keyboard.GetState();
             MouseState mouseState = Mouse.GetState();
+
+            // --- CRITICAL STATE MANAGEMENT FIX ---
+            // This block forces the game state to 'Playing' immediately after world generation finishes.
+            if (startMenu.GetState() == MenuState.Loading)
+            {
+                if (worldGenerated)
+                {
+                    // FORCE the game state to Playing immediately after world generation is flagged complete
+                    startMenu.SetState(MenuState.Playing);
+                    Logger.Log("[GAME] DEBUG: Forced state transition to Playing.");
+                }
+
+                // If still loading (or just finished loading), skip to base.Update
+                if (startMenu.GetState() != MenuState.Playing)
+                {
+                    previousKeyboardState = keyboardState;
+                    previousMouseState = mouseState;
+                    base.Update(gameTime);
+                    return;
+                }
+            }
+            // --- END CRITICAL FIX ---
+
 
             if (startMenu.GetState() == MenuState.MainMenu ||
                 startMenu.GetState() == MenuState.Options ||
@@ -291,23 +410,19 @@ namespace Claude4_5Terraria
                 return;
             }
 
-            if (startMenu.GetState() == MenuState.Loading)
-            {
-                if (worldGenerated)
-                {
-                    startMenu.SetState(MenuState.Playing);
-                }
+            float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
+            // CRITICAL CHECK FIX: Ensure all required core systems are initialized before proceeding.
+            if (timeSystem == null || player == null || world == null || miningSystem == null || inventory == null)
+            {
                 previousKeyboardState = keyboardState;
                 previousMouseState = mouseState;
                 base.Update(gameTime);
                 return;
             }
 
-            float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
-
             // SINGLE DECLARATION OF playerCenter for the entire remaining scope
-            Vector2 playerCenter = player != null ? player.GetCenterPosition() : Vector2.Zero;
+            Vector2 playerCenter = player.GetCenterPosition();
 
             // Update chest UI if open (HIGHEST PRIORITY)
             if (chestUI != null && chestUI.IsOpen)
@@ -372,15 +487,6 @@ namespace Claude4_5Terraria
                 return;
             }
 
-            // Check if game objects still exist (not quit to menu)
-            if (timeSystem == null || player == null || world == null)
-            {
-                previousKeyboardState = keyboardState;
-                previousMouseState = mouseState;
-                base.Update(gameTime);
-                return;
-            }
-
             // --- NEW: Handle Sleeping Logic (Before TimeSystem update) ---
             if (isSleeping)
             {
@@ -428,6 +534,9 @@ namespace Claude4_5Terraria
             timeSystem.Update(deltaTime);
 
             UpdateRainParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+
+            // Update snow particles (always snowing in snow biome)
+            UpdateSnowParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
 
             // NEW: Liquid System Update
             liquidSystem.UpdateFlow();
@@ -501,15 +610,21 @@ namespace Claude4_5Terraria
             }
 
 
-            // NEW: Handle right-click to open chests, use Recall Potion, or use bed
+            // Get world position from mouse for bed/chest interactions
+            Vector2 worldPos = camera.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
+            int tileX = (int)(worldPos.X / World.World.TILE_SIZE);
+            int tileY = (int)(worldPos.Y / World.World.TILE_SIZE);
+
+            // FIX for NullReferenceException: Ensure world is not null before accessing its methods
+            Tile clickedTile = null;
+            if (world != null)
+            {
+                clickedTile = world.GetTile(tileX, tileY);
+            }
+
+            // NEW: Handle right-click to open chests, use Recall Potion, or set bed spawn
             if (mouseState.RightButton == ButtonState.Pressed && previousMouseState.RightButton == ButtonState.Released)
             {
-                // Get world position from mouse
-                Vector2 worldPos = camera.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
-                int tileX = (int)(worldPos.X / World.World.TILE_SIZE);
-                int tileY = (int)(worldPos.Y / World.World.TILE_SIZE);
-                var clickedTile = world.GetTile(tileX, tileY);
-
                 // Check if player is using Recall Potion from hotbar
                 var selectedSlot = miningSystem.GetSelectedHotbarSlot();
                 var slot = inventory.GetSlot(selectedSlot);
@@ -531,29 +646,16 @@ namespace Claude4_5Terraria
                 {
                     HandleBucketUse(tileX, tileY, clickedTile, slot);
                 }
-                // Check if clicking on a bed (UPDATED logic)
+                // Check if clicking on a bed - SET SPAWN ONLY (don't start sleep yet)
                 else if (clickedTile != null && clickedTile.Type == TileType.Bed)
                 {
                     Point bedTilePos = new Point(tileX, tileY);
-                    Point playerTilePos = new Point((int)(playerCenter.X / World.World.TILE_SIZE), (int)(playerCenter.Y / World.World.TILE_SIZE));
-
-                    // 1. Set bed as spawn point
                     Vector2 bedSpawnPos = new Vector2(
                         bedTilePos.X * World.World.TILE_SIZE,
                         (bedTilePos.Y - 2) * World.World.TILE_SIZE
                     );
                     player.SetBedSpawn(bedSpawnPos);
-
-                    // 2. Check if player is near/on the bed's tile to start sleeping
-                    if (playerTilePos.X >= bedTilePos.X - 1 && playerTilePos.X <= bedTilePos.X + 1 &&
-                        playerTilePos.Y >= bedTilePos.Y - 2 && playerTilePos.Y <= bedTilePos.Y)
-                    {
-                        // 3. Start sleeping
-                        isSleeping = true;
-                        currentBedPosition = bedTilePos;
-                        sleepProgress = 0f;
-                        Logger.Log("[GAME] Starting to sleep in bed.");
-                    }
+                    // Don't start sleeping yet - need to hold the button
                 }
                 // Check if clicking on a chest
                 else if (clickedTile != null && (clickedTile.Type == TileType.WoodChest ||
@@ -562,6 +664,40 @@ namespace Claude4_5Terraria
                 {
                     HandleChestInteraction(mouseState);
                 }
+            }
+
+            // NEW: Handle HOLDING right-click on bed to sleep (must hold for 1.5+ seconds)
+            if (mouseState.RightButton == ButtonState.Pressed && clickedTile != null && clickedTile.Type == TileType.Bed)
+            {
+                Point bedTilePos = new Point(tileX, tileY);
+                Point playerTilePos = new Point((int)(playerCenter.X / World.World.TILE_SIZE), (int)(playerCenter.Y / World.World.TILE_SIZE));
+
+                // Check if player is near/on the bed's tile
+                if (playerTilePos.X >= bedTilePos.X - 1 && playerTilePos.X <= bedTilePos.X + 1 &&
+                    playerTilePos.Y >= bedTilePos.Y - 2 && playerTilePos.Y <= bedTilePos.Y)
+                {
+                    // Accumulate hold time
+                    bedHoldTime += deltaTime;
+
+                    // Start sleeping only after holding for BED_HOLD_REQUIRED seconds
+                    if (bedHoldTime >= BED_HOLD_REQUIRED && !isSleeping)
+                    {
+                        isSleeping = true;
+                        currentBedPosition = bedTilePos;
+                        sleepProgress = 0f;
+                        Logger.Log($"[GAME] Starting to sleep in bed (held right-click for {bedHoldTime:F1}s).");
+                    }
+                }
+                else
+                {
+                    // Player moved away - reset hold time
+                    bedHoldTime = 0f;
+                }
+            }
+            else
+            {
+                // Released right-click or not on bed - reset hold time
+                bedHoldTime = 0f;
             }
 
             world.UpdateLoadedChunks(camera);
@@ -578,6 +714,62 @@ namespace Claude4_5Terraria
                 isAutoMiningActive,
                 lastPlayerDirection
             );
+
+            // NEW: Update combat system
+            if (combatSystem != null)
+            {
+                // Get current held item
+                var selectedSlot = miningSystem.GetSelectedHotbarSlot();
+                var slot = inventory.GetSlot(selectedSlot);
+                ItemType heldItem = slot != null ? slot.ItemType : ItemType.None;
+
+                // Only allow sword attacks when holding a sword
+                if (heldItem == ItemType.WoodSword)
+                {
+                    combatSystem.Update(deltaTime, player.Position, player.GetFacingRight(), mouseState, previousMouseState);
+                }
+            }
+
+            // NEW: Update Magic System and Projectiles
+            if (magicSystem != null && projectileSystem != null)
+            {
+                var selectedSlot = miningSystem.GetSelectedHotbarSlot();
+                var slot = inventory.GetSlot(selectedSlot);
+                ItemType heldItem = slot != null ? slot.ItemType : ItemType.None;
+
+                // Update Magic System (handles mana regen and cast input if wand is held)
+                magicSystem.Update(deltaTime, mouseState, previousMouseState, heldItem);
+
+                // Update Projectile System (moves, checks collisions)
+                projectileSystem.Update(deltaTime, enemySpawner.GetActiveEnemies());
+            }
+
+            // NEW: Update enemy spawner and handle combat/collisions
+            if (enemySpawner != null)
+            {
+                Logger.Log($"[UPDATE] EnemySpawner is updating.");
+                Rectangle cameraView = camera.GetVisibleArea(World.World.TILE_SIZE);
+                enemySpawner.Update(deltaTime, playerCenter, timeSystem, cameraView);
+
+                // CRITICAL NULL CHECK: Ensure combat system exists before calling its methods
+                if (combatSystem != null)
+                {
+                    // Check combat collisions (sword hitting enemies)
+                    var selectedSlot = miningSystem.GetSelectedHotbarSlot();
+                    var slot = inventory.GetSlot(selectedSlot);
+                    ItemType heldWeapon = slot != null ? slot.ItemType : ItemType.None;
+                    enemySpawner.CheckCombatCollisions(combatSystem, player.Position,
+                        Claude4_5Terraria.Player.Player.PLAYER_WIDTH,
+                        Claude4_5Terraria.Player.Player.PLAYER_HEIGHT,
+                        heldWeapon, inventory);
+                }
+
+                // Check player collisions (enemies touching player)
+                enemySpawner.CheckPlayerCollisions(player.Position,
+                    Claude4_5Terraria.Player.Player.PLAYER_WIDTH,
+                    Claude4_5Terraria.Player.Player.PLAYER_HEIGHT,
+                    player);
+            }
 
             if (hud != null)
             {
@@ -716,7 +908,9 @@ namespace Claude4_5Terraria
                 { "stone", Enums.TileType.Stone },
                 { "coalblock", Enums.TileType.Coal },
                 { "copperblock", Enums.TileType.Copper },
+                { "ironblock", Enums.TileType.Iron },
                 { "silverblock", Enums.TileType.Silver },
+                { "goldblock", Enums.TileType.Gold },
                 { "platinumblock", Enums.TileType.Platinum },
                 { "torch", Enums.TileType.Torch },
                 { "saplingplanteddirt", Enums.TileType.Sapling },
@@ -748,7 +942,9 @@ namespace Claude4_5Terraria
                 { "woodpickaxe", Enums.ItemType.WoodPickaxe },
                 { "stonepickaxe", Enums.ItemType.StonePickaxe },
                 { "copperpickaxe", Enums.ItemType.CopperPickaxe },
+                { "ironpickaxe", Enums.ItemType.IronPickaxe },
                 { "silverpickaxe", Enums.ItemType.SilverPickaxe },
+                { "goldpickaxe", Enums.ItemType.GoldPickaxe },
                 { "platinumpickaxe", Enums.ItemType.PlatinumPickaxe },
                 { "runicpickaxe", Enums.ItemType.RunicPickaxe },
                 { "woodcraftingtable", Enums.ItemType.WoodCraftingBench },
@@ -757,18 +953,24 @@ namespace Claude4_5Terraria
                 { "silverchest", Enums.ItemType.SilverChest },
                 { "magicchest", Enums.ItemType.MagicChest },
                 { "copperore", Enums.ItemType.Copper },
+                { "ironore", Enums.ItemType.Iron },
                 { "silverore", Enums.ItemType.Silver },
+                { "goldore", Enums.ItemType.Gold },
                 { "platinumore", Enums.ItemType.Platinum },
                 { "coal", Enums.ItemType.Coal },
                 { "copperbar", Enums.ItemType.CopperBar },
+                { "ironbar", Enums.ItemType.IronBar },
                 { "silverbar", Enums.ItemType.SilverBar },
+                { "goldbar", Enums.ItemType.GoldBar },
                 { "platinumbar", Enums.ItemType.PlatinumBar },
                 { "torch", Enums.ItemType.Torch },
                 { "acorn", Enums.ItemType.Acorn },
                 { "stick", Enums.ItemType.Stick },
                 { "dirt", Enums.ItemType.Dirt },
                 { "stone", Enums.ItemType.Stone },
-                { "grass", Enums.ItemType.Grass }
+                { "grass", Enums.ItemType.Grass },
+                { "woodsword", Enums.ItemType.WoodSword },
+                { "wand", Enums.ItemType.WoodWand } // NEW WAND ITEM SPRITE
             };
 
             foreach (var sprite in spriteMap)
@@ -793,7 +995,9 @@ namespace Claude4_5Terraria
                 { "woodpickaxe", Enums.ItemType.WoodPickaxe },
                 { "stonepickaxe", Enums.ItemType.StonePickaxe },
                 { "copperpickaxe", Enums.ItemType.CopperPickaxe },
+                { "ironpickaxe", Enums.ItemType.IronPickaxe },
                 { "silverpickaxe", Enums.ItemType.SilverPickaxe },
+                { "goldpickaxe", Enums.ItemType.GoldPickaxe },
                 { "platinumpickaxe", Enums.ItemType.PlatinumPickaxe },
                 { "runicpickaxe", Enums.ItemType.RunicPickaxe },
                 { "woodcraftingtable", Enums.ItemType.WoodCraftingBench },
@@ -802,11 +1006,15 @@ namespace Claude4_5Terraria
                 { "silverchest", Enums.ItemType.SilverChest },
                 { "magicchest", Enums.ItemType.MagicChest },
                 { "copperore", Enums.ItemType.Copper },
+                { "ironore", Enums.ItemType.Iron },
                 { "silverore", Enums.ItemType.Silver },
+                { "goldore", Enums.ItemType.Gold },
                 { "platinumore", Enums.ItemType.Platinum },
                 { "coal", Enums.ItemType.Coal },
                 { "copperbar", Enums.ItemType.CopperBar },
+                { "ironbar", Enums.ItemType.IronBar },
                 { "silverbar", Enums.ItemType.SilverBar },
+                { "goldbar", Enums.ItemType.GoldBar },
                 { "platinumbar", Enums.ItemType.PlatinumBar },
                 { "torch", Enums.ItemType.Torch },
                 { "acorn", Enums.ItemType.Acorn },
@@ -968,7 +1176,8 @@ namespace Claude4_5Terraria
             currentWorldSeed = data.WorldSeed;
             totalPlayTime = data.PlayTimeSeconds;
             hud = new HUD();
-            hud.Initialize(GraphicsDevice);
+            // FIX: HUD.Initialize now requires SpriteFont
+            hud.Initialize(GraphicsDevice, font);
             world = new World.World(hud);
             timeSystem = new TimeSystem();
             timeSystem.SetCurrentTime(data.GameTime);
@@ -986,9 +1195,15 @@ namespace Claude4_5Terraria
             world.EnableTileChangeTracking();
             player = new Claude4_5Terraria.Player.Player(world, data.PlayerPosition);
             world.SetPlayer(player); // Set player reference for World/HUD/Bed logic
+
+            // Enable debug mode if toggled in start menu
+            if (startMenu.IsDebugModeEnabled)
+            {
+                player.SetDebugMode(true);
+            }
             // FIX: World now needs LiquidSystem reference for SetTile/TriggerLiquidSpreadCheck
             world.SetLiquidSystem(liquidSystem);
-            
+
             // CRITICAL FIX: Clear all generated liquids before applying save changes
             // This prevents duplication of water from world generation
             Logger.Log("[GAME] Clearing generated liquids before applying save...");
@@ -1004,14 +1219,14 @@ namespace Claude4_5Terraria
                     }
                 }
             }
-            
+
             world.ApplyTileChanges(data.TileChanges);
             chestSystem.LoadFromData(data.Chests);
             Logger.Log($"[GAME] Loaded {chestSystem.GetChestCount()} chests from save");
-            
+
             // NEW: Activate all loaded liquid tiles for flow simulation
             liquidSystem.ActivateAllLiquids();
-            
+
             world.DisableWorldUpdates();
             camera = new Camera(GraphicsDevice.Viewport);
             camera.Position = player.Position;
@@ -1031,6 +1246,14 @@ namespace Claude4_5Terraria
             miningSystem.OnChestMined += HandleChestMined;
             miningSystem.OnChestPlaced += HandleChestPlaced;
 
+            combatSystem = new CombatSystem(); // NEW: Initialize combat system
+            enemySpawner = new EnemySpawner(world); // NEW: Initialize enemy spawner
+
+            // NEW: Initialize Projectile and Magic Systems
+            projectileSystem = new ProjectileSystem(world);
+            // FIX: Pass world and camera to MagicSystem constructor
+            magicSystem = new MagicSystem(player, projectileSystem, world, camera);
+
             inventoryUI = new InventoryUI(inventory, miningSystem);
             inventoryUI.Initialize(pixelTexture, font);
             LoadItemSprites(inventoryUI);
@@ -1042,7 +1265,7 @@ namespace Claude4_5Terraria
                                       ToggleAutoMining, isAutoMiningActive,
                                       SetGameSoundsVolume, gameSoundsVolume);
             saveMenu = new SaveMenu(SaveGame);
-            miningOverlay = new MiningOverlay(world, miningSystem);
+            miningOverlay = new MiningOverlay(world, miningSystem, chestSystem);
             worldGenerated = true;
             Logger.Log("[GAME] Game loaded successfully");
         }
@@ -1072,7 +1295,8 @@ namespace Claude4_5Terraria
             }
 
             hud = new HUD();
-            hud.Initialize(GraphicsDevice);
+            // FIX: HUD.Initialize now requires SpriteFont
+            hud.Initialize(GraphicsDevice, font);
             currentWorldSeed = System.Environment.TickCount;
             totalPlayTime = 0f;
             world = new World.World(hud);
@@ -1092,15 +1316,36 @@ namespace Claude4_5Terraria
             Vector2 spawnPosition = worldGenerator.GetSpawnPosition(64);
             player = new Claude4_5Terraria.Player.Player(world, spawnPosition);
             world.SetPlayer(player); // Set player reference for World/HUD/Bed logic
+
+            // Enable debug mode if toggled in start menu
+            if (startMenu.IsDebugModeEnabled)
+            {
+                player.SetDebugMode(true);
+            }
             // FIX: World now needs LiquidSystem reference for SetTile/TriggerLocalFlow
             world.SetLiquidSystem(liquidSystem);
             camera = new Camera(GraphicsDevice.Viewport);
             camera.Position = player.Position;
             inventory = new Inventory();
+
+            // NEW: Give player starting items including Wood Sword and Wand
+            inventory.AddItem(ItemType.WoodSword, 1);
+            Logger.Log("[GAME] Added Wood Sword to starting inventory");
+            inventory.AddItem(ItemType.WoodWand, 1);
+            Logger.Log("[GAME] Added Wood Wand to starting inventory");
+
             miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume);
 
             miningSystem.OnChestMined += HandleChestMined;
             miningSystem.OnChestPlaced += HandleChestPlaced;
+
+            combatSystem = new CombatSystem(); // NEW: Initialize combat system
+            enemySpawner = new EnemySpawner(world); // NEW: Initialize enemy spawner
+
+            // NEW: Initialize Projectile and Magic Systems
+            projectileSystem = new ProjectileSystem(world);
+            // FIX: Pass world and camera to MagicSystem constructor
+            magicSystem = new MagicSystem(player, projectileSystem, world, camera);
 
             inventoryUI = new InventoryUI(inventory, miningSystem);
             inventoryUI.Initialize(pixelTexture, font);
@@ -1113,7 +1358,7 @@ namespace Claude4_5Terraria
                                       ToggleAutoMining, isAutoMiningActive,
                                       SetGameSoundsVolume, gameSoundsVolume);
             saveMenu = new SaveMenu(SaveGame);
-            miningOverlay = new MiningOverlay(world, miningSystem);
+            miningOverlay = new MiningOverlay(world, miningSystem, chestSystem);
             worldGenerated = true;
             Logger.Log($"[GAME] World generated with {chestSystem.GetChestCount()} chests");
         }
@@ -1140,7 +1385,7 @@ namespace Claude4_5Terraria
 
             spriteBatch.End();
 
-            Color skyColor = timeSystem.GetSkyColor();
+            Color skyColor = timeSystem != null ? timeSystem.GetSkyColor() : Color.Black;
             GraphicsDevice.Clear(skyColor);
 
             Matrix transformMatrix = camera.GetTransformMatrix();
@@ -1152,10 +1397,29 @@ namespace Claude4_5Terraria
                 transformMatrix: transformMatrix
             );
 
-            // FIX: World.Draw signature is now correct
-            world.Draw(spriteBatch, camera, pixelTexture, lightingSystem, miningSystem);
+            // FIX: World.Draw signature is now correct - pass debug mode status
+            bool playerDebugMode = player != null && player.IsDebugModeActive();
+            world.Draw(spriteBatch, camera, pixelTexture, lightingSystem, miningSystem, playerDebugMode);
 
             miningSystem.DrawItems(spriteBatch, pixelTexture);
+
+            // NEW: Draw projectiles (before enemies/player)
+            if (projectileSystem != null)
+            {
+                projectileSystem.Draw(spriteBatch, pixelTexture);
+            }
+
+            // NEW: Draw enemies
+            if (enemySpawner != null)
+            {
+                // DEBUG: Force a very visible draw if the texture failed
+                if (oozeEnemyTexture == pixelTexture)
+                {
+                    Logger.Log("[DRAW] WARNING: Ooze texture failed to load! Drawing as large red block.");
+                }
+
+                enemySpawner.DrawEnemies(spriteBatch, oozeEnemyTexture, pixelTexture);
+            }
 
             // 1. Determine currently held item
             ItemType heldItemType = inventory.GetSlot(miningSystem.GetSelectedHotbarSlot())?.ItemType ?? ItemType.None;
@@ -1165,13 +1429,22 @@ namespace Claude4_5Terraria
                 itemTextureMap.TryGetValue(heldItemType, out heldItemTexture);
             }
 
-            // 2. Pass data to Player Draw method
+            // 2. Determine animation frame (mining or combat)
+            int animationFrame = miningSystem.CurrentAnimationFrame;
+
+            // If holding a sword and attacking, use combat animation instead
+            if (heldItemType == ItemType.WoodSword && combatSystem != null && combatSystem.IsAttacking())
+            {
+                animationFrame = combatSystem.CurrentAnimationFrame;
+            }
+
+            // 3. Pass data to Player Draw method
             player.Draw(
                 spriteBatch,
                 pixelTexture,
                 heldItemType,
                 heldItemTexture,
-                miningSystem.CurrentAnimationFrame
+                animationFrame
             );
 
             // 3. Handle Torch Lighting and Lava Bucket Lighting
@@ -1198,6 +1471,10 @@ namespace Claude4_5Terraria
                 samplerState: SamplerState.PointClamp
             );
 
+            // Draw chest tooltip (in screen space, after world rendering)
+            MouseState currentMouseState = Mouse.GetState();
+            miningOverlay.DrawChestTooltip(spriteBatch, pixelTexture, font, camera, new Vector2(currentMouseState.X, currentMouseState.Y));
+
             // --- NEW: Draw Rain Particles ---
             if (timeSystem.IsRaining)
             {
@@ -1206,6 +1483,18 @@ namespace Claude4_5Terraria
                 {
                     // Draw a longer thin line (1x8 pixel rain drop for faster movement)
                     spriteBatch.Draw(pixelTexture, p, null, rainColor, 0f, Vector2.Zero, new Vector2(1f, 8f), SpriteEffects.None, 0f);
+                }
+            }
+            // --- END NEW ---
+
+            // --- NEW: Draw Snow Particles ---
+            if (snowParticles.Count > 0)
+            {
+                Color snowColor = new Color(255, 255, 255, 200); // White, semi-transparent
+                foreach (Vector2 p in snowParticles)
+                {
+                    // Draw snowflakes as small 3x3 pixel squares
+                    spriteBatch.Draw(pixelTexture, p, null, snowColor, 0f, Vector2.Zero, new Vector2(3f, 3f), SpriteEffects.None, 0f);
                 }
             }
             // --- END NEW ---
@@ -1221,7 +1510,7 @@ namespace Claude4_5Terraria
 
             if (hud != null)
             {
-                // UPDATED: Passed bed/sleep state to HUD.Draw
+                // UPDATED: Passed MagicSystem, TimeSystem, and all sleep/bed data to HUD.Draw 
                 hud.Draw(spriteBatch, pixelTexture, font,
                     GraphicsDevice.Viewport.Width,
                     GraphicsDevice.Viewport.Height,
@@ -1236,7 +1525,11 @@ namespace Claude4_5Terraria
                     currentBedPosition,
                     isSleeping,
                     sleepProgress,
-                    SLEEP_DURATION
+                    SLEEP_DURATION,
+                    bedHoldTime,
+                    BED_HOLD_REQUIRED,
+                    timeSystem,
+                    magicSystem // CRITICAL: Pass the Magic System object
                 );
             }
 

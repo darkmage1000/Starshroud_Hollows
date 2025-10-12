@@ -10,12 +10,14 @@ namespace Claude4_5Terraria.UI
     {
         private World.World world;
         private MiningSystem miningSystem;
+        private ChestSystem chestSystem;
         private const int MINING_RANGE = 4;
 
-        public MiningOverlay(World.World world, MiningSystem miningSystem)
+        public MiningOverlay(World.World world, MiningSystem miningSystem, ChestSystem chestSystem)
         {
             this.world = world;
             this.miningSystem = miningSystem;
+            this.chestSystem = chestSystem;
         }
 
         public void DrawBlockOutlines(SpriteBatch spriteBatch, Texture2D pixelTexture, Camera camera, Vector2 playerCenter, bool showOutlines)
@@ -159,6 +161,52 @@ namespace Claude4_5Terraria.UI
             Vector2 scale = new Vector2(length, thickness);
 
             spriteBatch.Draw(pixelTexture, midPoint, null, color, angle, origin, scale, SpriteEffects.None, 0f);
+        }
+
+        // NEW: Draw chest name tooltip when hovering over a chest
+        public void DrawChestTooltip(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, Camera camera, Vector2 mouseScreenPos)
+        {
+            // Convert mouse screen position to world position
+            Vector2 worldPos = camera.ScreenToWorld(mouseScreenPos);
+            int tileX = (int)(worldPos.X / World.World.TILE_SIZE);
+            int tileY = (int)(worldPos.Y / World.World.TILE_SIZE);
+
+            // Check if hovering over a chest tile
+            Tile tile = world.GetTile(tileX, tileY);
+            if (tile != null && (tile.Type == Enums.TileType.WoodChest ||
+                tile.Type == Enums.TileType.SilverChest ||
+                tile.Type == Enums.TileType.MagicChest))
+            {
+                // Get the chest at this position
+                Point tilePos = new Point(tileX, tileY);
+                Chest chest = chestSystem.GetChest(tilePos);
+                
+                if (chest != null)
+                {
+                    // Draw tooltip near mouse cursor
+                    string tooltipText = chest.Name;
+                    Vector2 textSize = font.MeasureString(tooltipText);
+                    
+                    // Position tooltip slightly offset from cursor
+                    Vector2 tooltipPos = new Vector2(mouseScreenPos.X + 15, mouseScreenPos.Y + 15);
+                    
+                    // Create background rectangle with padding
+                    int padding = 8;
+                    Rectangle tooltipBg = new Rectangle(
+                        (int)tooltipPos.X - padding,
+                        (int)tooltipPos.Y - padding,
+                        (int)textSize.X + padding * 2,
+                        (int)textSize.Y + padding * 2
+                    );
+                    
+                    // Draw tooltip background
+                    spriteBatch.Draw(pixelTexture, tooltipBg, Color.Black * 0.9f);
+                    DrawBorder(spriteBatch, pixelTexture, tooltipBg, 2, Color.Gold);
+                    
+                    // Draw chest name text
+                    spriteBatch.DrawString(font, tooltipText, tooltipPos, Color.White);
+                }
+            }
         }
     }
 }
