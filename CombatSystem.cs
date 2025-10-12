@@ -118,6 +118,11 @@ namespace Claude4_5Terraria.Systems
             return isAttacking;
         }
 
+        public int GetCurrentAttackFrame()
+        {
+            return CurrentAnimationFrame;
+        }
+
         public bool CanAttack()
         {
             return !isAttacking && cooldownTimer <= 0;

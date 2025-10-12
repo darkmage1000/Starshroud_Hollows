@@ -97,7 +97,7 @@ namespace Claude4_5Terraria.Systems
                 float stabilizeStart = 0.85f;
                 float stabilizeEnd = 0.90f;
                 OnProgressUpdate?.Invoke(stabilizeStart, "Stabilizing liquid flow...");
-                world.StabilizeLiquids(stabilizeStart, stabilizeEnd, OnProgressUpdate); // Pass range and callback
+                world.StabilizeLiquids(stabilizeStart, stabilizeEnd, OnProgressUpdate);
 
                 // Final steps
                 OnProgressUpdate?.Invoke(0.95f, "Planting trees...");
@@ -368,12 +368,33 @@ namespace Claude4_5Terraria.Systems
 
         private void GenerateOres()
         {
-            PlaceOreType(TileType.Coal, 46800, 210, 1900, 5, 9);
-            PlaceOreType(TileType.Copper, 42900, 210, 1800, 5, 7);
-            PlaceOreType(TileType.Iron, 39000, 400, 1900, 5, 7);     // NEW: Iron after copper
-            PlaceOreType(TileType.Silver, 23400, 1150, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);
-            PlaceOreType(TileType.Gold, 21000, 1400, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);  // NEW: Gold after silver
-            PlaceOreType(TileType.Platinum, 19500, 1900, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 5, 7);
+            // Coal (Reduced by 10%)
+            PlaceOreType(TileType.Coal, 42120, 210, 1900, 5, 9);
+
+            // Copper Distribution (Reduced by 30%)
+            PlaceOreType(TileType.Copper, 3500, 210, 400, 4, 7);
+            PlaceOreType(TileType.Copper, 14000, 400, 700, 6, 9);
+            PlaceOreType(TileType.Copper, 4900, 700, 900, 4, 7);
+            PlaceOreType(TileType.Copper, 700, 900, 1000, 3, 5);
+
+            // Iron Distribution (Reduced by 30%)
+            PlaceOreType(TileType.Iron, 12600, 500, 900, 5, 8);
+            PlaceOreType(TileType.Iron, 10500, 900, 1500, 5, 7);
+            PlaceOreType(TileType.Iron, 4200, 1500, 1900, 4, 6);
+
+            // Gold Distribution (Reduced by 30%)
+            PlaceOreType(TileType.Gold, 3500, 1000, 1500, 5, 7);
+            PlaceOreType(TileType.Gold, 8400, 1500, 1900, 6, 8);
+            PlaceOreType(TileType.Gold, 2800, 1900, 2100, 4, 6);
+
+            // Silver Distribution (Reduced by 30%)
+            PlaceOreType(TileType.Silver, 2380, 1500, 1900, 5, 7);
+            PlaceOreType(TileType.Silver, 10500, 1900, 2100, 6, 9);
+            PlaceOreType(TileType.Silver, 3500, 2100, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 4, 6);
+
+            // Platinum Distribution (Reduced by 30%)
+            PlaceOreType(TileType.Platinum, 3150, 1900, 2100, 5, 7);
+            PlaceOreType(TileType.Platinum, 10500, 2100, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 6, 9);
         }
 
         private void PlaceOreType(TileType oreType, int veinCount, int minDepth, int maxDepth, int minVeinSize, int maxVeinSize)
@@ -431,12 +452,12 @@ namespace Claude4_5Terraria.Systems
             int silverChestsPlaced = 0;
             int magicChestsPlaced = 0;
 
-            // Updated Wood Chest attempts to 1200
+            // Updated Wood Chest attempts to 1200 - FIXED: Deeper underground only
             for (int attempt = 0; attempt < 1200; attempt++)
             {
                 int x = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
-                int y = random.Next(250, 500);
-                Point? floorPos = FindCaveFloor(x, y, 250);
+                int y = random.Next(350, 600); // Changed from 250 to 350 to prevent surface spawning
+                Point? floorPos = FindCaveFloor(x, y, 600); // Changed maxY from 250 to 600
                 if (floorPos.HasValue && IsValidChestSpot(floorPos.Value))
                 {
                     world.SetTile(floorPos.Value.X, floorPos.Value.Y, new Claude4_5Terraria.World.Tile(TileType.WoodChest));
@@ -1088,6 +1109,7 @@ namespace Claude4_5Terraria.Systems
             snowBiomeEndX = Math.Min(Claude4_5Terraria.World.World.WORLD_WIDTH - 1, snowBiomeEndX);
 
             Logger.Log($"[WORLDGEN] Generating snow biome from X={snowBiomeStartX} to X={snowBiomeEndX} (width: {snowBiomeEndX - snowBiomeStartX}, side: {(spawnLeft ? "LEFT" : "RIGHT")})");
+            Logger.Log($"[WORLDGEN] Snow biome is {Math.Abs((snowBiomeStartX + snowBiomeEndX) / 2 - WORLD_CENTER)} blocks from spawn (world center)");
 
             int snowTilesConverted = 0;
             int iciclesPlaced = 0;

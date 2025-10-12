@@ -11,153 +11,72 @@ namespace Claude4_5Terraria.UI
         public bool IsPaused { get; private set; }
         public MenuState CurrentState { get; private set; }
 
-        private Rectangle pauseRect;
-        private Rectangle optionsRect;
-        private Rectangle saveRect;
         private bool showOptions;
-        private bool showSaveMenu;
-
         private Action openSaveMenuCallback;
         private Action quitToMenuCallback;
-
-        // Music Volume Fields
         private Action<float> musicVolumeCallback;
         private float currentMusicVolume;
-
-        // NEW: Game Sound Volume Fields
         private Action<float> gameSoundsVolumeCallback;
         private float currentGameSoundsVolume;
-
         private Action toggleFullscreenCallback;
-
-        // NEW: Fullscreen map toggle action
         private Action toggleFullscreenMapCallback;
         private HUD hud;
-
-        // Auto-mine fields
         private Action<bool?> toggleAutoMiningCallback;
         private bool isAutoMiningActive;
 
-        // Sliders for options
         private Slider musicVolumeSlider;
-        private Slider gameSoundsVolumeSlider; // NEW Slider
+        private Slider gameSoundsVolumeSlider;
         private Slider minimapOpacitySlider;
 
-        // Buttons
         private Button resumeButton;
         private Button optionsButton;
         private Button saveButton;
         private Button quitButton;
-
-        // NEW: Button for Fullscreen Map and Auto-Mine
         private Button fullscreenMapButton;
         private Button autoMineButton;
 
-        // Store previous mouse state for click detection (CRITICAL FIX)
         private MouseState previousMouseState;
+        private KeyboardState previousKeyboardState;
 
-        // NEW: Slider class
+        #region Inner Classes
         private class Slider
         {
             public string Label { get; }
             public float MinValue { get; }
             public float MaxValue { get; }
-            public float Increment { get; }
             private float currentValue;
             public Action<float> OnValueChanged { get; set; }
-
-            private Rectangle sliderRect;
             private bool isDragging = false;
 
             public float Value
             {
                 get => currentValue;
-                set
-                {
-                    currentValue = MathHelper.Clamp(value, MinValue, MaxValue);
-                    OnValueChanged?.Invoke(currentValue);
-                }
+                set { currentValue = MathHelper.Clamp(value, MinValue, MaxValue); OnValueChanged?.Invoke(currentValue); }
             }
 
-            public Slider(string label, float min, float max, float defaultValue, float increment, Action<float> callback)
+            public Slider(string label, float min, float max, float defaultValue, Action<float> callback)
             {
-                Label = label;
-                MinValue = min;
-                MaxValue = max;
-                Increment = increment;
-                Value = defaultValue;
-                OnValueChanged = callback;
+                Label = label; MinValue = min; MaxValue = max; Value = defaultValue; OnValueChanged = callback;
             }
 
-            public void Update(MouseState mouseState, Rectangle bounds)
+            public void Update(MouseState m, MouseState p, Rectangle b)
             {
-                // Define slider area relative to the bounds passed by PauseMenu.Update
-                // We assume bounds.Width/Height includes space for the label and value text
-                Rectangle currentSliderRect = new Rectangle(bounds.X + 150, bounds.Y + 10, bounds.Width - 170, bounds.Height - 10);
-
-                if (mouseState.LeftButton == ButtonState.Pressed)
-                {
-                    if (currentSliderRect.Contains(new Point(mouseState.X, mouseState.Y)) && !isDragging)
-                    {
-                        isDragging = true;
-                    }
-                    if (isDragging)
-                    {
-                        float percent = MathHelper.Clamp((mouseState.X - currentSliderRect.X) / (float)currentSliderRect.Width, 0f, 1f);
-                        Value = MinValue + percent * (MaxValue - MinValue);
-                    }
-                }
-                else
-                {
-                    isDragging = false;
-                }
+                Rectangle r = new Rectangle(b.X + 150, b.Y + 10, b.Width - 170, b.Height - 10);
+                if (m.LeftButton == ButtonState.Pressed) { if (r.Contains(m.Position) && p.LeftButton == ButtonState.Released) isDragging = true; if (isDragging) Value = MinValue + MathHelper.Clamp((m.X - r.X) / (float)r.Width, 0f, 1f) * (MaxValue - MinValue); } else isDragging = false;
             }
 
-            public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, Rectangle bounds)
+            public void Draw(SpriteBatch s, Texture2D t, SpriteFont f, Rectangle b)
             {
-                // Define slider area relative to the bounds passed by PauseMenu.Draw
-                Rectangle currentSliderRect = new Rectangle(bounds.X + 150, bounds.Y + 10, bounds.Width - 170, bounds.Height - 10);
-
-                // Label
-                spriteBatch.DrawString(font, Label, new Vector2(bounds.X, bounds.Y), Color.White);
-
-                // Slider bar background
-                spriteBatch.Draw(pixelTexture, currentSliderRect, Color.Gray * 0.5f);
-
-                // Slider fill
-                Rectangle fillRect = new Rectangle(currentSliderRect.X, currentSliderRect.Y,
-                    (int)(currentSliderRect.Width * ((Value - MinValue) / (MaxValue - MinValue))), currentSliderRect.Height);
-
-                Color fillColor;
-                if (Value > 0.5f)
-                {
-                    float t = (Value - 0.5f) * 2f;
-                    fillColor = Color.Lerp(Color.Yellow, Color.Lime, t);
-                }
-                else
-                {
-                    float t = Value * 2f;
-                    fillColor = Color.Lerp(Color.DarkRed, Color.Yellow, t);
-                }
-                spriteBatch.Draw(pixelTexture, fillRect, fillColor);
-
-                // Knob
-                int knobX = currentSliderRect.X + (int)(currentSliderRect.Width * ((Value - MinValue) / (MaxValue - MinValue)));
-                Rectangle knob = new Rectangle(knobX - 5, currentSliderRect.Y - 5, 10, currentSliderRect.Height + 10);
-                spriteBatch.Draw(pixelTexture, knob, Color.White);
-
-                // Volume text
-                int volumePercent = (int)(Value * 100);
-                string valueText = Value == 0 ? "MUTED" : $"{volumePercent}%";
-                Vector2 textSize = font.MeasureString(valueText);
-                Vector2 textPos = new Vector2(currentSliderRect.Right + 10, currentSliderRect.Y);
-
-                Color volumeColor = Value == 0 ? Color.Red : Color.White;
-                spriteBatch.DrawString(font, valueText, textPos, volumeColor);
+                Rectangle r = new Rectangle(b.X + 150, b.Y + 10, b.Width - 170, b.Height - 10);
+                s.DrawString(f, Label, new Vector2(b.X, b.Y), Color.White);
+                s.Draw(t, r, Color.Gray * 0.5f);
+                Rectangle fR = new Rectangle(r.X, r.Y, (int)(r.Width * ((Value - MinValue) / (MaxValue - MinValue))), r.Height);
+                s.Draw(t, fR, Color.Lerp(Color.DarkRed, Color.LimeGreen, Value / MaxValue));
+                int kX = r.X + (int)(r.Width * ((Value - MinValue) / (MaxValue - MinValue)));
+                s.Draw(t, new Rectangle(kX - 5, r.Y - 5, 10, r.Height + 10), Color.White);
+                s.DrawString(f, Value == 0 ? "MUTED" : $"{(int)(Value * 100)}%", new Vector2(r.Right + 10, r.Y), Value == 0 ? Color.Red : Color.White);
             }
         }
-
-        // NEW: Button class (Unchanged)
         private class Button
         {
             public string Text { get; set; }
@@ -165,330 +84,182 @@ namespace Claude4_5Terraria.UI
             public bool IsHovered { get; private set; }
             public Action OnClick { get; set; }
 
-            public Button(string text, Rectangle rect, Action onClick)
-            {
-                Text = text;
-                Rect = rect;
-                OnClick = onClick;
-            }
-
-            public void Update(MouseState mouseState)
-            {
-                IsHovered = Rect.Contains(new Point(mouseState.X, mouseState.Y));
-            }
-
-            public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font)
-            {
-                Color bgColor = IsHovered ? Color.Gray * 0.8f : Color.Gray * 0.5f;
-                spriteBatch.Draw(pixelTexture, Rect, bgColor);
-                DrawBorder(spriteBatch, pixelTexture, Rect, 1, Color.White);
-
-                Vector2 textSize = font.MeasureString(Text);
-                Vector2 textPos = new Vector2(Rect.X + (Rect.Width - textSize.X) / 2, Rect.Y + (Rect.Height - textSize.Y) / 2);
-                spriteBatch.DrawString(font, Text, textPos, Color.White);
-            }
+            public Button(string text, Rectangle rect, Action onClick) { Text = text; Rect = rect; OnClick = onClick; }
+            public void Update(MouseState m) => IsHovered = Rect.Contains(m.Position);
+            public void Draw(SpriteBatch s, Texture2D t, SpriteFont f) { s.Draw(t, Rect, IsHovered ? Color.Gray * 0.8f : Color.Gray * 0.5f); DrawBorder(s, t, Rect, 1, Color.White); Vector2 tS = f.MeasureString(Text); s.DrawString(f, Text, new Vector2(Rect.X + (Rect.Width - tS.X) / 2, Rect.Y + (Rect.Height - tS.Y) / 2), Color.White); }
         }
+        private static void DrawBorder(SpriteBatch s, Texture2D t, Rectangle r, int h, Color c) { s.Draw(t, new Rectangle(r.X, r.Y, r.Width, h), c); s.Draw(t, new Rectangle(r.X, r.Bottom - h, r.Width, h), c); s.Draw(t, new Rectangle(r.X, r.Y, h, r.Height), c); s.Draw(t, new Rectangle(r.Right - h, r.Y, h, r.Height), c); }
+        #endregion
 
-        // NEW: Border helper (Unchanged)
-        private static void DrawBorder(SpriteBatch spriteBatch, Texture2D pixelTexture, Rectangle rect, int thickness, Color color)
+        public PauseMenu(Action o, Action q, Action<float> mC, float mV, Action tF, Action tFM, HUD h, Action<bool?> tAM, bool iAS, Action<float> gSC, float gSV)
         {
-            spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, rect.Width, thickness), color);
-            spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
-            spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
-            spriteBatch.Draw(pixelTexture, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
-        }
+            openSaveMenuCallback = o; quitToMenuCallback = q; musicVolumeCallback = mC; currentMusicVolume = mV; gameSoundsVolumeCallback = gSC; currentGameSoundsVolume = gSV;
+            toggleFullscreenCallback = tF; toggleFullscreenMapCallback = tFM; this.hud = h; toggleAutoMiningCallback = tAM; isAutoMiningActive = iAS;
+            IsPaused = false; CurrentState = MenuState.Paused; showOptions = false;
+            previousMouseState = Mouse.GetState(); previousKeyboardState = Keyboard.GetState();
 
-        // UPDATED CONSTRUCTOR SIGNATURE (11 arguments)
-        public PauseMenu(Action openSaveMenu, Action quitToMenu,
-                         Action<float> musicCallback, float musicVol,
-                         Action toggleFullscreen, Action toggleFullscreenMap, HUD hud,
-                         Action<bool?> toggleAutoMining, bool initialAutoMineState,
-                         Action<float> gameSoundsCallback, float gameSoundsVol)
-        {
-            openSaveMenuCallback = openSaveMenu;
-            quitToMenuCallback = quitToMenu;
-
-            // Music Setup
-            musicVolumeCallback = musicCallback;
-            currentMusicVolume = musicVol;
-
-            // NEW: Game Sounds Setup
-            gameSoundsVolumeCallback = gameSoundsCallback;
-            currentGameSoundsVolume = gameSoundsVol;
-
-            toggleFullscreenCallback = toggleFullscreen;
-            toggleFullscreenMapCallback = toggleFullscreenMap;
-            this.hud = hud;
-
-            // Auto-Mine Setup
-            toggleAutoMiningCallback = toggleAutoMining;
-            isAutoMiningActive = initialAutoMineState;
-
-            IsPaused = false;
-            CurrentState = MenuState.Paused;
-            showOptions = false;
-            showSaveMenu = false;
-            previousMouseState = Mouse.GetState();
-
-            // Initialize buttons (centered on screen - default values)
-            int screenWidth = 1920;
-            int screenHeight = 1080;
-            int buttonWidth = 200;
-            int buttonHeight = 40;
-            int startY = (screenHeight / 2) - 100;
-
-            resumeButton = new Button("Resume", new Rectangle((screenWidth - buttonWidth) / 2, startY, buttonWidth, buttonHeight), () => IsPaused = false);
-            optionsButton = new Button("Options", new Rectangle((screenWidth - buttonWidth) / 2, startY + 50, buttonWidth, buttonHeight), () => showOptions = true); // Set to true to open
-            saveButton = new Button("Save", new Rectangle((screenWidth - buttonWidth) / 2, startY + 100, buttonWidth, buttonHeight), openSaveMenu);
-            quitButton = new Button("Quit to Menu", new Rectangle((screenWidth - buttonWidth) / 2, startY + 150, buttonWidth, buttonHeight), quitToMenu);
-
-            // Initialize sliders
-            musicVolumeSlider = new Slider("Music Volume", 0f, 1f, currentMusicVolume, 0.05f, (value) =>
-            {
-                currentMusicVolume = value;
-                musicVolumeCallback?.Invoke(value);
-            });
-
-            gameSoundsVolumeSlider = new Slider("SFX Volume", 0f, 1f, currentGameSoundsVolume, 0.05f, (value) => // NEW
-            {
-                currentGameSoundsVolume = value;
-                gameSoundsVolumeCallback?.Invoke(value);
-            });
-
-            minimapOpacitySlider = new Slider("Minimap Opacity", 0f, 1f, this.hud.MinimapOpacity, 0.05f, (value) =>
-            {
-                this.hud.MinimapOpacity = value;
-            });
-
-            // NEW: Initialize Fullscreen Map Button
-            fullscreenMapButton = new Button("Toggle Fullscreen Map", new Rectangle(0, 0, 400, 40), toggleFullscreenMap);
-
-            // NEW: Initialize Auto-Mine Button
-            autoMineButton = new Button("Toggle Auto-Mine (L)", new Rectangle(0, 0, 400, 40), () =>
-            {
-                isAutoMiningActive = !isAutoMiningActive;
-                toggleAutoMiningCallback?.Invoke(isAutoMiningActive);
-            });
+            int sW = 1920, sH = 1080, bW = 200, bH = 40, sY = (sH / 2) - 100;
+            resumeButton = new Button("Resume", new Rectangle((sW - bW) / 2, sY, bW, bH), TogglePause);
+            optionsButton = new Button("Options", new Rectangle((sW - bW) / 2, sY + 50, bW, bH), () => showOptions = true);
+            saveButton = new Button("Save", new Rectangle((sW - bW) / 2, sY + 100, bW, bH), openSaveMenuCallback);
+            quitButton = new Button("Quit to Menu", new Rectangle((sW - bW) / 2, sY + 150, bW, bH), quitToMenuCallback);
+            musicVolumeSlider = new Slider("Music Volume", 0f, 1f, currentMusicVolume, (v) => { currentMusicVolume = v; musicVolumeCallback?.Invoke(v); });
+            gameSoundsVolumeSlider = new Slider("SFX Volume", 0f, 1f, currentGameSoundsVolume, (v) => { currentGameSoundsVolume = v; gameSoundsVolumeCallback?.Invoke(v); });
+            minimapOpacitySlider = new Slider("Minimap Opacity", 0f, 1f, this.hud.MinimapOpacity, (v) => { this.hud.MinimapOpacity = v; });
+            fullscreenMapButton = new Button("Toggle Fullscreen Map", new Rectangle(), toggleFullscreenMapCallback);
+            autoMineButton = new Button("Toggle Auto-Mine (L)", new Rectangle(), () => { isAutoMiningActive = !isAutoMiningActive; toggleAutoMiningCallback?.Invoke(isAutoMiningActive); });
         }
 
         public void Update()
         {
             if (!IsPaused) return;
 
-            MouseState mouseState = Mouse.GetState();
-            KeyboardState keyboardState = Keyboard.GetState();
+            MouseState mS = Mouse.GetState();
+            KeyboardState kS = Keyboard.GetState();
+            bool isNewClick = mS.LeftButton == ButtonState.Pressed && previousMouseState.LeftButton == ButtonState.Released;
 
-            // CRITICAL: isNewClick must be defined once here
-            bool isNewClick = mouseState.LeftButton == ButtonState.Pressed && previousMouseState.LeftButton == ButtonState.Released;
-
-            // --- ESCAPE KEY HANDLING ---
-            if (keyboardState.IsKeyDown(Keys.Escape))
-            {
-                if (showOptions)
-                {
-                    showOptions = false; // Close options menu
-                    return;
-                }
+            if (hud?.IsMapFullscreen == true) 
+            { 
+                if (isNewClick) 
+                { 
+                    hud.ToggleFullscreenMap(); 
+                } 
+                previousMouseState = mS; 
+                previousKeyboardState = kS; 
+                return; 
             }
-
-            // --- CRITICAL FIX: If map is fullscreen, allow clicks/Escape to exit it ---
-            if (hud != null && hud.IsMapFullscreen)
-            {
-                if (isNewClick || keyboardState.IsKeyDown(Keys.Escape))
-                {
-                    if (hud.IsMapFullscreen)
-                    {
-                        hud.ToggleFullscreenMap(); // Exit fullscreen map
-                    }
-                    else
-                    {
-                        IsPaused = false; // Unpause
-                    }
-                }
-
-                // If the map is fullscreen, we don't process pause menu buttons.
-                previousMouseState = mouseState;
-                return;
-            }
-
-            // --- COMMON MOUSE CLICK LOGIC (Only runs if not fullscreen map) ---
-
-            // Define options area (Panel height increased to 350)
-            Rectangle optionsPanel = new Rectangle((1920 - 500) / 2, 200, 500, 400); // Increased height further
-            Rectangle backButtonRect = new Rectangle(optionsPanel.X + 10, optionsPanel.Y + 10, 80, 30);
-
-            // Define button/slider areas inside the Options Panel
-            Rectangle fullscreenButtonRect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 60, 400, 40);
-            Rectangle fullscreenMapButtonRect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 110, 460, 40);
-            Rectangle autoMineButtonRect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 160, 460, 40);
-
-            Rectangle musicSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 220, 400, 40); // MOVED DOWN
-            Rectangle gameSoundsSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 270, 400, 40); // NEW POSITION
-            Rectangle minimapSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 320, 400, 40); // MOVED DOWN
-
+            
             if (showOptions)
             {
-                // Update buttons/sliders that are NOT sliders
-                fullscreenMapButton.Rect = fullscreenMapButtonRect;
-                fullscreenMapButton.Update(mouseState);
-
-                autoMineButton.Rect = autoMineButtonRect;
-                autoMineButton.Update(mouseState);
-
-
-                // Update sliders 
-                musicVolumeSlider.Update(mouseState, musicSliderArea);
-                gameSoundsVolumeSlider.Update(mouseState, gameSoundsSliderArea); // NEW
-                minimapOpacitySlider.Update(mouseState, minimapSliderArea);
-
-                // Handle Options Menu Button Clicks
+                // Update sliders and buttons for options menu
+                int bW = 400, bH = 40;
+                int startY = (1080 / 2) - 150;
+                int sW = 1920;
+                int spacing = 60;
+                
+                // Update music volume slider
+                Rectangle musicSliderRect = new Rectangle((sW - bW) / 2, startY, bW, bH);
+                musicVolumeSlider.Update(mS, previousMouseState, musicSliderRect);
+                
+                // Update SFX volume slider
+                Rectangle sfxSliderRect = new Rectangle((sW - bW) / 2, startY + spacing, bW, bH);
+                gameSoundsVolumeSlider.Update(mS, previousMouseState, sfxSliderRect);
+                
+                // Update minimap opacity slider
+                Rectangle minimapSliderRect = new Rectangle((sW - bW) / 2, startY + spacing * 2, bW, bH);
+                minimapOpacitySlider.Update(mS, previousMouseState, minimapSliderRect);
+                
+                // Update fullscreen button
+                int buttonW = 300, buttonH = 40;
+                fullscreenMapButton.Rect = new Rectangle((sW - buttonW) / 2, startY + spacing * 3 + 20, buttonW, buttonH);
+                fullscreenMapButton.Update(mS);
+                
+                // Update back button
+                int backButtonY = startY + spacing * 4 + 40;
+                Button backButton = new Button("Back", new Rectangle((sW - 200) / 2, backButtonY, 200, 40), () => showOptions = false);
+                backButton.Update(mS);
+                
                 if (isNewClick)
                 {
-                    // Back button click
-                    if (backButtonRect.Contains(mouseState.Position))
-                    {
-                        showOptions = false;
-                        previousMouseState = mouseState;
-                        return;
-                    }
-
-                    // Fullscreen toggle click
-                    if (fullscreenButtonRect.Contains(mouseState.Position))
-                    {
-                        toggleFullscreenCallback?.Invoke();
-                    }
-
-                    // Fullscreen map toggle click
-                    if (fullscreenMapButtonRect.Contains(mouseState.Position))
-                    {
-                        fullscreenMapButton.OnClick?.Invoke();
-                    }
-
-                    // NEW: Auto-Mine toggle click
-                    if (autoMineButtonRect.Contains(mouseState.Position))
-                    {
-                        autoMineButton.OnClick?.Invoke();
-                    }
+                    if (fullscreenMapButton.IsHovered) fullscreenMapButton.OnClick();
+                    if (backButton.IsHovered) backButton.OnClick();
                 }
             }
-            else // Main Pause Menu
-            {
-                // Handle Main Menu Button Clicks
-                if (isNewClick)
-                {
-                    if (resumeButton.Rect.Contains(mouseState.Position)) resumeButton.OnClick();
-                    if (optionsButton.Rect.Contains(mouseState.Position)) optionsButton.OnClick();
-                    if (saveButton.Rect.Contains(mouseState.Position)) saveButton.OnClick();
-                    if (quitButton.Rect.Contains(mouseState.Position)) quitButton.OnClick();
-                }
-
-                // Update hover state for main buttons
-                resumeButton.Update(mouseState);
-                optionsButton.Update(mouseState);
-                saveButton.Update(mouseState);
-                quitButton.Update(mouseState);
-            }
-
-            // Store current mouse state for the next frame's click detection
-            previousMouseState = mouseState;
-        }
-
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight)
-        {
-            if (!IsPaused) return;
-
-            // --- CRITICAL FIX: Do NOT draw the pause menu overlay if the map is fullscreen ---
-            if (hud != null && hud.IsMapFullscreen)
-            {
-                return;
-            }
-
-            // Semi-transparent overlay
-            spriteBatch.Draw(pixelTexture, new Rectangle(0, 0, screenWidth, screenHeight), Color.Black * 0.5f);
-
-            // --- Options Menu Drawing ---
-            if (showOptions)
-            {
-                // Define panel area (matching Update's size)
-                Rectangle optionsPanel = new Rectangle((screenWidth - 500) / 2, 200, 500, 400); // HEIGHT ADJUSTED
-                spriteBatch.Draw(pixelTexture, optionsPanel, Color.Gray * 0.8f);
-                DrawBorder(spriteBatch, pixelTexture, optionsPanel, 2, Color.White);
-
-                // Back button
-                Rectangle backButtonRect = new Rectangle(optionsPanel.X + 10, optionsPanel.Y + 10, 80, 30);
-                string backText = "Back";
-                bool isBackHovered = backButtonRect.Contains(Mouse.GetState().Position);
-                Color backColor = isBackHovered ? Color.DarkGray * 0.8f : Color.Gray * 0.5f;
-                spriteBatch.Draw(pixelTexture, backButtonRect, backColor);
-                DrawBorder(spriteBatch, pixelTexture, backButtonRect, 1, Color.White);
-                Vector2 backTextSize = font.MeasureString(backText);
-                Vector2 backTextPos = new Vector2(backButtonRect.X + (backButtonRect.Width - backTextSize.X) / 2, backButtonRect.Y + (backButtonRect.Height - backTextSize.Y) / 2);
-                spriteBatch.DrawString(font, backText, backTextPos, Color.White);
-
-                // Fullscreen toggle display area
-                string fullscreenText = "Windowed/Fullscreen Toggle";
-                Rectangle fullscreenDisplayArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 60, 400, 40);
-                spriteBatch.DrawString(font, fullscreenText, new Vector2(fullscreenDisplayArea.X, fullscreenDisplayArea.Y), Color.White);
-
-                // NEW: Fullscreen map button
-                string mapButtonText = "Toggle Fullscreen Map: " + (hud.IsMapFullscreen ? "On" : "Off");
-                fullscreenMapButton.Text = mapButtonText;
-                fullscreenMapButton.Rect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 110, 460, 40);
-                fullscreenMapButton.Draw(spriteBatch, pixelTexture, font);
-
-                // NEW: Auto-Mine button
-                string autoMineText = "Auto-Mine (L): " + (isAutoMiningActive ? "On" : "Off");
-                autoMineButton.Text = autoMineText;
-                autoMineButton.Rect = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 160, 460, 40);
-                autoMineButton.Draw(spriteBatch, pixelTexture, font);
-
-                // Draw sliders
-                Rectangle musicSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 220, 400, 40);
-                musicVolumeSlider.Draw(spriteBatch, pixelTexture, font, musicSliderArea);
-
-                Rectangle gameSoundsSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 270, 400, 40); // NEW POSITION
-                gameSoundsVolumeSlider.Draw(spriteBatch, pixelTexture, font, gameSoundsSliderArea); // NEW
-
-                Rectangle minimapSliderArea = new Rectangle(optionsPanel.X + 20, optionsPanel.Y + 320, 400, 40);
-                minimapOpacitySlider.Draw(spriteBatch, pixelTexture, font, minimapSliderArea);
-            }
-            // --- Main Menu Drawing ---
             else
             {
-                // Draw pause menu buttons (centered)
-                int buttonWidth = 200;
-                int buttonHeight = 40;
-                int startY = (screenHeight / 2) - 100;
-
-                // Update button positions for current screen resolution
-                resumeButton.Rect = new Rectangle((screenWidth - buttonWidth) / 2, startY, buttonWidth, buttonHeight);
-                optionsButton.Rect = new Rectangle((screenWidth - buttonWidth) / 2, startY + 50, buttonWidth, buttonHeight);
-                saveButton.Rect = new Rectangle((screenWidth - buttonWidth) / 2, startY + 100, buttonWidth, buttonHeight);
-                quitButton.Rect = new Rectangle((screenWidth - buttonWidth) / 2, startY + 150, buttonWidth, buttonHeight);
-
-                // Draw buttons
-                resumeButton.Draw(spriteBatch, pixelTexture, font);
-                optionsButton.Draw(spriteBatch, pixelTexture, font);
-                saveButton.Draw(spriteBatch, pixelTexture, font);
-                quitButton.Draw(spriteBatch, pixelTexture, font);
+                // CRITICAL FIX: Update button positions BEFORE checking for clicks
+                int bW = 200, bH = 40;
+                int sY = (1080 / 2) - 100; // Use fixed screen height for now
+                int sW = 1920; // Use fixed screen width for now
+                
+                resumeButton.Rect = new Rectangle((sW - bW) / 2, sY, bW, bH);
+                optionsButton.Rect = new Rectangle((sW - bW) / 2, sY + 50, bW, bH);
+                saveButton.Rect = new Rectangle((sW - bW) / 2, sY + 100, bW, bH);
+                quitButton.Rect = new Rectangle((sW - bW) / 2, sY + 150, bW, bH);
+                
+                resumeButton.Update(mS); 
+                optionsButton.Update(mS); 
+                saveButton.Update(mS); 
+                quitButton.Update(mS);
+                
+                if (isNewClick)
+                {
+                    if (resumeButton.IsHovered) resumeButton.OnClick(); 
+                    if (optionsButton.IsHovered) optionsButton.OnClick();
+                    if (saveButton.IsHovered) saveButton.OnClick(); 
+                    if (quitButton.IsHovered) quitButton.OnClick();
+                }
             }
+
+            previousMouseState = mS; 
+            previousKeyboardState = kS;
         }
 
-        // Public methods for external control
-        public void TogglePause()
+        public void Draw(SpriteBatch s, Texture2D t, SpriteFont f, int sW, int sH)
         {
-            IsPaused = !IsPaused;
-            if (IsPaused)
+            if (!IsPaused || hud?.IsMapFullscreen == true) return;
+            s.Draw(t, new Rectangle(0, 0, sW, sH), Color.Black * 0.5f);
+            
+            if (showOptions) 
+            { 
+                // Draw Options Menu
+                string title = "OPTIONS";
+                Vector2 titleSize = f.MeasureString(title);
+                Vector2 titlePos = new Vector2((sW - titleSize.X) / 2, sH / 4);
+                s.DrawString(f, title, titlePos + new Vector2(2, 2), Color.Black);
+                s.DrawString(f, title, titlePos, Color.Yellow);
+                
+                // Draw sliders
+                int bW = 400, bH = 40;
+                int startY = (sH / 2) - 150;
+                int spacing = 60;
+                
+                // Music volume slider
+                Rectangle musicSliderRect = new Rectangle((sW - bW) / 2, startY, bW, bH);
+                musicVolumeSlider.Draw(s, t, f, musicSliderRect);
+                
+                // SFX volume slider
+                Rectangle sfxSliderRect = new Rectangle((sW - bW) / 2, startY + spacing, bW, bH);
+                gameSoundsVolumeSlider.Draw(s, t, f, sfxSliderRect);
+                
+                // Minimap opacity slider
+                Rectangle minimapSliderRect = new Rectangle((sW - bW) / 2, startY + spacing * 2, bW, bH);
+                minimapOpacitySlider.Draw(s, t, f, minimapSliderRect);
+                
+                // Fullscreen toggle button
+                int buttonW = 300, buttonH = 40;
+                fullscreenMapButton.Text = "Toggle Fullscreen (F11)";
+                fullscreenMapButton.Rect = new Rectangle((sW - buttonW) / 2, startY + spacing * 3 + 20, buttonW, buttonH);
+                fullscreenMapButton.Draw(s, t, f);
+                
+                // Draw Back button
+                int backButtonY = startY + spacing * 4 + 40;
+                Rectangle backRect = new Rectangle((sW - 200) / 2, backButtonY, 200, 40);
+                
+                bool isHovered = backRect.Contains(Mouse.GetState().Position);
+                s.Draw(t, backRect, isHovered ? Color.Gray * 0.8f : Color.Gray * 0.5f);
+                DrawBorder(s, t, backRect, 1, Color.White);
+                
+                Vector2 backTextSize = f.MeasureString("Back");
+                Vector2 backTextPos = new Vector2(backRect.X + (backRect.Width - backTextSize.X) / 2, backRect.Y + (backRect.Height - backTextSize.Y) / 2);
+                s.DrawString(f, "Back", backTextPos + new Vector2(2, 2), Color.Black);
+                s.DrawString(f, "Back", backTextPos, Color.White);
+            }
+            else
             {
-                CurrentState = MenuState.Paused;
-                // Reset state when pausing to show main pause buttons, not options
-                showOptions = false;
+                int bW = 200, bH = 40, sY = (sH / 2) - 100;
+                resumeButton.Rect = new Rectangle((sW - bW) / 2, sY, bW, bH); 
+                optionsButton.Rect = new Rectangle((sW - bW) / 2, sY + 50, bW, bH);
+                saveButton.Rect = new Rectangle((sW - bW) / 2, sY + 100, bW, bH); 
+                quitButton.Rect = new Rectangle((sW - bW) / 2, sY + 150, bW, bH);
+                resumeButton.Draw(s, t, f); 
+                optionsButton.Draw(s, t, f); 
+                saveButton.Draw(s, t, f); 
+                quitButton.Draw(s, t, f);
             }
         }
 
-        public void SetState(MenuState state)
-        {
-            CurrentState = state;
-        }
+        public void TogglePause() { IsPaused = !IsPaused; if (IsPaused) { CurrentState = MenuState.Paused; showOptions = false; } }
+        public void SetState(MenuState s) => CurrentState = s;
     }
 }

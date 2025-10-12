@@ -68,6 +68,10 @@ namespace Claude4_5Terraria.Player
         private const float ITEM_ANIM_SPEED = 0.15f;
         private int itemAnimFrame = 0;
 
+        private float heldItemAnimationTimer = 0f;
+        private int heldItemCurrentFrame = 0;
+
+
         public Player(World.World world, Vector2 startPosition)
         {
             this.world = world;
@@ -210,6 +214,7 @@ namespace Claude4_5Terraria.Player
                 Velocity = Vector2.Zero;
                 UpdateAnimation(deltaTime);
                 UpdateItemAnimation(deltaTime);
+                UpdateHeldItemAnimation(deltaTime);
                 return;
             }
 
@@ -256,6 +261,7 @@ namespace Claude4_5Terraria.Player
             ApplyPhysics();
             UpdateAnimation(deltaTime);
             UpdateItemAnimation(deltaTime);
+            UpdateHeldItemAnimation(deltaTime);
         }
 
         private void CheckLavaDamage(float deltaTime)
@@ -447,6 +453,16 @@ namespace Claude4_5Terraria.Player
             }
         }
 
+        private void UpdateHeldItemAnimation(float deltaTime)
+        {
+            heldItemAnimationTimer += deltaTime;
+            if (heldItemAnimationTimer >= FRAME_TIME)
+            {
+                heldItemAnimationTimer -= FRAME_TIME;
+                heldItemCurrentFrame++;
+            }
+        }
+
         private void ApplyPhysics()
         {
             Vector2 newPosition = new Vector2(Position.X + Velocity.X, Position.Y);
@@ -471,7 +487,6 @@ namespace Claude4_5Terraria.Player
                 {
                     int hitTileY = (int)((Position.Y + Velocity.Y + PLAYER_HEIGHT) / World.World.TILE_SIZE);
                     Position = new Vector2(Position.X, hitTileY * World.World.TILE_SIZE - PLAYER_HEIGHT);
-
                     isOnGround = true;
                 }
                 Velocity = new Vector2(Velocity.X, 0);
@@ -523,84 +538,87 @@ namespace Claude4_5Terraria.Player
             return false;
         }
 
-        private bool hasLoggedDraw = false;
-
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, ItemType heldItemType, Texture2D itemSpriteSheet, int animationFrame)
         {
-            Rectangle playerRect = new Rectangle(
-                (int)Position.X,
-                (int)Position.Y,
-                PLAYER_WIDTH,
-                PLAYER_HEIGHT
-            );
-            spriteBatch.Draw(pixelTexture, playerRect, Color.Yellow);
+            // Draw the player sprite
+            if (spriteSheet != null)
+            {
+                Rectangle playerSourceRect = new Rectangle(currentFrame * FRAME_WIDTH, currentAnimationRow * FRAME_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT);
+                Vector2 playerDrawPosition = new Vector2(Position.X + (PLAYER_WIDTH / 2), Position.Y + (PLAYER_HEIGHT / 2));
+                Vector2 playerOrigin = new Vector2(FRAME_WIDTH / 2f, FRAME_HEIGHT / 2f);
+                SpriteEffects playerFlip = facingRight ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
+                float playerScale = (float)PLAYER_HEIGHT / (float)FRAME_HEIGHT;
 
+                spriteBatch.Draw(spriteSheet, playerDrawPosition, playerSourceRect, Color.White, 0f, playerOrigin, playerScale, playerFlip, 0f);
+            }
+            else // Fallback drawing
+            {
+                Rectangle playerRect = new Rectangle((int)Position.X, (int)Position.Y, PLAYER_WIDTH, PLAYER_HEIGHT);
+                spriteBatch.Draw(pixelTexture, playerRect, Color.Yellow);
+            }
+
+            // Draw the held item
             if (heldItemType != ItemType.None && itemSpriteSheet != null)
             {
-                int totalFrames = 1;
+                // Initialize variables for drawing the item
                 int itemFrameWidth = itemSpriteSheet.Width;
                 int itemFrameHeight = itemSpriteSheet.Height;
-                int currentFrame = 0;
                 float rotation = 0f;
                 float scale = 0.5f;
                 SpriteEffects flip = facingRight ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
+                int sourceX = 0;
+                int sourceY = 0;
 
-                // Handle Runic Pickaxe (2x2 grid)
-                if (heldItemType == ItemType.RunicPickaxe)
+                // --- LOGIC FOR DIFFERENT ITEM TYPES ---
+                if (heldItemType >= ItemType.WoodPickaxe && heldItemType <= ItemType.RunicPickaxe)
                 {
-                    totalFrames = 3;
-                    itemFrameWidth = itemSpriteSheet.Width / 2;
-                    itemFrameHeight = itemSpriteSheet.Height / 2;
-                    currentFrame = animationFrame > 0 ? animationFrame : itemAnimFrame;
-                    scale = 0.5f;
+                    scale = 1.7f;
+                    float idleAngle = facingRight ? MathHelper.ToRadians(-45) : MathHelper.ToRadians(45);
+                    float backswingAngle = facingRight ? MathHelper.ToRadians(-120) : MathHelper.ToRadians(120);
+                    float impactAngle = facingRight ? MathHelper.ToRadians(80) : MathHelper.ToRadians(-80);
 
-                    if (animationFrame == 1)
-                    {
-                        rotation = facingRight ? MathHelper.PiOver4 * 0.5f : MathHelper.PiOver4 * 1.5f;
-                    }
-                    else if (animationFrame == 2)
-                    {
-                        rotation = facingRight ? MathHelper.PiOver4 * 1.5f : -MathHelper.PiOver4 * 0.5f;
-                    }
-                    else
-                    {
-                        rotation = facingRight ? -MathHelper.PiOver4 * 0.25f : MathHelper.PiOver4 * 0.25f;
-                    }
-                }
-                // Handle all swords
-                else if (heldItemType == ItemType.WoodSword || heldItemType == ItemType.CopperSword ||
-                         heldItemType == ItemType.IronSword || heldItemType == ItemType.SilverSword ||
-                         heldItemType == ItemType.GoldSword || heldItemType == ItemType.PlatinumSword ||
-                         heldItemType == ItemType.RunicSword)
-                {
-                    totalFrames = 3;
-                    
-                    // Runic sword has 2x2 animation frames
-                    if (heldItemType == ItemType.RunicSword)
+                    if (animationFrame == 1) rotation = backswingAngle;
+                    else if (animationFrame == 2) rotation = impactAngle;
+                    else rotation = idleAngle;
+
+                    if (heldItemType == ItemType.RunicPickaxe)
                     {
                         itemFrameWidth = itemSpriteSheet.Width / 2;
                         itemFrameHeight = itemSpriteSheet.Height / 2;
-                        currentFrame = animationFrame > 0 ? animationFrame : itemAnimFrame;
+                        int currentFrame = animationFrame > 0 ? animationFrame : itemAnimFrame;
+                        if (currentFrame == 1) sourceX = itemFrameWidth;
+                        if (currentFrame == 2) sourceY = itemFrameHeight;
                     }
-                    else
-                    {
-                        itemFrameWidth = itemSpriteSheet.Width;
-                        itemFrameHeight = itemSpriteSheet.Height;
-                    }
-                    currentFrame = animationFrame;
+                }
+                else if (heldItemType >= ItemType.WoodSword && heldItemType <= ItemType.RunicSword)
+                {
                     scale = 0.6f;
+                    if (animationFrame == 1) rotation = facingRight ? MathHelper.PiOver4 * 2.8f : -MathHelper.PiOver4 * 1.2f;
+                    else if (animationFrame == 2) rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 2.5f;
+                    else rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 0.5f;
 
-                    if (animationFrame == 1)
+                    if (heldItemType == ItemType.RunicSword)
                     {
-                        rotation = facingRight ? MathHelper.PiOver4 * 2.8f : -MathHelper.PiOver4 * 1.2f;
+                        int totalFrames = 9;
+                        itemFrameWidth = itemSpriteSheet.Width / 5;
+                        itemFrameHeight = itemSpriteSheet.Height / 2;
+                        int currentAnimFrame = heldItemCurrentFrame % totalFrames;
+                        sourceX = (currentAnimFrame % 5) * itemFrameWidth;
+                        sourceY = (currentAnimFrame / 5) * itemFrameHeight;
                     }
-                    else if (animationFrame == 2)
+                }
+                else if (heldItemType >= ItemType.WoodWand && heldItemType <= ItemType.RunicLaserWand)
+                {
+                    scale = 0.5f;
+                    rotation = 0f;
+                    if (heldItemType == ItemType.RunicLaserWand)
                     {
-                        rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 2.5f;
-                    }
-                    else
-                    {
-                        rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 0.5f;
+                        int totalFrames = 9;
+                        itemFrameWidth = itemSpriteSheet.Width / 4;
+                        itemFrameHeight = itemSpriteSheet.Height / 3;
+                        int currentAnimFrame = heldItemCurrentFrame % totalFrames;
+                        sourceX = (currentAnimFrame % 4) * itemFrameWidth;
+                        sourceY = (currentAnimFrame / 4) * itemFrameHeight;
                     }
                 }
                 else if (heldItemType == ItemType.Torch)
@@ -609,41 +627,14 @@ namespace Claude4_5Terraria.Player
                     rotation = 0f;
                     flip = SpriteEffects.None;
                 }
-                else
-                {
-                    scale = 0.5f;
-                    rotation = 0f;
-                }
+                // Default case for other items is already set
 
-                int sourceX = 0;
-                int sourceY = 0;
-
-                // Handle Runic items (2x2 grid)
-                if (heldItemType == ItemType.RunicPickaxe || heldItemType == ItemType.RunicSword)
-                {
-                    if (currentFrame == 1) sourceX = itemFrameWidth;
-                    if (currentFrame == 2) sourceY = itemFrameHeight;
-                }
-
-                Rectangle sourceRect = new Rectangle(
-                    sourceX,
-                    sourceY,
-                    itemFrameWidth,
-                    itemFrameHeight
-                );
-
+                // --- FINAL DRAW CALL FOR THE ITEM ---
+                Rectangle sourceRect = new Rectangle(sourceX, sourceY, itemFrameWidth, itemFrameHeight);
                 Vector2 origin = new Vector2(itemFrameWidth / 2f, itemFrameHeight / 2f);
+                Vector2 drawPosition = new Vector2(Position.X + (PLAYER_WIDTH * 0.75f), Position.Y + (PLAYER_HEIGHT * 0.35f));
 
-                Vector2 drawPosition = new Vector2(
-                    Position.X + (PLAYER_WIDTH * 0.75f),
-                    Position.Y + (PLAYER_HEIGHT * 0.35f)
-                );
-
-                // Extend sword position during swing
-                if (heldItemType == ItemType.WoodSword || heldItemType == ItemType.CopperSword ||
-                    heldItemType == ItemType.IronSword || heldItemType == ItemType.SilverSword ||
-                    heldItemType == ItemType.GoldSword || heldItemType == ItemType.PlatinumSword ||
-                    heldItemType == ItemType.RunicSword)
+                if (heldItemType >= ItemType.WoodSword && heldItemType <= ItemType.RunicSword)
                 {
                     if (animationFrame == 1)
                     {
@@ -662,17 +653,7 @@ namespace Claude4_5Terraria.Player
                     drawPosition.Y += 5;
                 }
 
-                spriteBatch.Draw(
-                    itemSpriteSheet,
-                    drawPosition,
-                    sourceRect,
-                    Color.White,
-                    rotation,
-                    origin,
-                    scale,
-                    flip,
-                    0f
-                );
+                spriteBatch.Draw(itemSpriteSheet, drawPosition, sourceRect, Color.White, rotation, origin, scale, flip, 0f);
             }
         }
 
@@ -683,7 +664,7 @@ namespace Claude4_5Terraria.Player
                 Position.Y + PLAYER_HEIGHT / 2
             );
         }
-        
+
         public bool GetFacingRight()
         {
             return facingRight;

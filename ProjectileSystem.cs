@@ -1,463 +1,149 @@
-﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Claude4_5Terraria.Entities;
 using Claude4_5Terraria.Enums;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 
 namespace Claude4_5Terraria.Systems
 {
-    // NEW: Enum definition for projectile types 
-    public enum ProjectileType
-    {
-        MagicBolt,
-        FireBolt,
-        LightningBlast,
-        NatureVine,
-        WaterBubble,
-        HalfMoonSlash,
-        RunicLaser
-    }
-
     public abstract class Projectile
     {
         public Vector2 Position { get; set; }
         public bool IsAlive { get; set; }
         public float Damage { get; protected set; }
-        protected Texture2D texture; // Sprite texture
-
-        // Abstract methods must be implemented by derived classes
+        protected Texture2D texture;
+        protected float animationTimer = 0f;
+        protected int currentFrame = 0;
+        protected const float FRAME_TIME = 0.1f;
         public abstract void Update(float deltaTime);
         public abstract void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture);
         public abstract Rectangle GetHitbox();
-        
-        // Set texture (called by ProjectileSystem)
-        public void SetTexture(Texture2D tex)
-        {
-            texture = tex;
-        }
+        public void SetTexture(Texture2D tex) => texture = tex;
     }
 
-    // NEW: Magic Bolt Projectile
     public class MagicBolt : Projectile
     {
-        private const float SPEED = 600f; // Very fast projectile, e.g., 600 pixels/sec
+        private const float SPEED = 600f;
         private Vector2 velocity;
-        private const int WIDTH = 8;
-        private const int HEIGHT = 8;
-        private float lifeTimer = 0f;
-        private const float MAX_LIFE = 2f; // Despawns after 2 seconds
+        private const int WIDTH = 32, HEIGHT = 14;
+        private float lifeTimer = 0f, MAX_LIFE = 2f;
 
-        // MODIFIED: Constructor now takes Vector2 direction
         public MagicBolt(Vector2 position, Vector2 direction, float damage)
         {
-            Position = position;
-            IsAlive = true;
-            Damage = damage;
-            // Velocity is calculated from direction * speed
-            velocity = direction * SPEED;
+            Position = position; IsAlive = true; Damage = damage; velocity = direction * SPEED;
         }
-
         public override void Update(float deltaTime)
         {
-            if (!IsAlive) return;
-
-            // Move the projectile
-            Position += velocity * deltaTime;
-
-            // Check max life duration
-            lifeTimer += deltaTime;
-            if (lifeTimer >= MAX_LIFE)
-            {
-                IsAlive = false;
-            }
+            if (!IsAlive) return; Position += velocity * deltaTime; lifeTimer += deltaTime; if (lifeTimer >= MAX_LIFE) IsAlive = false;
         }
-
-        public override Rectangle GetHitbox()
-        {
-            return new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
-        }
-
+        public override Rectangle GetHitbox() => new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
         public override void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
         {
-            if (IsAlive)
-            {
-                Rectangle destRect = GetHitbox();
-                if (texture != null)
-                {
-                    spriteBatch.Draw(texture, destRect, Color.White);
-                }
-                else
-                {
-                    // Fallback to purple square
-                    spriteBatch.Draw(pixelTexture, destRect, Color.MediumPurple);
-                }
-            }
+            if (IsAlive) { if (texture != null) spriteBatch.Draw(texture, GetHitbox(), Color.White); else spriteBatch.Draw(pixelTexture, GetHitbox(), Color.MediumPurple); }
         }
     }
 
-    // FireBolt: Fast, moderate damage, explodes on hit
     public class FireBolt : Projectile
     {
         private const float SPEED = 700f;
         private Vector2 velocity;
-        private const int WIDTH = 12;
-        private const int HEIGHT = 12;
-        private float lifeTimer = 0f;
-        private const float MAX_LIFE = 3f;
+        private const int WIDTH = 32, HEIGHT = 14;
+        private float lifeTimer = 0f, MAX_LIFE = 3f;
 
-        public FireBolt(Vector2 position, Vector2 direction, float damage)
-        {
-            Position = position;
-            IsAlive = true;
-            Damage = damage;
-            velocity = direction * SPEED;
-        }
-
-        public override void Update(float deltaTime)
-        {
-            if (!IsAlive) return;
-            
-            Position += velocity * deltaTime;
-            
-            lifeTimer += deltaTime;
-            if (lifeTimer >= MAX_LIFE) IsAlive = false;
-        }
-
-        public override Rectangle GetHitbox()
-        {
-            return new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
-        }
-
-        public override void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
-        {
-            if (IsAlive)
-            {
-                Rectangle destRect = GetHitbox();
-                if (texture != null)
-                {
-                    spriteBatch.Draw(texture, destRect, Color.White);
-                }
-                else
-                {
-                    spriteBatch.Draw(pixelTexture, GetHitbox(), Color.OrangeRed);
-                }
-            }
-        }
+        public FireBolt(Vector2 pos, Vector2 dir, float dmg) { Position = pos; IsAlive = true; Damage = dmg; velocity = dir * SPEED; }
+        public override void Update(float dT) { if (!IsAlive) return; Position += velocity * dT; lifeTimer += dT; if (lifeTimer >= MAX_LIFE) IsAlive = false; }
+        public override Rectangle GetHitbox() => new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
+        public override void Draw(SpriteBatch sb, Texture2D pT) { if (IsAlive) { if (texture != null) sb.Draw(texture, GetHitbox(), Color.White); else sb.Draw(pT, GetHitbox(), Color.OrangeRed); } }
     }
 
-    // LightningBlast: Very fast, piercing, chaining
     public class LightningBlast : Projectile
     {
         private const float SPEED = 900f;
         private Vector2 velocity;
-        private const int WIDTH = 8;
-        private const int HEIGHT = 24;
-        private float lifeTimer = 0f;
-        private const float MAX_LIFE = 1.5f;
-        public bool IsPiercing { get; private set; } // Can hit multiple enemies
-        private List<Enemy> hitEnemies; // Track which enemies were already hit
+        private const int WIDTH = 48, HEIGHT = 24;
+        private float lifeTimer = 0f, MAX_LIFE = 1.5f;
+        private List<Enemy> hitEnemies;
 
-        public LightningBlast(Vector2 position, Vector2 direction, float damage)
-        {
-            Position = position;
-            IsAlive = true;
-            Damage = damage;
-            velocity = direction * SPEED;
-            IsPiercing = true;
-            hitEnemies = new List<Enemy>();
-        }
-
-        public bool HasHitEnemy(Enemy enemy)
-        {
-            return hitEnemies.Contains(enemy);
-        }
-
-        public void MarkEnemyHit(Enemy enemy)
-        {
-            hitEnemies.Add(enemy);
-        }
-
-        public override void Update(float deltaTime)
-        {
-            if (!IsAlive) return;
-            Position += velocity * deltaTime;
-            lifeTimer += deltaTime;
-            if (lifeTimer >= MAX_LIFE) IsAlive = false;
-        }
-
-        public override Rectangle GetHitbox()
-        {
-            return new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
-        }
-
-        public override void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
-        {
-            if (IsAlive)
-            {
-                Rectangle destRect = GetHitbox();
-                if (texture != null)
-                {
-                    spriteBatch.Draw(texture, destRect, Color.White);
-                }
-                else
-                {
-                    spriteBatch.Draw(pixelTexture, GetHitbox(), Color.LightCyan);
-                }
-            }
-        }
+        public LightningBlast(Vector2 pos, Vector2 dir, float dmg) { Position = pos; IsAlive = true; Damage = dmg; velocity = dir * SPEED; hitEnemies = new List<Enemy>(); }
+        public bool HasHitEnemy(Enemy e) => hitEnemies.Contains(e);
+        public void MarkEnemyHit(Enemy e) => hitEnemies.Add(e);
+        public override void Update(float dT) { if (!IsAlive) return; Position += velocity * dT; lifeTimer += dT; if (lifeTimer >= MAX_LIFE) IsAlive = false; }
+        public override Rectangle GetHitbox() => new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
+        public override void Draw(SpriteBatch sb, Texture2D pT) { if (IsAlive) { if (texture != null) sb.Draw(texture, GetHitbox(), Color.White); else sb.Draw(pT, GetHitbox(), Color.LightCyan); } }
     }
 
-    // NatureVine: Rises from ground at target position
     public class NatureVine : Projectile
     {
-        private const float RISE_SPEED = 400f; // Rises upward
-        private Vector2 velocity;
-        private const int WIDTH = 10;
-        private const int HEIGHT = 10;
-        private float lifeTimer = 0f;
-        private const float MAX_LIFE = 2f; // Shorter life since it rises from ground
-        private Vector2 targetGroundPosition; // Where the mouse clicked
-        private bool hasReachedGround = false;
-        private float riseDistance = 0f;
-        private const float MAX_RISE_DISTANCE = 96f; // Rise 3 tiles (32px * 3)
+        private const float RISE_SPEED = 150f;
+        private const int WIDTH = 24, HEIGHT = 96;
+        private float lifeTimer = 0f, MAX_LIFE = 2.5f;
+        private float totalRise = 0f;
 
-        public NatureVine(Vector2 startPosition, Vector2 mouseWorldPosition, float damage)
+        public NatureVine(Vector2 pPos, Vector2 tPos, float dmg, World.World w)
         {
-            // Start position is where spell is cast from
-            // But we want it to appear at ground level below the mouse cursor
-            
-            // Find ground position below mouse cursor
-            int mouseX = (int)(mouseWorldPosition.X / 32); // Tile X
-            int startY = (int)(mouseWorldPosition.Y / 32); // Start searching from mouse Y
-            
-            // Search downward for solid ground (max 10 tiles)
-            int groundY = startY;
-            // We'll set actual ground finding in Update since we need world reference
-            
-            targetGroundPosition = new Vector2(mouseWorldPosition.X, mouseWorldPosition.Y);
-            
-            // Position starts at ground level
-            Position = new Vector2(mouseWorldPosition.X - WIDTH / 2, mouseWorldPosition.Y);
-            
-            IsAlive = true;
-            Damage = damage;
-            
-            // Velocity is upward
-            velocity = new Vector2(0, -RISE_SPEED);
+            IsAlive = true; Damage = dmg;
+            int tX = (int)(tPos.X / World.World.TILE_SIZE), tY = (int)(tPos.Y / World.World.TILE_SIZE), gY = tY;
+            for (int i = 0; i < 20; i++) { if (w.IsSolidAtPosition(tX, gY + 1)) break; gY++; }
+            Position = new Vector2(tX * World.World.TILE_SIZE, (gY + 1) * World.World.TILE_SIZE);
         }
-
-        public override void Update(float deltaTime)
-        {
-            if (!IsAlive) return;
-            
-            // Rise upward
-            Position += velocity * deltaTime;
-            riseDistance += System.Math.Abs(velocity.Y * deltaTime);
-            
-            // Check if reached max rise distance
-            if (riseDistance >= MAX_RISE_DISTANCE)
-            {
-                IsAlive = false;
-            }
-            
-            // Also check max lifetime
-            lifeTimer += deltaTime;
-            if (lifeTimer >= MAX_LIFE) IsAlive = false;
-        }
-
-        public override Rectangle GetHitbox()
-        {
-            return new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
-        }
-
-        public override void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
-        {
-            if (IsAlive)
-            {
-                Rectangle destRect = GetHitbox();
-                if (texture != null)
-                {
-                    spriteBatch.Draw(texture, destRect, Color.White);
-                }
-                else
-                {
-                    spriteBatch.Draw(pixelTexture, GetHitbox(), Color.LimeGreen);
-                }
-            }
-        }
+        public override void Update(float dT) { if (!IsAlive) return; if (totalRise < HEIGHT) { float rA = RISE_SPEED * dT; Position -= new Vector2(0, rA); totalRise += rA; } lifeTimer += dT; if (lifeTimer >= MAX_LIFE) IsAlive = false; }
+        public override Rectangle GetHitbox() => new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
+        public override void Draw(SpriteBatch sb, Texture2D pT) { if (IsAlive) { if (texture != null) { int vH = (int)Math.Min(totalRise, HEIGHT); Rectangle sR = new Rectangle(0, texture.Height - vH, texture.Width, vH); Rectangle dR = new Rectangle((int)Position.X, (int)Position.Y + HEIGHT - vH, WIDTH, vH); sb.Draw(texture, dR, sR, Color.White); } else sb.Draw(pT, GetHitbox(), Color.LimeGreen); } }
     }
 
-    // WaterBubble: Medium speed, bounces, splash damage
     public class WaterBubble : Projectile
     {
-        private const float SPEED = 400f;
+        private const float SPEED = 150f;
         private Vector2 velocity;
-        private const int WIDTH = 14;
-        private const int HEIGHT = 14;
-        private float lifeTimer = 0f;
-        private const float MAX_LIFE = 3f;
+        private const int WIDTH = 32, HEIGHT = 32;
+        private float lifeTimer = 0f, MAX_LIFE = 3f;
+        private const int FRAME_COUNT = 5;
 
-        public WaterBubble(Vector2 position, Vector2 direction, float damage)
-        {
-            Position = position;
-            IsAlive = true;
-            Damage = damage;
-            velocity = direction * SPEED;
-        }
-
-        public override void Update(float deltaTime)
-        {
-            if (!IsAlive) return;
-            Position += velocity * deltaTime;
-            lifeTimer += deltaTime;
-            if (lifeTimer >= MAX_LIFE) IsAlive = false;
-        }
-
-        public override Rectangle GetHitbox()
-        {
-            return new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
-        }
-
-        public override void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
-        {
-            if (IsAlive)
-            {
-                Rectangle destRect = GetHitbox();
-                if (texture != null)
-                {
-                    spriteBatch.Draw(texture, destRect, Color.White);
-                }
-                else
-                {
-                    spriteBatch.Draw(pixelTexture, GetHitbox(), Color.DeepSkyBlue);
-                }
-            }
-        }
+        public WaterBubble(Vector2 pos, Vector2 dir, float dmg) { Position = pos; IsAlive = true; Damage = dmg; velocity = dir * SPEED; }
+        public override void Update(float dT) { if (!IsAlive) return; Position += velocity * dT; lifeTimer += dT; if (lifeTimer >= MAX_LIFE) IsAlive = false; animationTimer += dT; if (animationTimer >= FRAME_TIME) { animationTimer -= FRAME_TIME; currentFrame = (currentFrame + 1) % FRAME_COUNT; } }
+        public override Rectangle GetHitbox() => new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
+        public override void Draw(SpriteBatch sb, Texture2D pT) { if (IsAlive) { if (texture != null) { int fW = texture.Width / 3, fH = texture.Height / 2; Rectangle sR = new Rectangle((currentFrame % 3) * fW, (currentFrame / 3) * fH, fW, fH); sb.Draw(texture, GetHitbox(), sR, Color.White); } else sb.Draw(pT, GetHitbox(), Color.DeepSkyBlue); } }
     }
 
-    // HalfMoonSlash: Arc projectile, wide hitbox, piercing
     public class HalfMoonSlash : Projectile
     {
-        private const float SPEED = 500f;
+        private const float SPEED = 900f;
         private Vector2 velocity;
-        private const int WIDTH = 20;
-        private const int HEIGHT = 20;
-        private float lifeTimer = 0f;
-        private const float MAX_LIFE = 2f;
-        public bool IsPiercing { get; private set; }
+        private const int WIDTH = 32, HEIGHT = 32;
+        private float lifeTimer = 0f, MAX_LIFE = 2f;
         private List<Enemy> hitEnemies;
+        private const int MAX_PIERCES = 5;
 
-        public HalfMoonSlash(Vector2 position, Vector2 direction, float damage)
-        {
-            Position = position;
-            IsAlive = true;
-            Damage = damage;
-            velocity = direction * SPEED;
-            IsPiercing = true;
-            hitEnemies = new List<Enemy>();
-        }
-
-        public bool HasHitEnemy(Enemy enemy)
-        {
-            return hitEnemies.Contains(enemy);
-        }
-
-        public void MarkEnemyHit(Enemy enemy)
-        {
-            hitEnemies.Add(enemy);
-        }
-
-        public override void Update(float deltaTime)
-        {
-            if (!IsAlive) return;
-            Position += velocity * deltaTime;
-            lifeTimer += deltaTime;
-            if (lifeTimer >= MAX_LIFE) IsAlive = false;
-        }
-
-        public override Rectangle GetHitbox()
-        {
-            return new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
-        }
-
-        public override void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
-        {
-            if (IsAlive)
-            {
-                Rectangle destRect = GetHitbox();
-                if (texture != null)
-                {
-                    spriteBatch.Draw(texture, destRect, Color.White);
-                }
-                else
-                {
-                    spriteBatch.Draw(pixelTexture, GetHitbox(), Color.Silver);
-                }
-            }
-        }
+        public HalfMoonSlash(Vector2 pos, Vector2 dir, float dmg) { Position = pos; IsAlive = true; Damage = dmg; velocity = dir * SPEED; hitEnemies = new List<Enemy>(); }
+        public bool HasHitEnemy(Enemy e) => hitEnemies.Contains(e);
+        public void MarkEnemyHit(Enemy e) { hitEnemies.Add(e); if (hitEnemies.Count >= MAX_PIERCES) IsAlive = false; }
+        public override void Update(float dT) { if (!IsAlive) return; Position += velocity * dT; lifeTimer += dT; if (lifeTimer >= MAX_LIFE) IsAlive = false; }
+        public override Rectangle GetHitbox() => new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
+        public override void Draw(SpriteBatch sb, Texture2D pT) { if (IsAlive) { if (texture != null) sb.Draw(texture, GetHitbox(), Color.White); else sb.Draw(pT, GetHitbox(), Color.Silver); } }
     }
 
-    // RunicLaser: Extremely fast beam, high damage, penetrating (continuous damage)
     public class RunicLaser : Projectile
     {
-        private const float SPEED = 1200f;
-        private Vector2 velocity;
-        private const int WIDTH = 6;
-        private const int HEIGHT = 32;
-        private float lifeTimer = 0f;
-        private const float MAX_LIFE = 1f;
-        public bool IsPiercing { get; private set; }
-        private List<Enemy> hitEnemies;
+        private float lifeTimer = 0f, MAX_LIFE = 0.25f;
+        private const float MAX_LENGTH = 1200f;
+        public Vector2 StartPosition { get; private set; }
+        public Vector2 EndPosition { get; private set; }
+        public Vector2 Direction { get; private set; }
+        public float Length { get; private set; }
+        public List<Enemy> hitEnemies;
 
-        public RunicLaser(Vector2 position, Vector2 direction, float damage)
+        public RunicLaser(Vector2 startPos, Vector2 dir, float dmg, World.World w)
         {
-            Position = position;
-            IsAlive = true;
-            Damage = damage;
-            velocity = direction * SPEED;
-            IsPiercing = true;
-            hitEnemies = new List<Enemy>();
+            IsAlive = true; Damage = dmg; StartPosition = startPos; Position = startPos; Direction = dir; hitEnemies = new List<Enemy>();
+            Vector2 endPos = StartPosition;
+            for (int i = 8; i < MAX_LENGTH; i += 8) { Vector2 cP = StartPosition + Direction * i; if (w.IsSolidAtPosition((int)cP.X / World.World.TILE_SIZE, (int)cP.Y / World.World.TILE_SIZE)) break; endPos = cP; }
+            EndPosition = endPos; Length = Vector2.Distance(StartPosition, EndPosition);
         }
-
-        public bool HasHitEnemy(Enemy enemy)
-        {
-            return hitEnemies.Contains(enemy);
-        }
-
-        public void MarkEnemyHit(Enemy enemy)
-        {
-            hitEnemies.Add(enemy);
-        }
-
-        public override void Update(float deltaTime)
-        {
-            if (!IsAlive) return;
-            Position += velocity * deltaTime;
-            lifeTimer += deltaTime;
-            if (lifeTimer >= MAX_LIFE) IsAlive = false;
-        }
-
-        public override Rectangle GetHitbox()
-        {
-            return new Rectangle((int)Position.X, (int)Position.Y, WIDTH, HEIGHT);
-        }
-
-        public override void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
-        {
-            if (IsAlive)
-            {
-                Rectangle destRect = GetHitbox();
-                if (texture != null)
-                {
-                    spriteBatch.Draw(texture, destRect, Color.White);
-                }
-                else
-                {
-                    spriteBatch.Draw(pixelTexture, GetHitbox(), Color.MediumPurple);
-                }
-            }
-        }
+        public override void Update(float dT) { if (!IsAlive) return; lifeTimer += dT; if (lifeTimer >= MAX_LIFE) IsAlive = false; }
+        public override Rectangle GetHitbox() => Rectangle.Empty;
+        public override void Draw(SpriteBatch sb, Texture2D pT) { if (IsAlive && texture != null && Length > 0) { Rectangle sR = new Rectangle(0, 10, 114, 8); float rot = (float)Math.Atan2(Direction.Y, Direction.X); Vector2 scale = new Vector2(Length / sR.Width, 1f); sb.Draw(texture, StartPosition, sR, Color.White, rot, new Vector2(0, sR.Height / 2f), scale, SpriteEffects.None, 0f); } }
     }
 
     public class ProjectileSystem
@@ -466,166 +152,33 @@ namespace Claude4_5Terraria.Systems
         private World.World world;
         private Dictionary<ProjectileType, Texture2D> projectileTextures;
 
-        public ProjectileSystem(World.World world)
+        public ProjectileSystem(World.World world) { this.world = world; activeProjectiles = new List<Projectile>(); projectileTextures = new Dictionary<ProjectileType, Texture2D>(); }
+        public void LoadTexture(ProjectileType type, Texture2D texture) => projectileTextures[type] = texture;
+        public void Launch(ProjectileType type, Vector2 pos, Vector2 dir, float dmg)
         {
-            this.world = world;
-            activeProjectiles = new List<Projectile>();
-            projectileTextures = new Dictionary<ProjectileType, Texture2D>();
+            Projectile p = null;
+            switch (type) { case ProjectileType.MagicBolt: p = new MagicBolt(pos, dir, dmg); break; case ProjectileType.FireBolt: p = new FireBolt(pos, dir, dmg); break; case ProjectileType.LightningBlast: p = new LightningBlast(pos, dir, dmg); break; case ProjectileType.WaterBubble: p = new WaterBubble(pos, dir, dmg); break; case ProjectileType.HalfMoonSlash: p = new HalfMoonSlash(pos, dir, dmg); break; case ProjectileType.RunicLaser: p = new RunicLaser(pos, dir, dmg, world); break; }
+            if (p != null) { if (projectileTextures.ContainsKey(type)) p.SetTexture(projectileTextures[type]); activeProjectiles.Add(p); }
         }
-
-        // Load projectile textures
-        public void LoadTexture(ProjectileType type, Texture2D texture)
+        public void LaunchAtPosition(ProjectileType type, Vector2 pPos, Vector2 tPos, float dmg)
         {
-            projectileTextures[type] = texture;
-            Logger.Log($"[PROJECTILE] Loaded texture for {type}");
+            Projectile p = null; if (type == ProjectileType.NatureVine) p = new NatureVine(pPos, tPos, dmg, world);
+            if (p != null) { if (projectileTextures.ContainsKey(type)) p.SetTexture(projectileTextures[type]); activeProjectiles.Add(p); }
         }
-
-        // MODIFIED: Launch now takes Vector2 direction instead of bool facingRight
-        public void Launch(ProjectileType type, Vector2 position, Vector2 direction, float damage)
+        public void Update(float dT, List<Enemy> enemies)
         {
-            Projectile newProjectile = null;
-            
-            switch (type)
+            foreach (var p in activeProjectiles.Where(p => p.IsAlive).ToList())
             {
-                case ProjectileType.MagicBolt:
-                    newProjectile = new MagicBolt(position, direction, damage);
-                    break;
-                case ProjectileType.FireBolt:
-                    newProjectile = new FireBolt(position, direction, damage);
-                    break;
-                case ProjectileType.LightningBlast:
-                    newProjectile = new LightningBlast(position, direction, damage);
-                    break;
-                case ProjectileType.NatureVine:
-                    // This shouldn't be called for NatureVine - use LaunchAtPosition instead
-                    newProjectile = new NatureVine(position, position, damage);
-                    break;
-                case ProjectileType.WaterBubble:
-                    newProjectile = new WaterBubble(position, direction, damage);
-                    break;
-                case ProjectileType.HalfMoonSlash:
-                    newProjectile = new HalfMoonSlash(position, direction, damage);
-                    break;
-                case ProjectileType.RunicLaser:
-                    newProjectile = new RunicLaser(position, direction, damage);
-                    break;
-            }
-            
-            if (newProjectile != null)
-            {
-                // Set texture if available
-                if (projectileTextures.ContainsKey(type))
+                p.Update(dT); if (!p.IsAlive) continue;
+                Rectangle hb = p.GetHitbox(); if (!hb.IsEmpty && world.IsSolidAtPosition(hb.Center.X / 32, hb.Center.Y / 32)) { if (!(p is NatureVine)) { p.IsAlive = false; continue; } }
+                if (enemies != null)
                 {
-                    newProjectile.SetTexture(projectileTextures[type]);
-                }
-                
-                activeProjectiles.Add(newProjectile);
-                Systems.Logger.Log($"[PROJECTILE] Launched {type} at {position} with damage {damage}");
-            }
-        }
-
-        // NEW: Special launch method for position-based spells (like Nature Vine)
-        public void LaunchAtPosition(ProjectileType type, Vector2 playerPosition, Vector2 targetWorldPosition, float damage)
-        {
-            Projectile newProjectile = null;
-            
-            if (type == ProjectileType.NatureVine)
-            {
-                newProjectile = new NatureVine(playerPosition, targetWorldPosition, damage);
-            }
-            
-            if (newProjectile != null)
-            {
-                // Set texture if available
-                if (projectileTextures.ContainsKey(type))
-                {
-                    newProjectile.SetTexture(projectileTextures[type]);
-                }
-                
-                activeProjectiles.Add(newProjectile);
-                Systems.Logger.Log($"[PROJECTILE] Launched {type} at target position {targetWorldPosition} with damage {damage}");
-            }
-        }
-
-        public void Update(float deltaTime, List<Enemy> activeEnemies)
-        {
-            // Update positions and check enemy collisions
-            foreach (var projectile in activeProjectiles.Where(p => p.IsAlive).ToList())
-            {
-                projectile.Update(deltaTime);
-
-                // Check collision against enemies
-                if (activeEnemies != null)
-                {
-                    foreach (var enemy in activeEnemies.Where(e => e.IsAlive))
-                    {
-                        if (projectile.GetHitbox().Intersects(enemy.GetHitbox()))
-                        {
-                            // Check if this is a piercing projectile
-                            bool isPiercing = false;
-                            bool alreadyHit = false;
-                            
-                            if (projectile is LightningBlast lightning)
-                            {
-                                isPiercing = true;
-                                alreadyHit = lightning.HasHitEnemy(enemy);
-                            }
-                            else if (projectile is HalfMoonSlash halfMoon)
-                            {
-                                isPiercing = true;
-                                alreadyHit = halfMoon.HasHitEnemy(enemy);
-                            }
-                            else if (projectile is RunicLaser laser)
-                            {
-                                isPiercing = true;
-                                alreadyHit = laser.HasHitEnemy(enemy);
-                            }
-                            
-                            // Skip if already hit this enemy
-                            if (alreadyHit) continue;
-                            
-                            // Check if enemy can be damaged
-                            if (!enemy.CanBeDamaged())
-                            {
-                                continue;
-                            }
-
-                            // Apply damage
-                            enemy.TakeDamage(projectile.Damage);
-                            enemy.ResetHitCooldown();
-                            
-                            // Mark enemy as hit for piercing projectiles
-                            if (isPiercing)
-                            {
-                                if (projectile is LightningBlast lightning2)
-                                    lightning2.MarkEnemyHit(enemy);
-                                else if (projectile is HalfMoonSlash halfMoon2)
-                                    halfMoon2.MarkEnemyHit(enemy);
-                                else if (projectile is RunicLaser laser2)
-                                    laser2.MarkEnemyHit(enemy);
-                            }
-                            else
-                            {
-                                // Non-piercing projectile dies on hit
-                                projectile.IsAlive = false;
-                            }
-                            
-                            break;
-                        }
-                    }
+                    if (p is RunicLaser laser) { foreach (var e in enemies.Where(e => e.IsAlive && e.CanBeDamaged() && !laser.hitEnemies.Contains(e))) { for (float i = 0; i < laser.Length; i += 16) { if (e.GetHitbox().Contains(laser.StartPosition + laser.Direction * i)) { e.TakeDamage(laser.Damage); e.ResetHitCooldown(); laser.hitEnemies.Add(e); break; } } } }
+                    else { foreach (var e in enemies.Where(e => e.IsAlive && e.CanBeDamaged())) { if (p.GetHitbox().Intersects(e.GetHitbox())) { bool aH = false; if (p is LightningBlast l && l.HasHitEnemy(e)) aH = true; else if (p is HalfMoonSlash h && h.HasHitEnemy(e)) aH = true; if (aH) continue; e.TakeDamage(p.Damage); e.ResetHitCooldown(); if (p is LightningBlast l2) l2.MarkEnemyHit(e); else if (p is HalfMoonSlash h2) h2.MarkEnemyHit(e); else p.IsAlive = false; if (!p.IsAlive) break; } } }
                 }
             }
-
-            // Remove inactive projectiles
             activeProjectiles.RemoveAll(p => !p.IsAlive);
         }
-
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
-        {
-            foreach (var projectile in activeProjectiles.Where(p => p.IsAlive))
-            {
-                projectile.Draw(spriteBatch, pixelTexture);
-            }
-        }
+        public void Draw(SpriteBatch sb, Texture2D pT) { foreach (var p in activeProjectiles) p.Draw(sb, pT); }
     }
 }

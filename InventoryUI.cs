@@ -474,7 +474,13 @@ namespace Claude4_5Terraria.UI
                 InventorySlot slot = inventory.GetSlot(i);
                 if (slot != null && !slot.IsEmpty())
                 {
-                    DrawItemInSlot(spriteBatch, slotX, startY, slot);
+                    // FIX: Only draw the item icon if the inventory is open,
+                    // OR if this is NOT the currently selected hotbar item.
+                    // This prevents the hotbar icon and the held item from drawing at the same time.
+                    if (isInventoryOpen || i != selected)
+                    {
+                        DrawItemInSlot(spriteBatch, slotX, startY, slot);
+                    }
                 }
             }
         }
@@ -513,16 +519,16 @@ namespace Claude4_5Terraria.UI
                 }
                 else if (draggedItem.ItemType == ItemType.RunicSword)
                 {
-                    // Runic Sword - only show first frame
-                    int frameWidth = itemTexture.Width / 3;
-                    int frameHeight = itemTexture.Height;
+                    // Runic Sword - CORRECTED: 5x2 grid, show first frame (top-left)
+                    int frameWidth = itemTexture.Width / 4;
+                    int frameHeight = itemTexture.Height / 2;
                     sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
                 }
                 else if (draggedItem.ItemType == ItemType.RunicLaserWand)
                 {
-                    // Runic Laser Wand - only show first frame
-                    int frameWidth = itemTexture.Width / 3;
-                    int frameHeight = itemTexture.Height;
+                    // Runic Laser Wand - 4x3 grid, show first frame (top-left)
+                    int frameWidth = itemTexture.Width / 4; // CORRECTED
+                    int frameHeight = itemTexture.Height / 3;
                     sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
                 }
                 else
@@ -650,17 +656,16 @@ namespace Claude4_5Terraria.UI
                 }
                 else if (slot.ItemType == ItemType.RunicSword)
                 {
-                    // Runic Sword spritesheet - show only first frame
-                    // Assuming the spritesheet has frames in a row or grid
-                    int frameWidth = itemTexture.Width / 3; // Adjust based on actual layout
-                    int frameHeight = itemTexture.Height;
+                    // Runic Sword - CORRECTED: 5x2 grid, show first frame (top-left)
+                    int frameWidth = itemTexture.Width / 5;
+                    int frameHeight = itemTexture.Height / 2;
                     sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
                 }
                 else if (slot.ItemType == ItemType.RunicLaserWand)
                 {
-                    // Runic Laser Wand spritesheet - show only first frame
-                    int frameWidth = itemTexture.Width / 3; // Adjust based on actual layout
-                    int frameHeight = itemTexture.Height;
+                    // Runic Laser Wand - 4x3 grid, show first frame (top-left)
+                    int frameWidth = itemTexture.Width / 4; // CORRECTED
+                    int frameHeight = itemTexture.Height / 3;
                     sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
                 }
                 else

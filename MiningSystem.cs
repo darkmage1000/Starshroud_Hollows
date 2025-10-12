@@ -17,7 +17,6 @@ namespace Claude4_5Terraria.Systems
         private const int MINING_RANGE = 4;
         private const int PLACEMENT_RANGE = 4;
 
-        // NEW: Callbacks for chest system
         public Action<Point, TileType> OnChestMined;
         public Action<Point, ItemType> OnChestPlaced;
 
@@ -26,8 +25,7 @@ namespace Claude4_5Terraria.Systems
         private Point? currentlyMiningTile;
         private int selectedHotbarSlot;
 
-        // NEW: Animation frame property
-        public int CurrentAnimationFrame { get; private set; } // 0, 1, or 2
+        public int CurrentAnimationFrame { get; private set; }
 
         private MouseState previousMouseState;
 
@@ -39,17 +37,13 @@ namespace Claude4_5Terraria.Systems
 
         private Random random;
 
-        // --- NEW SOUND FIELDS ---
         private SoundEffect mineDirtSound;
         private SoundEffect mineStoneSound;
         private SoundEffect mineTorchSound;
         private SoundEffect placeTorchSound;
 
-        // NEW: Field to hold the dynamic game sound volume
         private float gameSoundVolume = 1.0f;
-        // ------------------------
 
-        // CRITICAL FIX: Constructor now accepts 6 arguments (world, inventory, and 4 sound effects + volume)
         public MiningSystem(World.World world, Inventory inventory, SoundEffect mineDirt, SoundEffect mineStone, SoundEffect mineTorch, SoundEffect placeTorch, float initialSoundVolume)
         {
             this.world = world;
@@ -64,16 +58,20 @@ namespace Claude4_5Terraria.Systems
             placementCooldown = 0f;
             random = new Random();
 
-            // NEW: Assign sound effects and initial volume
             mineDirtSound = mineDirt;
             mineStoneSound = mineStone;
             mineTorchSound = mineTorch;
             placeTorchSound = placeTorch;
 
-            this.gameSoundVolume = initialSoundVolume; // Assign initial volume
+            this.gameSoundVolume = initialSoundVolume;
         }
 
-        // NEW: Public setter for Game1 to update volume when slider moves
+        public void SetItemTextureMap(Dictionary<ItemType, Texture2D> itemTextureMap)
+        {
+            // This static property is assumed to exist on your DroppedItem class
+            // DroppedItem.ItemTextures = itemTextureMap;
+        }
+
         public void SetSoundVolume(float newVolume)
         {
             gameSoundVolume = newVolume;
@@ -107,7 +105,6 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
-        // NEW: Public method to drop items (for Q key)
         public void DropItem(Vector2 position, ItemType itemType, int count)
         {
             for (int i = 0; i < count; i++)
@@ -120,7 +117,6 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
-        // UPDATED: Auto-mine functionality is contained here
         public void Update(GameTime gameTime, Vector2 playerCenter, Camera camera, Vector2 playerPosition, int playerWidth, int playerHeight, bool autoMiningActive, Vector2 lastPlayerDirection)
         {
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
@@ -132,37 +128,29 @@ namespace Claude4_5Terraria.Systems
 
             MouseState mouseState = Mouse.GetState();
 
-            // --- DETERMINE TARGETING MODE (Auto or Manual) ---
             bool isMining = false;
             int targetX, targetY;
             Vector2 miningWorldPos;
 
-            // Auto-Mine Targeting: If active and moving
             if (autoMiningActive && lastPlayerDirection.LengthSquared() > 0)
             {
                 isMining = true;
-
-                // Determine the base target (player center)
                 miningWorldPos = playerCenter;
 
-                // Horizontal Multi-Block Mining
                 if (lastPlayerDirection.X != 0)
                 {
-                    // Target 1.0 tiles away horizontally (centers the target on the adjacent block for multi-mine)
                     miningWorldPos.X += lastPlayerDirection.X * World.World.TILE_SIZE * 1.0f;
                 }
-                else // Vertical movement (mines a single block)
+                else
                 {
                     miningWorldPos += lastPlayerDirection * World.World.TILE_SIZE * 1.5f;
                 }
             }
-            // Manual Targeting: If left mouse button is pressed
             else if (mouseState.LeftButton == ButtonState.Pressed)
             {
                 isMining = true;
                 miningWorldPos = GetMouseWorldPosition(mouseState, camera);
             }
-            // Default target (for visual outlines only)
             else
             {
                 miningWorldPos = GetMouseWorldPosition(mouseState, camera);
@@ -173,15 +161,12 @@ namespace Claude4_5Terraria.Systems
 
             float maxDistance = MINING_RANGE * World.World.TILE_SIZE;
 
-            // Calculate distance to the visually targeted tile (for range check)
             float distanceToTile = Vector2.Distance(
                 playerCenter,
                 new Vector2(targetX * World.World.TILE_SIZE + World.World.TILE_SIZE / 2,
                            targetY * World.World.TILE_SIZE + World.World.TILE_SIZE / 2)
             );
 
-
-            // Update targetedTile for mouse-over/visual feedback
             Tile targetTile = world.GetTile(targetX, targetY);
             if (targetTile != null && targetTile.IsActive && distanceToTile <= maxDistance)
             {
@@ -192,63 +177,48 @@ namespace Claude4_5Terraria.Systems
                 targetedTile = null;
             }
 
-            // ===== MINING (Triggered by manual mouse OR auto-mine logic) =====
             if (isMining && distanceToTile <= maxDistance)
             {
-                // Determine the vertical position of the two blocks in front of the player (head and foot level)
                 int horizontalDir = (int)lastPlayerDirection.X;
 
                 if (autoMiningActive && horizontalDir != 0)
                 {
-                    // Target the block *in front* of the player
                     int targetX_Multi = (int)((playerPosition.X + (playerWidth / 2) + (horizontalDir * World.World.TILE_SIZE)) / World.World.TILE_SIZE);
-
                     int playerTopTileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
                     int playerBottomTileY = (int)((playerPosition.Y + playerHeight - 1) / World.World.TILE_SIZE);
-
-                    int targetHeadY = playerTopTileY; // The block level the player's head is in
-                    int targetFootY = playerBottomTileY; // The block level the player's feet are in
-
-                    // Call the specialized multi-block horizontal auto-mine processor
+                    int targetHeadY = playerTopTileY;
+                    int targetFootY = playerBottomTileY;
                     ProcessHorizontalAutoMining(targetX_Multi, targetHeadY, targetFootY, deltaTime, lastPlayerDirection);
                 }
                 else if (targetedTile.HasValue && targetTile != null && targetTile.IsActive)
                 {
-                    // Manual mining or vertical auto-mining (single block)
                     ProcessMining(targetedTile.Value.X, targetedTile.Value.Y, deltaTime);
                 }
                 else
                 {
-                    // Ensure state resets if we are pressing but hit nothing
                     currentlyMiningTile = null;
                     miningProgress = 0f;
                     CurrentAnimationFrame = 0;
                 }
             }
-            else if (!isMining) // Stop mining if neither auto-mine nor manual click is active
+            else if (!isMining)
             {
                 currentlyMiningTile = null;
                 miningProgress = 0f;
-                CurrentAnimationFrame = 0; // Reset animation frame
+                CurrentAnimationFrame = 0;
             }
 
-            // ===== PLACEMENT (RIGHT CLICK - includes sound for torch placement) =====
             if (mouseState.RightButton == ButtonState.Pressed && placementCooldown <= 0)
             {
                 if (distanceToTile <= PLACEMENT_RANGE * World.World.TILE_SIZE)
                 {
-                    // Use the mouse position for placement, as auto-mine is only for digging
                     int placeX = (int)(GetMouseWorldPosition(mouseState, camera).X / World.World.TILE_SIZE);
                     int placeY = (int)(GetMouseWorldPosition(mouseState, camera).Y / World.World.TILE_SIZE);
-
                     InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
-
-                    // ACORN PLANTING
                     if (selectedSlot != null && !selectedSlot.IsEmpty() && selectedSlot.ItemType == ItemType.Acorn)
                     {
                         if (CanPlantAcorn(placeX, placeY))
                         {
-                            // Place sapling tile at the planting position
                             world.SetTile(placeX, placeY, new Tile(TileType.Sapling));
                             world.AddSapling(placeX, placeY);
                             selectedSlot.Count--;
@@ -258,41 +228,23 @@ namespace Claude4_5Terraria.Systems
                                 selectedSlot.Count = 0;
                             }
                             placementCooldown = PLACEMENT_DELAY;
-                            Logger.Log($"[PLACE] Planted acorn (sapling tile) at ({placeX}, {placeY})");
                         }
                         else
                         {
-                            Logger.Log($"[PLACE] Cannot plant acorn - need grass/dirt with 3 tiles of space above");
                             placementCooldown = PLACEMENT_DELAY;
                         }
                     }
-                    // BED PLACEMENT
                     else if (selectedSlot != null && !selectedSlot.IsEmpty() && selectedSlot.ItemType == ItemType.Bed)
                     {
                         Tile placeTile = world.GetTile(placeX, placeY);
-                        
-                        // Check if placing on solid ground
                         Tile below = world.GetTile(placeX, placeY + 1);
                         if (below != null && below.IsActive && (placeTile == null || !placeTile.IsActive))
                         {
-                            Rectangle blockRect = new Rectangle(
-                                placeX * World.World.TILE_SIZE,
-                                placeY * World.World.TILE_SIZE,
-                                World.World.TILE_SIZE,
-                                World.World.TILE_SIZE
-                            );
-
-                            Rectangle playerRect = new Rectangle(
-                                (int)playerPosition.X,
-                                (int)playerPosition.Y,
-                                playerWidth,
-                                playerHeight
-                            );
-
+                            Rectangle blockRect = new Rectangle(placeX * World.World.TILE_SIZE, placeY * World.World.TILE_SIZE, World.World.TILE_SIZE, World.World.TILE_SIZE);
+                            Rectangle playerRect = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
                             if (!blockRect.Intersects(playerRect))
                             {
                                 world.SetTile(placeX, placeY, new Tile(TileType.Bed));
-                                Logger.Log($"[PLACE] Placed bed at ({placeX}, {placeY})");
                                 selectedSlot.Count--;
                                 if (selectedSlot.Count <= 0)
                                 {
@@ -304,41 +256,24 @@ namespace Claude4_5Terraria.Systems
                         }
                         else
                         {
-                            Logger.Log($"[PLACE] Bed requires solid ground below");
                             placementCooldown = PLACEMENT_DELAY;
                         }
                     }
-                    // REGULAR BLOCK PLACEMENT
                     else
                     {
                         Tile placeTile = world.GetTile(placeX, placeY);
-
-                        // Allow placement on water, but NOT on lava or solid blocks
                         if (placeTile != null && placeTile.IsActive && placeTile.Type == TileType.Lava)
                         {
-                            Logger.Log($"[PLACE] Cannot place blocks on lava");
                             placementCooldown = PLACEMENT_DELAY;
                         }
                         else if (placeTile != null && placeTile.IsActive && placeTile.Type != TileType.Water)
                         {
-                            // Already a solid block here
+                            // Already solid
                         }
                         else
                         {
-                            Rectangle blockRect = new Rectangle(
-                                placeX * World.World.TILE_SIZE,
-                                placeY * World.World.TILE_SIZE,
-                                World.World.TILE_SIZE,
-                                World.World.TILE_SIZE
-                            );
-
-                            Rectangle playerRect = new Rectangle(
-                                (int)playerPosition.X,
-                                (int)playerPosition.Y,
-                                playerWidth,
-                                playerHeight
-                            );
-
+                            Rectangle blockRect = new Rectangle(placeX * World.World.TILE_SIZE, placeY * World.World.TILE_SIZE, World.World.TILE_SIZE, World.World.TILE_SIZE);
+                            Rectangle playerRect = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
                             if (!blockRect.Intersects(playerRect))
                             {
                                 if (selectedSlot != null && !selectedSlot.IsEmpty())
@@ -348,68 +283,48 @@ namespace Claude4_5Terraria.Systems
 
                                     if (IsPlaceable(blockType))
                                     {
-                                        // TORCH PLACEMENT
                                         if (blockType == TileType.Torch)
                                         {
-                                            // Check if underground
                                             bool isUnderground = false;
                                             for (int checkY = placeY - 1; checkY >= 0; checkY--)
                                             {
                                                 Tile checkTile = world.GetTile(placeX, checkY);
-                                                if (checkTile != null && checkTile.IsActive &&
-                                                    checkTile.Type != TileType.Leaves &&
-                                                    checkTile.Type != TileType.Wood &&
-                                                    checkTile.Type != TileType.Sapling)
+                                                if (checkTile != null && checkTile.IsActive && checkTile.Type != TileType.Leaves && checkTile.Type != TileType.Wood && checkTile.Type != TileType.Sapling)
                                                 {
                                                     isUnderground = true;
                                                     break;
                                                 }
                                             }
-
-                                            // Underground: allow floating torches
-                                            // Surface: require adjacent block
                                             if (!isUnderground && !HasAdjacentSolidBlock(placeX, placeY))
                                             {
-                                                Logger.Log($"[PLACE] Torch requires adjacent wall or surface");
                                                 placementCooldown = PLACEMENT_DELAY;
                                             }
                                             else
                                             {
                                                 world.SetTile(placeX, placeY, new Tile(blockType));
-                                                Logger.Log($"[PLACE] Placed {blockType} at ({placeX}, {placeY})");
-
-                                                // UPDATED PLAYBACK
                                                 placeTorchSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
-
                                                 selectedSlot.Count--;
                                                 if (selectedSlot.Count <= 0)
                                                 {
                                                     selectedSlot.ItemType = ItemType.None;
                                                     selectedSlot.Count = 0;
                                                 }
-
                                                 placementCooldown = PLACEMENT_DELAY;
                                             }
                                         }
-                                        // ALL OTHER BLOCKS
                                         else
                                         {
                                             world.SetTile(placeX, placeY, new Tile(blockType));
-                                            Logger.Log($"[PLACE] Placed {blockType} at ({placeX}, {placeY})");
-
-                                            // NEW: Notify if a chest was placed
                                             if (itemType == ItemType.WoodChest || itemType == ItemType.SilverChest || itemType == ItemType.MagicChest)
                                             {
                                                 OnChestPlaced?.Invoke(new Point(placeX, placeY), itemType);
                                             }
-
                                             selectedSlot.Count--;
                                             if (selectedSlot.Count <= 0)
                                             {
                                                 selectedSlot.ItemType = ItemType.None;
                                                 selectedSlot.Count = 0;
                                             }
-
                                             placementCooldown = PLACEMENT_DELAY;
                                         }
                                     }
@@ -420,54 +335,56 @@ namespace Claude4_5Terraria.Systems
                 }
             }
 
-            // ===== UPDATE DROPPED ITEMS (unchanged) =====
+            // This is the section to replace in your MiningSystem.Update method
+
             foreach (DroppedItem item in droppedItems)
             {
                 item.Update(deltaTime, world);
                 item.ApplyMagnetism(playerCenter, MAGNET_RANGE);
             }
 
-            // ===== AUTO-PICKUP ITEMS (unchanged) =====
+            // --- REPLACEMENT STARTS HERE ---
+
+            // 1. Create the list *before* the loop starts.
             List<DroppedItem> itemsToRemove = new List<DroppedItem>();
-            Rectangle playerRect2 = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
+
+            // Loop through all dropped items in the world.
             foreach (DroppedItem item in droppedItems)
             {
-                if (playerRect2.Intersects(item.GetBounds()))
+                // 2. Use item.CanCollect() to respect the pickup delay.
+                if (item.CanCollect(playerPosition, playerWidth, playerHeight))
                 {
-                    inventory.AddItem(item.ItemType, 1);
-                    itemsToRemove.Add(item);
-                    Logger.Log($"[MINING] Picked up {item.ItemType}");
+                    // If the item can be collected and added to inventory, mark it for removal.
+                    if (inventory.AddItem(item.ItemType, 1))
+                    {
+                        itemsToRemove.Add(item);
+                    }
                 }
             }
-            foreach (DroppedItem item in itemsToRemove)
-            {
-                droppedItems.Remove(item);
-            }
+
+            // Remove all collected items from the world.
+            itemsToRemove.ForEach(item => droppedItems.Remove(item));
+
+            // --- REPLACEMENT ENDS HERE ---
 
             previousMouseState = mouseState;
         }
 
-        // NEW: Specialized handler for two-block horizontal auto-mining
         private void ProcessHorizontalAutoMining(int targetX, int targetHeadY, int targetFootY, float deltaTime, Vector2 lastPlayerDirection)
         {
-            Point targetBottom = new Point(targetX, targetFootY);
-            Point targetTop = new Point(targetX, targetHeadY);
-
-            // We track the bottom block as the "currentlyMiningTile" for UI/consistency
-            if (currentlyMiningTile == null || currentlyMiningTile.Value != targetBottom)
+            // 1. Identify all tiles to be mined in the vertical column
+            List<Point> tilesToMine = new List<Point>();
+            for (int y = targetHeadY; y <= targetFootY; y++)
             {
-                currentlyMiningTile = targetBottom;
-                miningProgress = 0f;
+                Tile tile = world.GetTile(targetX, y);
+                if (tile != null && tile.IsActive)
+                {
+                    tilesToMine.Add(new Point(targetX, y));
+                }
             }
 
-            Tile tileTop = world.GetTile(targetTop.X, targetTop.Y);
-            Tile tileBottom = world.GetTile(targetBottom.X, targetBottom.Y);
-
-            bool needsTop = tileTop != null && tileTop.IsActive;
-            bool needsBottom = tileBottom != null && tileBottom.IsActive;
-
-            // Exit if there is nothing to mine
-            if (!needsTop && !needsBottom)
+            // If there's nothing to mine, reset and exit
+            if (tilesToMine.Count == 0)
             {
                 currentlyMiningTile = null;
                 miningProgress = 0f;
@@ -475,57 +392,67 @@ namespace Claude4_5Terraria.Systems
                 return;
             }
 
-            InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
-            ItemType currentTool = selectedSlot?.ItemType ?? ItemType.None;
-
-            // Check if the tool can mine the hardest material in the two blocks
-            TileType hardestType = TileType.Air;
-            if (needsTop) hardestType = tileTop.Type;
-            if (needsBottom && GetMiningTime(tileBottom.Type) > GetMiningTime(hardestType))
+            // Use the top-most block as the reference for tracking the mining target
+            Point primaryTarget = tilesToMine[0];
+            if (currentlyMiningTile == null || currentlyMiningTile.Value != primaryTarget)
             {
-                hardestType = tileBottom.Type;
+                currentlyMiningTile = primaryTarget;
+                miningProgress = 0f;
             }
 
+            // 2. Determine the hardest block to set the mining time
+            InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
+            ItemType currentTool = selectedSlot?.ItemType ?? ItemType.None;
+            TileType hardestType = TileType.Air;
+            float maxMiningTime = 0f;
+
+            foreach (Point tilePos in tilesToMine)
+            {
+                Tile tile = world.GetTile(tilePos.X, tilePos.Y);
+                if (tile != null)
+                {
+                    // Find the tile that takes the longest to mine
+                    float time = GetMiningTime(tile.Type);
+                    if (time > maxMiningTime)
+                    {
+                        maxMiningTime = time;
+                        hardestType = tile.Type;
+                    }
+                }
+            }
+
+            // 3. Check if the current tool can mine the hardest block
             if (!ToolProperties.CanMine(currentTool, hardestType))
             {
-                if (miningProgress == 0f) Logger.Log($"[AUTO-MINE] Cannot clear path with {currentTool}");
                 miningProgress = 0f;
                 CurrentAnimationFrame = 0;
                 return;
             }
 
-            // --- Apply mining progress ---
-            float baseMiningTime = GetMiningTime(hardestType);
+            // 4. Calculate mining progress based on the hardest block
             float miningSpeed = ToolProperties.GetMiningSpeed(currentTool);
-            float adjustedMiningTime = baseMiningTime / miningSpeed;
-
+            float adjustedMiningTime = maxMiningTime / miningSpeed;
+            if (adjustedMiningTime <= 0) adjustedMiningTime = 0.1f; // Prevent division by zero
             miningProgress += deltaTime / adjustedMiningTime;
-
-            // Update animation frame based on progress
             CurrentAnimationFrame = (int)(miningProgress * 3) % 3;
 
-            // --- Check for break ---
+            // 5. Break all targeted blocks when mining is complete
             if (miningProgress >= 1f)
             {
-                if (needsTop)
+                foreach (Point tilePos in tilesToMine)
                 {
-                    BreakBlock(targetTop.X, targetTop.Y);
-                    Logger.Log($"[AUTO-MINE] Mined top block ({targetTop.X}, {targetTop.Y})");
+                    // Ensure the block still exists before breaking
+                    if (world.GetTile(tilePos.X, tilePos.Y)?.IsActive == true)
+                    {
+                        BreakBlock(tilePos.X, tilePos.Y);
+                    }
                 }
-                if (needsBottom)
-                {
-                    BreakBlock(targetBottom.X, targetBottom.Y);
-                    Logger.Log($"[AUTO-MINE] Mined bottom block ({targetBottom.X}, {targetBottom.Y})");
-                }
-
-                // Reset state after clearing both blocks
                 miningProgress = 0f;
                 currentlyMiningTile = null;
                 CurrentAnimationFrame = 0;
             }
         }
 
-        // Core mining logic, remains for manual and vertical auto-mining
         private void ProcessMining(int targetX, int targetY, float deltaTime)
         {
             Point targetPoint = new Point(targetX, targetY);
@@ -538,7 +465,6 @@ namespace Claude4_5Terraria.Systems
 
             Tile tile = world.GetTile(targetPoint.X, targetPoint.Y);
 
-            // CRITICAL FIX: Cannot mine water or lava directly - only move by removing blocks
             if (tile != null && (tile.Type == TileType.Water || tile.Type == TileType.Lava))
             {
                 miningProgress = 0f;
@@ -549,36 +475,19 @@ namespace Claude4_5Terraria.Systems
             if (tile != null)
             {
                 InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
-                ItemType currentTool;
-                if (selectedSlot != null && !selectedSlot.IsEmpty())
-                {
-                    currentTool = selectedSlot.ItemType;
-                }
-                else
-                {
-                    currentTool = ItemType.None;
-                }
+                ItemType currentTool = selectedSlot != null && !selectedSlot.IsEmpty() ? selectedSlot.ItemType : ItemType.None;
 
-                bool canMine = ToolProperties.CanMine(currentTool, tile.Type);
-
-                if (!canMine)
+                if (!ToolProperties.CanMine(currentTool, tile.Type))
                 {
-                    if (miningProgress == 0f)
-                    {
-                        Logger.Log($"[MINING] Cannot mine {tile.Type} with {currentTool} - need better tool");
-                    }
                     miningProgress = 0f;
-                    CurrentAnimationFrame = 0; // Reset animation frame
+                    CurrentAnimationFrame = 0;
                 }
                 else
                 {
                     float baseMiningTime = GetMiningTime(tile.Type);
                     float miningSpeed = ToolProperties.GetMiningSpeed(currentTool);
                     float adjustedMiningTime = baseMiningTime / miningSpeed;
-
                     miningProgress += deltaTime / adjustedMiningTime;
-
-                    // Update animation frame based on progress (cycles 0, 1, 2)
                     CurrentAnimationFrame = (int)(miningProgress * 3) % 3;
 
                     if (miningProgress >= 1f)
@@ -586,14 +495,12 @@ namespace Claude4_5Terraria.Systems
                         BreakBlock(targetPoint.X, targetPoint.Y);
                         miningProgress = 0f;
                         currentlyMiningTile = null;
-                        CurrentAnimationFrame = 0; // Reset animation frame
-                        Logger.Log($"[MINING] Mined {tile.Type} with {currentTool} at ({targetPoint.X}, {targetPoint.Y})");
+                        CurrentAnimationFrame = 0;
                     }
                 }
             }
         }
 
-        // UPDATED: Added sound logic
         private void BreakBlock(int x, int y)
         {
             Tile tile = world.GetTile(x, y);
@@ -603,219 +510,75 @@ namespace Claude4_5Terraria.Systems
             ItemType droppedItemType;
             int dropCount = 1;
 
-            // --- Determine sound before removing tile ---
             SoundEffect breakSound = null;
-            if (tileType == TileType.Dirt || tileType == TileType.Grass)
-            {
-                breakSound = mineDirtSound;
-            }
-            else if (tileType == TileType.Stone || tileType == TileType.Copper || tileType == TileType.Silver || tileType == TileType.Platinum || tileType == TileType.Coal)
-            {
-                breakSound = mineStoneSound;
-            }
-            else if (tileType == TileType.Torch)
-            {
-                breakSound = mineTorchSound;
-            }
-            // --- End sound determination ---
-
+            if (tileType == TileType.Dirt || tileType == TileType.Grass) { breakSound = mineDirtSound; }
+            else if (tileType == TileType.Stone || tileType == TileType.Copper || tileType == TileType.Silver || tileType == TileType.Platinum || tileType == TileType.Coal) { breakSound = mineStoneSound; }
+            else if (tileType == TileType.Torch) { breakSound = mineTorchSound; }
 
             if ((tile.Type == TileType.Wood || tile.Type == TileType.Leaves) && tile.IsPartOfTree)
             {
                 int woodBlockCount = CountTreeWoodBlocks(x, y);
                 world.RemoveTree(x, y);
-
                 droppedItemType = ItemType.Wood;
-
-                if (woodBlockCount <= 10)
-                {
-                    dropCount = 3;
-                }
-                else if (woodBlockCount <= 13)
-                {
-                    dropCount = 4;
-                }
-                else
-                {
-                    dropCount = 5;
-                }
-
-                // Play wood sound for trees
-                breakSound = mineTorchSound; // Using wood sound (loaded as mineTorchSound)
-
-                Vector2 acornPosition = new Vector2(
-                    x * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8,
-                    y * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8
-                );
+                if (woodBlockCount <= 10) dropCount = 3; else if (woodBlockCount <= 13) dropCount = 4; else dropCount = 5;
+                breakSound = mineTorchSound;
+                Vector2 acornPosition = new Vector2(x * World.World.TILE_SIZE + 8, y * World.World.TILE_SIZE + 8);
                 int acornCount = random.Next(1, 3);
-                for (int i = 0; i < acornCount; i++)
-                {
-                    Vector2 pos = acornPosition + new Vector2(
-                        (float)(random.NextDouble() - 0.5) * 20,
-                        (float)(random.NextDouble() - 0.5) * 20
-                    );
-                    droppedItems.Add(new DroppedItem(pos, ItemType.Acorn));
-                }
+                for (int i = 0; i < acornCount; i++) droppedItems.Add(new DroppedItem(acornPosition + new Vector2((float)(random.NextDouble() - 0.5) * 20, (float)(random.NextDouble() - 0.5) * 20), ItemType.Acorn));
             }
             else
             {
-                // Check if it's a chest before breaking
                 if (tileType == TileType.WoodChest || tileType == TileType.SilverChest || tileType == TileType.MagicChest)
                 {
-                    // Play stone sound as a generic hard object sound
                     mineStoneSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
                     OnChestMined?.Invoke(new Point(x, y), tileType);
                     return;
                 }
-
                 world.SetTile(x, y, new Tile(TileType.Air));
                 droppedItemType = (tileType == TileType.Grass) ? ItemType.Dirt : ItemTypeExtensions.FromTileType(tileType);
-                dropCount = 1;
             }
-
-            // Play the determined break sound with volume multiplier (MOST ROBUST PLAYBACK)
             breakSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
-
-            Vector2 basePosition = new Vector2(
-                x * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8,
-                y * World.World.TILE_SIZE + World.World.TILE_SIZE / 2 - 8
-            );
-
-            for (int i = 0; i < dropCount; i++)
-            {
-                Vector2 itemPosition = basePosition + new Vector2(
-                    (float)(random.NextDouble() - 0.5) * 16,
-                    (float)(random.NextDouble() - 0.5) * 16
-                );
-                droppedItems.Add(new DroppedItem(itemPosition, droppedItemType));
-            }
+            Vector2 basePosition = new Vector2(x * World.World.TILE_SIZE + 8, y * World.World.TILE_SIZE + 8);
+            for (int i = 0; i < dropCount; i++) droppedItems.Add(new DroppedItem(basePosition + new Vector2((float)(random.NextDouble() - 0.5) * 16, (float)(random.NextDouble() - 0.5) * 16), droppedItemType));
         }
-
 
         private bool HasAdjacentSolidBlock(int x, int y)
         {
-            bool left = world.IsSolidAtPosition(x - 1, y);
-            bool right = world.IsSolidAtPosition(x + 1, y);
-            bool up = world.IsSolidAtPosition(x, y - 1);
-            bool down = world.IsSolidAtPosition(x, y + 1);
-
-            return left || right || up || down;
+            return world.IsSolidAtPosition(x - 1, y) || world.IsSolidAtPosition(x + 1, y) || world.IsSolidAtPosition(x, y - 1) || world.IsSolidAtPosition(x, y + 1);
         }
-
 
         private bool IsPlaceable(TileType type)
         {
-            switch (type)
-            {
-                case TileType.Dirt:
-                case TileType.Grass:
-                case TileType.Stone:
-                case TileType.Wood:
-                case TileType.WoodCraftingBench:
-                case TileType.CopperCraftingBench:
-                case TileType.WoodChest:
-                case TileType.SilverChest:
-                case TileType.MagicChest:
-                case TileType.Torch:
-                    return true;
-                default:
-                    return false;
-            }
+            switch (type) { case TileType.Dirt: case TileType.Grass: case TileType.Stone: case TileType.Wood: case TileType.WoodCraftingBench: case TileType.CopperCraftingBench: case TileType.WoodChest: case TileType.SilverChest: case TileType.MagicChest: case TileType.Torch: return true; default: return false; }
         }
-
 
         public void DrawItems(SpriteBatch spriteBatch, Texture2D pixelTexture)
         {
-            foreach (DroppedItem item in droppedItems)
-            {
-                item.Draw(spriteBatch, pixelTexture);
-            }
+            foreach (DroppedItem item in droppedItems) item.Draw(spriteBatch, pixelTexture);
         }
 
         private Vector2 GetMouseWorldPosition(MouseState mouseState, Camera camera)
         {
-            Vector2 mouseScreen = new Vector2(mouseState.X, mouseState.Y);
-            Matrix inverseTransform = Matrix.Invert(camera.GetTransformMatrix());
-            Vector2 mouseWorld = Vector2.Transform(mouseScreen, inverseTransform);
-            return mouseWorld;
+            return Vector2.Transform(new Vector2(mouseState.X, mouseState.Y), Matrix.Invert(camera.GetTransformMatrix()));
         }
 
         private float GetMiningTime(TileType type)
         {
-            switch (type)
-            {
-                case TileType.Dirt:
-                case TileType.Grass:
-                    return 0.5f;
-                case TileType.Stone:
-                    return 1.0f;
-                case TileType.Copper:
-                    return 1.5f;
-                case TileType.Silver:
-                    return 2.0f;
-                case TileType.Platinum:
-                    return 3.0f;
-                case TileType.Wood:
-                case TileType.Leaves:
-                    return 0.8f;
-                case TileType.Coal:
-                    return 0.7f;
-                case TileType.Torch:
-                    return 0.3f;
-                case TileType.WoodCraftingBench:
-                case TileType.CopperCraftingBench:
-                case TileType.Sapling:
-                    return 0.3f;
-                case TileType.WoodChest:
-                case TileType.SilverChest:
-                case TileType.MagicChest:
-                    return 0.5f;
-                default:
-                    return 1.0f;
-            }
+            switch (type) { case TileType.Dirt: case TileType.Grass: return 0.5f; case TileType.Stone: return 1.0f; case TileType.Copper: return 1.5f; case TileType.Silver: return 2.0f; case TileType.Platinum: return 3.0f; case TileType.Wood: case TileType.Leaves: return 0.8f; case TileType.Coal: return 0.7f; case TileType.Torch: return 0.3f; case TileType.WoodCraftingBench: case TileType.CopperCraftingBench: case TileType.Sapling: return 0.3f; case TileType.WoodChest: case TileType.SilverChest: case TileType.MagicChest: return 0.5f; default: return 1.0f; }
         }
 
         private int CountTreeWoodBlocks(int x, int y)
         {
             int woodCount = 0;
-            for (int dx = -1; dx <= 1; dx++)
-            {
-                for (int dy = -10; dy <= 10; dy++)
-                {
-                    Tile checkTile = world.GetTile(x + dx, y + dy);
-                    if (checkTile != null && checkTile.Type == TileType.Wood && checkTile.IsPartOfTree)
-                    {
-                        woodCount++;
-                    }
-                }
-            }
-
+            for (int dx = -1; dx <= 1; dx++) for (int dy = -10; dy <= 10; dy++) { Tile t = world.GetTile(x + dx, y + dy); if (t?.Type == TileType.Wood && t.IsPartOfTree) woodCount++; }
             return woodCount;
         }
 
         private bool CanPlantAcorn(int x, int y)
         {
-            // Check if the planting spot is empty
-            Tile targetTile = world.GetTile(x, y);
-            if (targetTile != null && targetTile.IsActive)
-                return false; // Can't plant if there's already a block here (including another sapling)
-
-            // Check if there's grass or dirt BELOW
-            Tile groundTile = world.GetTile(x, y + 1);
-            if (groundTile == null || !groundTile.IsActive)
-                return false;
-
-            if (groundTile.Type != TileType.Grass && groundTile.Type != TileType.Dirt)
-                return false;
-
-            // Check if there's space above (2 more tiles of air)
-            for (int checkY = y - 1; checkY >= y - 2; checkY--)
-            {
-                Tile checkTile = world.GetTile(x, checkY);
-                if (checkTile != null && checkTile.IsActive)
-                    return false;
-            }
-
+            Tile targetTile = world.GetTile(x, y); if (targetTile?.IsActive == true) return false;
+            Tile groundTile = world.GetTile(x, y + 1); if (groundTile == null || !groundTile.IsActive || (groundTile.Type != TileType.Grass && groundTile.Type != TileType.Dirt)) return false;
+            for (int cY = y - 1; cY >= y - 2; cY--) { if (world.GetTile(x, cY)?.IsActive == true) return false; }
             return true;
         }
     }
