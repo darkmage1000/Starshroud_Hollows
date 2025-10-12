@@ -503,12 +503,26 @@ namespace Claude4_5Terraria.UI
                 Texture2D itemTexture = itemSprites[draggedItem.ItemType];
                 Rectangle sourceRect;
 
-                // FIXED: Special handling for Runic Pickaxe (animated spritesheet)
+                // FIXED: Special handling for spritesheets when dragging
                 if (draggedItem.ItemType == ItemType.RunicPickaxe)
                 {
                     // Only show first frame when dragging
                     int frameWidth = itemTexture.Width / 2;
                     int frameHeight = itemTexture.Height / 2;
+                    sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
+                }
+                else if (draggedItem.ItemType == ItemType.RunicSword)
+                {
+                    // Runic Sword - only show first frame
+                    int frameWidth = itemTexture.Width / 3;
+                    int frameHeight = itemTexture.Height;
+                    sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
+                }
+                else if (draggedItem.ItemType == ItemType.RunicLaserWand)
+                {
+                    // Runic Laser Wand - only show first frame
+                    int frameWidth = itemTexture.Width / 3;
+                    int frameHeight = itemTexture.Height;
                     sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
                 }
                 else
@@ -625,13 +639,28 @@ namespace Claude4_5Terraria.UI
                 Texture2D itemTexture = itemSprites[slot.ItemType];
                 Rectangle sourceRect;
 
-                // FIXED: Special handling for Runic Pickaxe (animated spritesheet)
+                // FIXED: Special handling for spritesheets (only show first frame in inventory)
                 if (slot.ItemType == ItemType.RunicPickaxe)
                 {
                     // Runic pickaxe is a 2x2 grid (3 frames total)
                     // Frame 0 is at (0,0) - top-left corner
                     int frameWidth = itemTexture.Width / 2;
                     int frameHeight = itemTexture.Height / 2;
+                    sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
+                }
+                else if (slot.ItemType == ItemType.RunicSword)
+                {
+                    // Runic Sword spritesheet - show only first frame
+                    // Assuming the spritesheet has frames in a row or grid
+                    int frameWidth = itemTexture.Width / 3; // Adjust based on actual layout
+                    int frameHeight = itemTexture.Height;
+                    sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
+                }
+                else if (slot.ItemType == ItemType.RunicLaserWand)
+                {
+                    // Runic Laser Wand spritesheet - show only first frame
+                    int frameWidth = itemTexture.Width / 3; // Adjust based on actual layout
+                    int frameHeight = itemTexture.Height;
                     sourceRect = new Rectangle(0, 0, frameWidth, frameHeight);
                 }
                 else

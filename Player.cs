@@ -38,7 +38,6 @@ namespace Claude4_5Terraria.Player
         private const float JUMP_FORCE = -12f;
         private const float FAST_FALL_MULTIPLIER = 2.5f;
 
-        // Debug mode
         private bool debugMode = false;
         private const float DEBUG_FLY_SPEED = 15f;
 
@@ -64,6 +63,10 @@ namespace Claude4_5Terraria.Player
 
         private int currentAnimationRow = IDLE_DOWN_ROW;
         private const float SPRITE_SCALE = 2.0f;
+
+        private float itemAnimTimer = 0f;
+        private const float ITEM_ANIM_SPEED = 0.15f;
+        private int itemAnimFrame = 0;
 
         public Player(World.World world, Vector2 startPosition)
         {
@@ -173,7 +176,6 @@ namespace Claude4_5Terraria.Player
 
             KeyboardState keyState = Keyboard.GetState();
 
-            // DEBUG MODE: Free fly in all directions, noclip
             if (debugMode)
             {
                 Vector2 flyDirection = Vector2.Zero;
@@ -207,10 +209,10 @@ namespace Claude4_5Terraria.Player
                 Position += flyDirection * DEBUG_FLY_SPEED;
                 Velocity = Vector2.Zero;
                 UpdateAnimation(deltaTime);
+                UpdateItemAnimation(deltaTime);
                 return;
             }
 
-            // NORMAL MODE
             float horizontalInput = 0;
             isMoving = false;
 
@@ -253,6 +255,7 @@ namespace Claude4_5Terraria.Player
 
             ApplyPhysics();
             UpdateAnimation(deltaTime);
+            UpdateItemAnimation(deltaTime);
         }
 
         private void CheckLavaDamage(float deltaTime)
@@ -434,6 +437,16 @@ namespace Claude4_5Terraria.Player
             currentAnimationRow = IDLE_DOWN_ROW;
         }
 
+        private void UpdateItemAnimation(float deltaTime)
+        {
+            itemAnimTimer += deltaTime;
+            if (itemAnimTimer >= ITEM_ANIM_SPEED)
+            {
+                itemAnimTimer = 0f;
+                itemAnimFrame = (itemAnimFrame + 1) % 3;
+            }
+        }
+
         private void ApplyPhysics()
         {
             Vector2 newPosition = new Vector2(Position.X + Velocity.X, Position.Y);
@@ -532,13 +545,13 @@ namespace Claude4_5Terraria.Player
                 float scale = 0.5f;
                 SpriteEffects flip = facingRight ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
 
-                // Handle Runic Pickaxe animation
+                // Handle Runic Pickaxe (2x2 grid)
                 if (heldItemType == ItemType.RunicPickaxe)
                 {
                     totalFrames = 3;
                     itemFrameWidth = itemSpriteSheet.Width / 2;
                     itemFrameHeight = itemSpriteSheet.Height / 2;
-                    currentFrame = animationFrame;
+                    currentFrame = animationFrame > 0 ? animationFrame : itemAnimFrame;
                     scale = 0.5f;
 
                     if (animationFrame == 1)
@@ -554,27 +567,40 @@ namespace Claude4_5Terraria.Player
                         rotation = facingRight ? -MathHelper.PiOver4 * 0.25f : MathHelper.PiOver4 * 0.25f;
                     }
                 }
-                // NEW: Handle Wood Sword animation (same style as Runic Pickaxe)
-                else if (heldItemType == ItemType.WoodSword)
+                // Handle all swords
+                else if (heldItemType == ItemType.WoodSword || heldItemType == ItemType.CopperSword ||
+                         heldItemType == ItemType.IronSword || heldItemType == ItemType.SilverSword ||
+                         heldItemType == ItemType.GoldSword || heldItemType == ItemType.PlatinumSword ||
+                         heldItemType == ItemType.RunicSword)
                 {
                     totalFrames = 3;
-                    // Wood sword uses single sprite, not a sheet
-                    itemFrameWidth = itemSpriteSheet.Width;
-                    itemFrameHeight = itemSpriteSheet.Height;
-                    currentFrame = animationFrame;
-                    scale = 0.5f;
-
-                    if (animationFrame == 1)
+                    
+                    // Runic sword has 2x2 animation frames
+                    if (heldItemType == ItemType.RunicSword)
                     {
-                        rotation = facingRight ? MathHelper.PiOver4 * 0.5f : MathHelper.PiOver4 * 1.5f;
-                    }
-                    else if (animationFrame == 2)
-                    {
-                        rotation = facingRight ? MathHelper.PiOver4 * 1.5f : -MathHelper.PiOver4 * 0.5f;
+                        itemFrameWidth = itemSpriteSheet.Width / 2;
+                        itemFrameHeight = itemSpriteSheet.Height / 2;
+                        currentFrame = animationFrame > 0 ? animationFrame : itemAnimFrame;
                     }
                     else
                     {
-                        rotation = facingRight ? -MathHelper.PiOver4 * 0.25f : MathHelper.PiOver4 * 0.25f;
+                        itemFrameWidth = itemSpriteSheet.Width;
+                        itemFrameHeight = itemSpriteSheet.Height;
+                    }
+                    currentFrame = animationFrame;
+                    scale = 0.6f;
+
+                    if (animationFrame == 1)
+                    {
+                        rotation = facingRight ? MathHelper.PiOver4 * 2.8f : -MathHelper.PiOver4 * 1.2f;
+                    }
+                    else if (animationFrame == 2)
+                    {
+                        rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 2.5f;
+                    }
+                    else
+                    {
+                        rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 0.5f;
                     }
                 }
                 else if (heldItemType == ItemType.Torch)
@@ -592,12 +618,12 @@ namespace Claude4_5Terraria.Player
                 int sourceX = 0;
                 int sourceY = 0;
 
-                if (heldItemType == ItemType.RunicPickaxe)
+                // Handle Runic items (2x2 grid)
+                if (heldItemType == ItemType.RunicPickaxe || heldItemType == ItemType.RunicSword)
                 {
                     if (currentFrame == 1) sourceX = itemFrameWidth;
                     if (currentFrame == 2) sourceY = itemFrameHeight;
                 }
-                // Wood sword uses single sprite, no frame offset needed
 
                 Rectangle sourceRect = new Rectangle(
                     sourceX,
@@ -612,6 +638,24 @@ namespace Claude4_5Terraria.Player
                     Position.X + (PLAYER_WIDTH * 0.75f),
                     Position.Y + (PLAYER_HEIGHT * 0.35f)
                 );
+
+                // Extend sword position during swing
+                if (heldItemType == ItemType.WoodSword || heldItemType == ItemType.CopperSword ||
+                    heldItemType == ItemType.IronSword || heldItemType == ItemType.SilverSword ||
+                    heldItemType == ItemType.GoldSword || heldItemType == ItemType.PlatinumSword ||
+                    heldItemType == ItemType.RunicSword)
+                {
+                    if (animationFrame == 1)
+                    {
+                        drawPosition.X += facingRight ? 10 : -10;
+                        drawPosition.Y -= 5;
+                    }
+                    else if (animationFrame == 2)
+                    {
+                        drawPosition.X += facingRight ? 15 : -15;
+                        drawPosition.Y += 5;
+                    }
+                }
 
                 if (heldItemType == ItemType.Torch)
                 {

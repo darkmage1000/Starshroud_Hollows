@@ -10,7 +10,7 @@ namespace Claude4_5Terraria.Systems
     {
         private bool isAttacking;
         private float attackTimer;
-        private const float ATTACK_DURATION = 0.3f; // 300ms active swing animation time
+        private const float ATTACK_DURATION = 0.4f; // 400ms active swing animation (longer for better feel)
         private float cooldownTimer;
 
         // Animation frames (0 = idle, 1 = mid-swing, 2 = full swing)
@@ -37,15 +37,21 @@ namespace Claude4_5Terraria.Systems
             switch (weapon)
             {
                 case ItemType.WoodSword:
-                    // Wood Sword is slow: 0.5 seconds of recovery after the 0.3s swing.
-                    return 0.5f;
-                // Future: Add faster weapons here (e.g., return 0.1f for a fast dagger)
+                    return 0.5f; // Slow
+                case ItemType.CopperSword:
+                case ItemType.IronSword:
+                case ItemType.SilverSword:
+                case ItemType.GoldSword:
+                case ItemType.PlatinumSword:
+                    return 0.3f; // Medium speed
+                case ItemType.RunicSword:
+                    return 0.3f; // Medium speed (will have animation frames)
                 default:
                     return 0.2f; // Default/Fist recovery
             }
         }
 
-        public void Update(float deltaTime, Vector2 playerPosition, bool facingRight, MouseState mouseState, MouseState previousMouseState)
+        public void Update(float deltaTime, Vector2 playerPosition, bool facingRight, MouseState mouseState, MouseState previousMouseState, ItemType currentWeapon = ItemType.WoodSword)
         {
             // Update cooldown
             if (cooldownTimer > 0)
@@ -61,9 +67,8 @@ namespace Claude4_5Terraria.Systems
                 cooldownTimer <= 0 &&
                 !isAttacking)
             {
-                // NOTE: We rely on Game1.cs to check if the held item is a sword before calling this Update block.
-                // We'll set the recovery time here based on the assumed weapon.
-                activeWeaponRecoveryTime = GetWeaponRecoveryTime(ItemType.WoodSword); // Assuming WoodSword is held
+                // Set recovery time based on the actual weapon being used
+                activeWeaponRecoveryTime = GetWeaponRecoveryTime(currentWeapon);
                 StartAttack(facingRight);
             }
 
@@ -148,10 +153,21 @@ namespace Claude4_5Terraria.Systems
             switch (weapon)
             {
                 case ItemType.WoodSword:
-                    return 2f;
-                // Future weapons can be added here
+                    return 2f;  // Base damage
+                case ItemType.CopperSword:
+                    return 3f;  // +1 damage
+                case ItemType.IronSword:
+                    return 4f;  // +2 damage
+                case ItemType.SilverSword:
+                    return 5f;  // +3 damage
+                case ItemType.GoldSword:
+                    return 6f;  // +4 damage
+                case ItemType.PlatinumSword:
+                    return 7f;  // +5 damage
+                case ItemType.RunicSword:
+                    return 10f; // Best sword, +8 damage!
                 default:
-                    return 1f;
+                    return 1f;  // Fist/default
             }
         }
     }

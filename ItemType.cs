@@ -50,9 +50,26 @@ namespace Claude4_5Terraria.Enums
         WaterBucket,
         LavaBucket,
 
-        // Weapons
+        // Weapons - Swords
         WoodSword,
-        WoodWand // NEW: Wood Wand for Magic System
+        CopperSword,
+        IronSword,
+        SilverSword,
+        GoldSword,
+        PlatinumSword,
+        RunicSword,
+        
+        // Weapons - Wands
+        WoodWand,
+        FireWand,
+        LightningWand,
+        NatureWand,
+        WaterWand,
+        HalfMoonWand,
+        RunicLaserWand,
+        
+        // Weapons - Staff
+        WoodSummonStaff
     }
 
     public static class ItemTypeExtensions

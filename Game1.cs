@@ -723,10 +723,16 @@ namespace Claude4_5Terraria
                 var slot = inventory.GetSlot(selectedSlot);
                 ItemType heldItem = slot != null ? slot.ItemType : ItemType.None;
 
+                // Check if holding any sword
+                bool isSword = heldItem == ItemType.WoodSword || heldItem == ItemType.CopperSword ||
+                               heldItem == ItemType.IronSword || heldItem == ItemType.SilverSword ||
+                               heldItem == ItemType.GoldSword || heldItem == ItemType.PlatinumSword ||
+                               heldItem == ItemType.RunicSword;
+
                 // Only allow sword attacks when holding a sword
-                if (heldItem == ItemType.WoodSword)
+                if (isSword)
                 {
-                    combatSystem.Update(deltaTime, player.Position, player.GetFacingRight(), mouseState, previousMouseState);
+                    combatSystem.Update(deltaTime, player.Position, player.GetFacingRight(), mouseState, previousMouseState, heldItem);
                 }
             }
 
@@ -939,6 +945,7 @@ namespace Claude4_5Terraria
         {
             var spriteMap = new System.Collections.Generic.Dictionary<string, Enums.ItemType>
             {
+                // Tools - Pickaxes
                 { "woodpickaxe", Enums.ItemType.WoodPickaxe },
                 { "stonepickaxe", Enums.ItemType.StonePickaxe },
                 { "copperpickaxe", Enums.ItemType.CopperPickaxe },
@@ -947,30 +954,57 @@ namespace Claude4_5Terraria
                 { "goldpickaxe", Enums.ItemType.GoldPickaxe },
                 { "platinumpickaxe", Enums.ItemType.PlatinumPickaxe },
                 { "runicpickaxe", Enums.ItemType.RunicPickaxe },
+                
+                // Placeable
                 { "woodcraftingtable", Enums.ItemType.WoodCraftingBench },
                 { "coppercraftingtable", Enums.ItemType.CopperCraftingBench },
                 { "woodchest", Enums.ItemType.WoodChest },
                 { "silverchest", Enums.ItemType.SilverChest },
                 { "magicchest", Enums.ItemType.MagicChest },
+                
+                // Ores
                 { "copperore", Enums.ItemType.Copper },
                 { "ironore", Enums.ItemType.Iron },
                 { "silverore", Enums.ItemType.Silver },
                 { "goldore", Enums.ItemType.Gold },
                 { "platinumore", Enums.ItemType.Platinum },
                 { "coal", Enums.ItemType.Coal },
+                
+                // Bars
                 { "copperbar", Enums.ItemType.CopperBar },
                 { "ironbar", Enums.ItemType.IronBar },
                 { "silverbar", Enums.ItemType.SilverBar },
                 { "goldbar", Enums.ItemType.GoldBar },
                 { "platinumbar", Enums.ItemType.PlatinumBar },
+                
+                // Other items
                 { "torch", Enums.ItemType.Torch },
                 { "acorn", Enums.ItemType.Acorn },
                 { "stick", Enums.ItemType.Stick },
                 { "dirt", Enums.ItemType.Dirt },
                 { "stone", Enums.ItemType.Stone },
                 { "grass", Enums.ItemType.Grass },
+                
+                // Weapons - Swords
                 { "woodsword", Enums.ItemType.WoodSword },
-                { "wand", Enums.ItemType.WoodWand } // NEW WAND ITEM SPRITE
+                { "CopperSword", Enums.ItemType.CopperSword },
+                { "IronSword", Enums.ItemType.IronSword },
+                { "SilverSword", Enums.ItemType.SilverSword },
+                { "GoldSword", Enums.ItemType.GoldSword },
+                { "PlatinumSword", Enums.ItemType.PlatinumSword },
+                // RunicSword will be handled separately due to spritesheet
+                
+                // Weapons - Wands
+                { "wand", Enums.ItemType.WoodWand },
+                { "FireWand", Enums.ItemType.FireWand },
+                { "LightningWand", Enums.ItemType.LightningWand },
+                { "NatureWand", Enums.ItemType.NatureWand },
+                { "WaterWand", Enums.ItemType.WaterWand },
+                { "HalfMoonWand", Enums.ItemType.HalfMoonWand },
+                // RunicLaserWand will be handled separately due to spritesheet
+                
+                // Weapons - Staff
+                { "WoodSummonStaff", Enums.ItemType.WoodSummonStaff }
             };
 
             foreach (var sprite in spriteMap)
@@ -984,6 +1018,60 @@ namespace Claude4_5Terraria
                 catch (Exception ex)
                 {
                     Logger.Log($"[GAME] Could not load {sprite.Key} item sprite: {ex.Message}");
+                }
+            }
+            
+            // NEW: Load RunicSword spritesheet (frame 0 for inventory display)
+            try
+            {
+                Texture2D runicSwordSpriteSheet = Content.Load<Texture2D>("RunicSword Spritesheet");
+                inventoryUI.LoadItemSprite(Enums.ItemType.RunicSword, runicSwordSpriteSheet);
+                itemTextureMap[Enums.ItemType.RunicSword] = runicSwordSpriteSheet;
+                Logger.Log("[GAME] Loaded RunicSword spritesheet successfully");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GAME] Could not load RunicSword spritesheet: {ex.Message}");
+            }
+            
+            // NEW: Load RunicLaserWand spritesheet (frame 0 for inventory display)
+            try
+            {
+                Texture2D runicLaserWandSpriteSheet = Content.Load<Texture2D>("RunicLaserWandSpriteSheet");
+                inventoryUI.LoadItemSprite(Enums.ItemType.RunicLaserWand, runicLaserWandSpriteSheet);
+                itemTextureMap[Enums.ItemType.RunicLaserWand] = runicLaserWandSpriteSheet;
+                Logger.Log("[GAME] Loaded RunicLaserWand spritesheet successfully");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GAME] Could not load RunicLaserWand spritesheet: {ex.Message}");
+            }
+        }
+
+        private void LoadSpellTextures(ProjectileSystem projectileSystem)
+        {
+            var spriteMap = new System.Collections.Generic.Dictionary<string, ProjectileType>
+            {
+                { "MagicBolt", ProjectileType.MagicBolt },
+                { "FireBolt", ProjectileType.FireBolt },
+                { "LightningSpell", ProjectileType.LightningBlast },
+                { "NatureVineSpell", ProjectileType.NatureVine },
+                { "WaterBubbleSpell", ProjectileType.WaterBubble },
+                { "HalfMoonSpell", ProjectileType.HalfMoonSlash },
+                { "RunicLaserBeamSpell", ProjectileType.RunicLaser }
+            };
+
+            foreach (var sprite in spriteMap)
+            {
+                try
+                {
+                    Texture2D texture = Content.Load<Texture2D>(sprite.Key);
+                    projectileSystem.LoadTexture(sprite.Value, texture);
+                    Logger.Log($"[GAME] Loaded {sprite.Key} spell texture successfully");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[GAME] Could not load {sprite.Key} spell sprite: {ex.Message}");
                 }
             }
         }
@@ -1251,6 +1339,7 @@ namespace Claude4_5Terraria
 
             // NEW: Initialize Projectile and Magic Systems
             projectileSystem = new ProjectileSystem(world);
+            LoadSpellTextures(projectileSystem); // Load spell sprites
             // FIX: Pass world and camera to MagicSystem constructor
             magicSystem = new MagicSystem(player, projectileSystem, world, camera);
 
@@ -1328,11 +1417,22 @@ namespace Claude4_5Terraria
             camera.Position = player.Position;
             inventory = new Inventory();
 
-            // NEW: Give player starting items including Wood Sword and Wand
+            // NEW: Give player starting items for testing
             inventory.AddItem(ItemType.WoodSword, 1);
-            Logger.Log("[GAME] Added Wood Sword to starting inventory");
+            inventory.AddItem(ItemType.CopperSword, 1);
+            inventory.AddItem(ItemType.IronSword, 1);
+            inventory.AddItem(ItemType.SilverSword, 1);
+            inventory.AddItem(ItemType.GoldSword, 1);
+            inventory.AddItem(ItemType.PlatinumSword, 1);
+            inventory.AddItem(ItemType.RunicSword, 1); // Added!
             inventory.AddItem(ItemType.WoodWand, 1);
-            Logger.Log("[GAME] Added Wood Wand to starting inventory");
+            inventory.AddItem(ItemType.FireWand, 1);
+            inventory.AddItem(ItemType.LightningWand, 1);
+            inventory.AddItem(ItemType.NatureWand, 1);
+            inventory.AddItem(ItemType.WaterWand, 1);
+            inventory.AddItem(ItemType.HalfMoonWand, 1);
+            inventory.AddItem(ItemType.RunicLaserWand, 1);
+            Logger.Log("[GAME] Added all weapons to starting inventory for testing");
 
             miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume);
 
@@ -1344,6 +1444,7 @@ namespace Claude4_5Terraria
 
             // NEW: Initialize Projectile and Magic Systems
             projectileSystem = new ProjectileSystem(world);
+            LoadSpellTextures(projectileSystem); // Load spell sprites
             // FIX: Pass world and camera to MagicSystem constructor
             magicSystem = new MagicSystem(player, projectileSystem, world, camera);
 
@@ -1432,8 +1533,13 @@ namespace Claude4_5Terraria
             // 2. Determine animation frame (mining or combat)
             int animationFrame = miningSystem.CurrentAnimationFrame;
 
-            // If holding a sword and attacking, use combat animation instead
-            if (heldItemType == ItemType.WoodSword && combatSystem != null && combatSystem.IsAttacking())
+            // Check if holding any sword and attacking - use combat animation
+            bool isSword = heldItemType == ItemType.WoodSword || heldItemType == ItemType.CopperSword ||
+                           heldItemType == ItemType.IronSword || heldItemType == ItemType.SilverSword ||
+                           heldItemType == ItemType.GoldSword || heldItemType == ItemType.PlatinumSword ||
+                           heldItemType == ItemType.RunicSword;
+            
+            if (isSword && combatSystem != null && combatSystem.IsAttacking())
             {
                 animationFrame = combatSystem.CurrentAnimationFrame;
             }

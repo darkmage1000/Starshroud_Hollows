@@ -20,8 +20,8 @@ namespace Claude4_5Terraria.Systems
 
         // Mana Regen
         private float manaRegenTimer;
-        // FIX: Mana recovered every 5 seconds
-        private const float MANA_REGEN_INTERVAL = 5.0f;
+        // Faster regen for testing
+        private const float MANA_REGEN_INTERVAL = 1.0f; // 1 second
         private const float MANA_REGEN_AMOUNT = 1.0f;
 
         // Spell Stats
@@ -59,15 +59,24 @@ namespace Claude4_5Terraria.Systems
                 castCooldownTimer -= deltaTime;
             }
 
-            // 2. Casting Input (Left Click)
-            if (mouseState.LeftButton == ButtonState.Pressed && heldItem == ItemType.WoodWand)
+            // 2. Casting Input (Left Click) - Check if holding any wand
+            if (mouseState.LeftButton == ButtonState.Pressed && IsWand(heldItem))
             {
-                // FIX: Only attempt to cast if the internal cooldown is ready
+                // Only attempt to cast if the internal cooldown is ready
                 if (castCooldownTimer <= 0)
                 {
-                    TryCastMagicBolt(mouseState);
+                    TryCastSpell(heldItem, mouseState);
                 }
             }
+        }
+
+        // Helper method to check if an item is a wand
+        private bool IsWand(ItemType item)
+        {
+            return item == ItemType.WoodWand || item == ItemType.FireWand || 
+                   item == ItemType.LightningWand || item == ItemType.NatureWand || 
+                   item == ItemType.WaterWand || item == ItemType.HalfMoonWand || 
+                   item == ItemType.RunicLaserWand || item == ItemType.WoodSummonStaff;
         }
 
         private void HandleManaRegen(float deltaTime)
@@ -89,39 +98,104 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
-        public bool TryCastMagicBolt(MouseState mouseState)
+        // New unified casting method that handles all wand types
+        private void TryCastSpell(ItemType wand, MouseState mouseState)
         {
-            if (CurrentMana >= MAGIC_BOLT_COST)
+            ProjectileType spellType;
+            float manaCost;
+            float damage;
+
+            // Determine spell properties based on wand type
+            switch (wand)
             {
-                // Calculate aiming direction
-                Vector2 mouseWorldPosition = camera.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
-
-                Vector2 playerCenter = player.GetCenterPosition();
-
-                // Calculate spawn position (just outside the player)
-                Vector2 direction = mouseWorldPosition - playerCenter;
-                if (direction.LengthSquared() > 0)
-                {
-                    direction.Normalize();
-                }
-
-                // FIX: Access static player size constants via the Player class
-                // spawn position is slightly offset from player center
-                Vector2 spawnPosition = playerCenter + direction * (Player.Player.PLAYER_WIDTH / 2 + 5);
-
-                CurrentMana -= MAGIC_BOLT_COST;
-
-                // Set the cooldown immediately after a successful cast
-                castCooldownTimer = CAST_COOLDOWN;
-
-                // Launch the projectile, passing the normalized direction vector
-                projectileSystem.Launch(ProjectileType.MagicBolt, spawnPosition, direction, MAGIC_BOLT_DAMAGE);
-
-                Logger.Log($"[MAGIC] Cast Magic Bolt. Mana remaining: {CurrentMana}/{MaxMana}");
-                return true;
+                case ItemType.WoodWand:
+                    spellType = ProjectileType.MagicBolt;
+                    manaCost = 2f;
+                    damage = 1f;
+                    break;
+                case ItemType.FireWand:
+                    spellType = ProjectileType.FireBolt;
+                    manaCost = 3f;
+                    damage = 3f;
+                    break;
+                case ItemType.LightningWand:
+                    spellType = ProjectileType.LightningBlast;
+                    manaCost = 4f;
+                    damage = 4f;
+                    break;
+                case ItemType.NatureWand:
+                    spellType = ProjectileType.NatureVine;
+                    manaCost = 3f;
+                    damage = 2f;
+                    break;
+                case ItemType.WaterWand:
+                    spellType = ProjectileType.WaterBubble;
+                    manaCost = 3f;
+                    damage = 2f;
+                    break;
+                case ItemType.HalfMoonWand:
+                    spellType = ProjectileType.HalfMoonSlash;
+                    manaCost = 5f;
+                    damage = 5f;
+                    break;
+                case ItemType.RunicLaserWand:
+                    spellType = ProjectileType.RunicLaser;
+                    manaCost = 6f;
+                    damage = 8f;
+                    break;
+                default:
+                    return; // Not a valid wand
             }
 
-            return false;
+            // Check if we have enough mana
+            if (CurrentMana >= manaCost)
+            {
+                CastSpell(spellType, damage, manaCost, mouseState);
+            }
+        }
+
+        // Shared casting logic
+        private void CastSpell(ProjectileType spellType, float damage, float manaCost, MouseState mouseState)
+        {
+            // Calculate aiming direction and mouse world position
+            Vector2 mouseWorldPosition = camera.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
+            Vector2 playerCenter = player.GetCenterPosition();
+
+            // Calculate spawn position (just outside the player)
+            Vector2 direction = mouseWorldPosition - playerCenter;
+            if (direction.LengthSquared() > 0)
+            {
+                direction.Normalize();
+            }
+
+            // Spawn position is slightly offset from player center
+            Vector2 spawnPosition = playerCenter + direction * (Player.Player.PLAYER_WIDTH / 2 + 5);
+
+            CurrentMana -= manaCost;
+
+            // Set the cooldown immediately after a successful cast
+            castCooldownTimer = CAST_COOLDOWN;
+
+            // Special handling for Nature Vine - it rises from ground at mouse position
+            if (spellType == ProjectileType.NatureVine)
+            {
+                // Pass mouse world position directly for ground-rising spell
+                projectileSystem.LaunchAtPosition(spellType, spawnPosition, mouseWorldPosition, damage);
+            }
+            else
+            {
+                // Normal directional projectiles
+                projectileSystem.Launch(spellType, spawnPosition, direction, damage);
+            }
+
+            Logger.Log($"[MAGIC] Cast {spellType}. Mana cost: {manaCost}, Damage: {damage}. Mana remaining: {CurrentMana}/{MaxMana}");
+        }
+
+        // Old method kept for compatibility - now redirects to new system
+        public bool TryCastMagicBolt(MouseState mouseState)
+        {
+            TryCastSpell(ItemType.WoodWand, mouseState);
+            return true;
         }
 
         // Getter for HUD
