@@ -669,5 +669,22 @@ namespace Claude4_5Terraria.Player
         {
             return facingRight;
         }
+
+        public bool IsOnGround()
+        {
+            return isOnGround;
+        }
+
+        public Rectangle GetHitbox()
+        {
+            return new Rectangle((int)Position.X, (int)Position.Y, PLAYER_WIDTH, PLAYER_HEIGHT);
+        }
+
+        public Systems.Inventory GetInventory()
+        {
+            // This will need to be set from Game1.cs where the inventory is actually managed
+            // For now, return null and we'll fix it in Game1 integration
+            return null;
+        }
     }
 }

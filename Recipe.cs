@@ -151,8 +151,14 @@ namespace Claude4_5Terraria.Systems
             bucket.AddIngredient(ItemType.SilverBar, 15);
             recipes.Add(bucket);
 
+            // NEW: Troll Bait - boss summon item
+            Recipe trollBait = new Recipe(ItemType.TrollBait, 1);
+            trollBait.AddIngredient(ItemType.PieceOfFlesh, 25);
+            recipes.Add(trollBait);
+
             // Note: Magic chests are NOT craftable - they can only be found
             // Note: Runic pickaxe is NOT craftable - only found in Magic chests
+            // Note: Troll Bars and Troll Club are boss drops only
         }
 
         public static List<Recipe> GetAvailableRecipes(bool nearWoodBench, bool nearCopperBench)

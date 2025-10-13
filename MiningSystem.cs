@@ -180,15 +180,25 @@ namespace Claude4_5Terraria.Systems
             if (isMining && distanceToTile <= maxDistance)
             {
                 int horizontalDir = (int)lastPlayerDirection.X;
+                int verticalDir = (int)lastPlayerDirection.Y;
 
                 if (autoMiningActive && horizontalDir != 0)
                 {
-                    int targetX_Multi = (int)((playerPosition.X + (playerWidth / 2) + (horizontalDir * World.World.TILE_SIZE)) / World.World.TILE_SIZE);
+                    // Horizontal auto-mining (left/right)
+                    int targetX_Multi = (int)((playerPosition.X + (playerWidth / 2) + (horizontalDir * (World.World.TILE_SIZE / 2 + 1))) / World.World.TILE_SIZE);
                     int playerTopTileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
                     int playerBottomTileY = (int)((playerPosition.Y + playerHeight - 1) / World.World.TILE_SIZE);
                     int targetHeadY = playerTopTileY;
                     int targetFootY = playerBottomTileY;
                     ProcessHorizontalAutoMining(targetX_Multi, targetHeadY, targetFootY, deltaTime, lastPlayerDirection);
+                }
+                else if (autoMiningActive && verticalDir != 0)
+                {
+                    // Vertical auto-mining (up/down)
+                    int playerLeftTileX = (int)(playerPosition.X / World.World.TILE_SIZE);
+                    int playerRightTileX = (int)((playerPosition.X + playerWidth - 1) / World.World.TILE_SIZE);
+                    int targetY_Multi = (int)((playerPosition.Y + (playerHeight / 2) + (verticalDir * (World.World.TILE_SIZE / 2 + 1))) / World.World.TILE_SIZE);
+                    ProcessVerticalAutoMining(playerLeftTileX, playerRightTileX, targetY_Multi, deltaTime, lastPlayerDirection);
                 }
                 else if (targetedTile.HasValue && targetTile != null && targetTile.IsActive)
                 {
@@ -393,6 +403,89 @@ namespace Claude4_5Terraria.Systems
             }
 
             // Use the top-most block as the reference for tracking the mining target
+            Point primaryTarget = tilesToMine[0];
+            if (currentlyMiningTile == null || currentlyMiningTile.Value != primaryTarget)
+            {
+                currentlyMiningTile = primaryTarget;
+                miningProgress = 0f;
+            }
+
+            // 2. Determine the hardest block to set the mining time
+            InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
+            ItemType currentTool = selectedSlot?.ItemType ?? ItemType.None;
+            TileType hardestType = TileType.Air;
+            float maxMiningTime = 0f;
+
+            foreach (Point tilePos in tilesToMine)
+            {
+                Tile tile = world.GetTile(tilePos.X, tilePos.Y);
+                if (tile != null)
+                {
+                    // Find the tile that takes the longest to mine
+                    float time = GetMiningTime(tile.Type);
+                    if (time > maxMiningTime)
+                    {
+                        maxMiningTime = time;
+                        hardestType = tile.Type;
+                    }
+                }
+            }
+
+            // 3. Check if the current tool can mine the hardest block
+            if (!ToolProperties.CanMine(currentTool, hardestType))
+            {
+                miningProgress = 0f;
+                CurrentAnimationFrame = 0;
+                return;
+            }
+
+            // 4. Calculate mining progress based on the hardest block
+            float miningSpeed = ToolProperties.GetMiningSpeed(currentTool);
+            float adjustedMiningTime = maxMiningTime / miningSpeed;
+            if (adjustedMiningTime <= 0) adjustedMiningTime = 0.1f; // Prevent division by zero
+            miningProgress += deltaTime / adjustedMiningTime;
+            CurrentAnimationFrame = (int)(miningProgress * 3) % 3;
+
+            // 5. Break all targeted blocks when mining is complete
+            if (miningProgress >= 1f)
+            {
+                foreach (Point tilePos in tilesToMine)
+                {
+                    // Ensure the block still exists before breaking
+                    if (world.GetTile(tilePos.X, tilePos.Y)?.IsActive == true)
+                    {
+                        BreakBlock(tilePos.X, tilePos.Y);
+                    }
+                }
+                miningProgress = 0f;
+                currentlyMiningTile = null;
+                CurrentAnimationFrame = 0;
+            }
+        }
+
+        private void ProcessVerticalAutoMining(int targetLeftX, int targetRightX, int targetY, float deltaTime, Vector2 lastPlayerDirection)
+        {
+            // 1. Identify all tiles to be mined in the horizontal row
+            List<Point> tilesToMine = new List<Point>();
+            for (int x = targetLeftX; x <= targetRightX; x++)
+            {
+                Tile tile = world.GetTile(x, targetY);
+                if (tile != null && tile.IsActive)
+                {
+                    tilesToMine.Add(new Point(x, targetY));
+                }
+            }
+
+            // If there's nothing to mine, reset and exit
+            if (tilesToMine.Count == 0)
+            {
+                currentlyMiningTile = null;
+                miningProgress = 0f;
+                CurrentAnimationFrame = 0;
+                return;
+            }
+
+            // Use the left-most block as the reference for tracking the mining target
             Point primaryTarget = tilesToMine[0];
             if (currentlyMiningTile == null || currentlyMiningTile.Value != primaryTarget)
             {

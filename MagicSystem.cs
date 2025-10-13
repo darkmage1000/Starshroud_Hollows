@@ -1,6 +1,7 @@
-﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework;
 using Claude4_5Terraria.Enums;
 using Claude4_5Terraria.Systems;
+using Claude4_5Terraria.Systems.Summons;
 using System;
 using Claude4_5Terraria.Player;
 using Microsoft.Xna.Framework.Input;
@@ -19,8 +20,8 @@ namespace Claude4_5Terraria.Systems
 
         // Mana Regen
         private float manaRegenTimer;
-        private const float MANA_REGEN_INTERVAL = 5.0f; // CHANGED: Regenerate every 5 seconds
-        private const float MANA_REGEN_AMOUNT = 1.0f;   // Regenerate 1 mana point
+        private const float MANA_REGEN_INTERVAL = 5.0f;
+        private const float MANA_REGEN_AMOUNT = 1.0f;
 
         // Spell Stats
         private const float MAGIC_BOLT_COST = 2.0f;
@@ -32,11 +33,15 @@ namespace Claude4_5Terraria.Systems
 
         // Projectile System Reference
         private ProjectileSystem projectileSystem;
+        
+        // Summon System Reference
+        private SummonSystem summonSystem;
 
-        public MagicSystem(Claude4_5Terraria.Player.Player player, ProjectileSystem projectileSystem, World.World world, Camera camera)
+        public MagicSystem(Claude4_5Terraria.Player.Player player, ProjectileSystem projectileSystem, SummonSystem summonSystem, World.World world, Camera camera)
         {
             this.player = player;
             this.projectileSystem = projectileSystem;
+            this.summonSystem = summonSystem;
             this.world = world;
             this.camera = camera;
 
@@ -55,11 +60,15 @@ namespace Claude4_5Terraria.Systems
                 castCooldownTimer -= deltaTime;
             }
 
-            if (mouseState.LeftButton == ButtonState.Pressed && IsWand(heldItem))
+            if (mouseState.LeftButton == ButtonState.Pressed)
             {
-                if (castCooldownTimer <= 0)
+                if (IsWand(heldItem) && castCooldownTimer <= 0)
                 {
                     TryCastSpell(heldItem, mouseState);
+                }
+                else if (IsSummonStaff(heldItem) && castCooldownTimer <= 0)
+                {
+                    TrySummon(heldItem, mouseState);
                 }
             }
         }
@@ -69,7 +78,12 @@ namespace Claude4_5Terraria.Systems
             return item == ItemType.WoodWand || item == ItemType.FireWand ||
                    item == ItemType.LightningWand || item == ItemType.NatureWand ||
                    item == ItemType.WaterWand || item == ItemType.HalfMoonWand ||
-                   item == ItemType.RunicLaserWand || item == ItemType.WoodSummonStaff;
+                   item == ItemType.RunicLaserWand;
+        }
+        
+        private bool IsSummonStaff(ItemType item)
+        {
+            return item == ItemType.WoodSummonStaff;
         }
 
         private void HandleManaRegen(float deltaTime)
@@ -174,6 +188,42 @@ namespace Claude4_5Terraria.Systems
         {
             TryCastSpell(ItemType.WoodWand, mouseState);
             return true;
+        }
+
+        private void TrySummon(ItemType staff, MouseState mouseState)
+        {
+            float manaCost;
+            
+            switch (staff)
+            {
+                case ItemType.WoodSummonStaff:
+                    manaCost = 2.0f;
+                    break;
+                default:
+                    return;
+            }
+
+            if (CurrentMana >= manaCost)
+            {
+                CastSummon(staff, manaCost, mouseState);
+            }
+        }
+
+        private void CastSummon(ItemType staff, float manaCost, MouseState mouseState)
+        {
+            Vector2 mouseWorldPosition = camera.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
+            Vector2 playerCenter = player.GetCenterPosition();
+
+            CurrentMana -= manaCost;
+            castCooldownTimer = CAST_COOLDOWN;
+
+            switch (staff)
+            {
+                case ItemType.WoodSummonStaff:
+                    summonSystem.SummonEchoWisp(mouseWorldPosition);
+                    Logger.Log($"[MAGIC] Summoned Echo Wisp at {mouseWorldPosition}. Mana: {CurrentMana}/{MaxMana}. Active: {summonSystem.GetActiveEchoWispCount()}/{summonSystem.GetMaxEchoWisps()}");
+                    break;
+            }
         }
 
         public float GetCurrentMana() => CurrentMana;

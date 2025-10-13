@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Graphics;
 using Claude4_5Terraria.Enums;
 using System;
+using System.Collections.Generic; // Add this for List
 
 namespace Claude4_5Terraria.Systems
 {
@@ -10,17 +11,14 @@ namespace Claude4_5Terraria.Systems
     {
         private bool isAttacking;
         private float attackTimer;
-        private const float ATTACK_DURATION = 0.4f; // 400ms active swing animation (longer for better feel)
+        private const float ATTACK_DURATION = 0.4f;
         private float cooldownTimer;
-
-        // Animation frames (0 = idle, 1 = mid-swing, 2 = full swing)
         public int CurrentAnimationFrame { get; private set; }
-
-        // Attack direction (for determining hit area)
         private bool attackingRight;
+        private float activeWeaponRecoveryTime = 0.5f;
 
-        // NEW: Stores the recovery time calculated based on the weapon used.
-        private float activeWeaponRecoveryTime = 0.5f; // Defaults to WoodSword speed
+        // NEW: Tracks targets hit during a single swing to prevent multi-hits
+        private List<object> hitTargets;
 
         public CombatSystem()
         {
@@ -29,73 +27,51 @@ namespace Claude4_5Terraria.Systems
             cooldownTimer = 0f;
             CurrentAnimationFrame = 0;
             attackingRight = true;
+            hitTargets = new List<object>(); // Initialize the list
         }
 
-        // NEW METHOD: Defines the weapon's inherent attack speed (recovery time).
         private float GetWeaponRecoveryTime(ItemType weapon)
         {
             switch (weapon)
             {
-                case ItemType.WoodSword:
-                    return 0.5f; // Slow
+                case ItemType.WoodSword: return 0.5f;
                 case ItemType.CopperSword:
                 case ItemType.IronSword:
                 case ItemType.SilverSword:
                 case ItemType.GoldSword:
-                case ItemType.PlatinumSword:
-                    return 0.3f; // Medium speed
-                case ItemType.RunicSword:
-                    return 0.3f; // Medium speed (will have animation frames)
-                default:
-                    return 0.2f; // Default/Fist recovery
+                case ItemType.PlatinumSword: return 0.3f;
+                case ItemType.RunicSword: return 0.3f;
+                case ItemType.TrollClub: return 1.2f;
+                default: return 0.2f;
             }
         }
 
         public void Update(float deltaTime, Vector2 playerPosition, bool facingRight, MouseState mouseState, MouseState previousMouseState, ItemType currentWeapon = ItemType.WoodSword)
         {
-            // Update cooldown
             if (cooldownTimer > 0)
             {
                 cooldownTimer -= deltaTime;
             }
 
-            // FIX: Check for attack input (left mouse button)
-            // CRITICAL: A new attack can ONLY start if the previous one is NOT active (isAttacking) 
-            // AND the cooldown is fully reset (cooldownTimer <= 0).
             if (mouseState.LeftButton == ButtonState.Pressed &&
                 previousMouseState.LeftButton == ButtonState.Released &&
                 cooldownTimer <= 0 &&
                 !isAttacking)
             {
-                // Set recovery time based on the actual weapon being used
                 activeWeaponRecoveryTime = GetWeaponRecoveryTime(currentWeapon);
                 StartAttack(facingRight);
             }
 
-            // Update attack animation
             if (isAttacking)
             {
                 attackTimer += deltaTime;
-
-                // Update animation frame based on progress
                 float progress = attackTimer / ATTACK_DURATION;
-                if (progress < 0.33f)
-                {
-                    CurrentAnimationFrame = 0; // Start
-                }
-                else if (progress < 0.66f)
-                {
-                    CurrentAnimationFrame = 1; // Mid-swing
-                }
-                else
-                {
-                    CurrentAnimationFrame = 2; // Full swing
-                }
+                if (progress < 0.33f) CurrentAnimationFrame = 0;
+                else if (progress < 0.66f) CurrentAnimationFrame = 1;
+                else CurrentAnimationFrame = 2;
 
-                // End attack
                 if (attackTimer >= ATTACK_DURATION)
                 {
-                    // FIX: Set the cooldown based on the determined weapon recovery time.
                     isAttacking = false;
                     attackTimer = 0f;
                     cooldownTimer = activeWeaponRecoveryTime;
@@ -110,45 +86,37 @@ namespace Claude4_5Terraria.Systems
             attackTimer = 0f;
             attackingRight = facingRight;
             CurrentAnimationFrame = 0;
+            hitTargets.Clear(); // Clear hit targets at the start of a new swing
             Logger.Log($"[COMBAT] Attack started, facing {(facingRight ? "right" : "left")}");
         }
 
-        public bool IsAttacking()
-        {
-            return isAttacking;
-        }
+        public bool IsAttacking() => isAttacking;
+        public int GetCurrentAttackFrame() => CurrentAnimationFrame;
+        public bool CanAttack() => !isAttacking && cooldownTimer <= 0;
 
-        public int GetCurrentAttackFrame()
-        {
-            return CurrentAnimationFrame;
-        }
+        // NEW: Checks if a target has already been hit by the current swing
+        public bool HasAlreadyHit(object target) => hitTargets.Contains(target);
 
-        public bool CanAttack()
+        // NEW: Registers a target as hit for the current swing
+        public void RegisterHit(object target)
         {
-            return !isAttacking && cooldownTimer <= 0;
+            if (!hitTargets.Contains(target))
+            {
+                hitTargets.Add(target);
+            }
         }
 
         public Rectangle GetAttackHitbox(Vector2 playerPosition, int playerWidth, int playerHeight)
         {
-            if (!isAttacking)
-            {
-                return Rectangle.Empty;
-            }
+            if (!isAttacking) return Rectangle.Empty;
 
-            const int ATTACK_RANGE = 64; // 2 tiles (32px * 2)
-            const int ATTACK_HEIGHT = 64; // 2 tiles vertical
-
+            const int ATTACK_RANGE = 64;
+            const int ATTACK_HEIGHT = 64;
             int hitboxX;
             int hitboxY = (int)playerPosition.Y + (playerHeight / 2) - (ATTACK_HEIGHT / 2);
 
-            if (attackingRight)
-            {
-                hitboxX = (int)playerPosition.X + playerWidth;
-            }
-            else
-            {
-                hitboxX = (int)playerPosition.X - ATTACK_RANGE;
-            }
+            if (attackingRight) hitboxX = (int)playerPosition.X + playerWidth;
+            else hitboxX = (int)playerPosition.X - ATTACK_RANGE;
 
             return new Rectangle(hitboxX, hitboxY, ATTACK_RANGE, ATTACK_HEIGHT);
         }
@@ -157,22 +125,15 @@ namespace Claude4_5Terraria.Systems
         {
             switch (weapon)
             {
-                case ItemType.WoodSword:
-                    return 2f;  // Base damage
-                case ItemType.CopperSword:
-                    return 3f;  // +1 damage
-                case ItemType.IronSword:
-                    return 4f;  // +2 damage
-                case ItemType.SilverSword:
-                    return 5f;  // +3 damage
-                case ItemType.GoldSword:
-                    return 6f;  // +4 damage
-                case ItemType.PlatinumSword:
-                    return 7f;  // +5 damage
-                case ItemType.RunicSword:
-                    return 10f; // Best sword, +8 damage!
-                default:
-                    return 1f;  // Fist/default
+                case ItemType.WoodSword: return 2f;
+                case ItemType.CopperSword: return 3f;
+                case ItemType.IronSword: return 4f;
+                case ItemType.SilverSword: return 5f;
+                case ItemType.GoldSword: return 6f;
+                case ItemType.PlatinumSword: return 7f;
+                case ItemType.RunicSword: return 10f;
+                case ItemType.TrollClub: return 10f;
+                default: return 1f;
             }
         }
     }

@@ -22,6 +22,9 @@ namespace Claude4_5Terraria.Enums
         GoldBar,       // NEW: Gold bar
         PlatinumBar,
         Slime,         // NEW: Slime drop from Ooze enemies
+        PieceOfFlesh,  // NEW: Boss summon item from Zombies
+        TrollBait,     // Boss summon item - requires 25 Piece of Flesh
+        TrollBar,      // Dropped by Cave Troll boss
 
         // Placeable
         Torch,
@@ -69,7 +72,10 @@ namespace Claude4_5Terraria.Enums
         RunicLaserWand,
         
         // Weapons - Staff
-        WoodSummonStaff
+        WoodSummonStaff,
+        
+        // Boss Weapons
+        TrollClub      // 5% drop from Cave Troll boss
     }
 
     public static class ItemTypeExtensions

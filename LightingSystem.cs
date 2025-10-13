@@ -23,6 +23,11 @@ namespace Claude4_5Terraria.Systems
         // NEW: Dynamic light source for player's held torch
         private Vector2 playerLightWorldPosition;
         private bool isPlayerLightActive;
+        
+        // NEW: Dynamic light sources for summons
+        private List<Vector2> summonLightPositions;
+        private const float SUMMON_RADIUS = 6f;
+        private const float SUMMON_BRIGHTNESS = 0.8f;
 
 
         public LightingSystem(World.World world, TimeSystem timeSystem)
@@ -35,6 +40,7 @@ namespace Claude4_5Terraria.Systems
 
             playerLightWorldPosition = Vector2.Zero;
             isPlayerLightActive = false;
+            summonLightPositions = new List<Vector2>();
         }
 
         // NEW: Public method for Game1 to control the player's light source
@@ -47,6 +53,17 @@ namespace Claude4_5Terraria.Systems
             }
             isPlayerLightActive = active;
             playerLightWorldPosition = worldPosition;
+        }
+        
+        // NEW: Public method to update summon light sources
+        public void SetSummonLights(List<Vector2> summonPositions)
+        {
+            summonLightPositions.Clear();
+            summonLightPositions.AddRange(summonPositions);
+            if (summonPositions.Count > 0)
+            {
+                lightMap.Clear(); // Clear cache when summons change
+            }
         }
 
         public void UpdateTorchCache(Vector2 cameraPosition)
@@ -109,7 +126,8 @@ namespace Claude4_5Terraria.Systems
             float lavaLight = CalculateLavaLight(tileX, tileY);
             float exploredLight = world.IsTileExplored(tileX, tileY) ? 0.15f : 0f; // Slight glow for explored areas
 
-            float finalLight = Math.Max(Math.Max(Math.Max(sunlight, torchLight), lavaLight), exploredLight);
+            float summonLight = CalculateSummonLight(tileX, tileY);
+            float finalLight = Math.Max(Math.Max(Math.Max(Math.Max(sunlight, torchLight), lavaLight), summonLight), exploredLight);
 
             return Math.Min(1.0f, finalLight);
         }
@@ -248,6 +266,40 @@ namespace Claude4_5Terraria.Systems
             }
 
             return maxLavaLight;
+        }
+        
+        private float CalculateSummonLight(int tileX, int tileY)
+        {
+            float maxSummonLight = 0f;
+
+            foreach (Vector2 summonWorldPos in summonLightPositions)
+            {
+                // Convert summon world position to tile position
+                int summonTileX = (int)(summonWorldPos.X / World.World.TILE_SIZE);
+                int summonTileY = (int)(summonWorldPos.Y / World.World.TILE_SIZE);
+                
+                float distance = (float)Math.Sqrt(
+                    Math.Pow(tileX - summonTileX, 2) +
+                    Math.Pow(tileY - summonTileY, 2)
+                );
+
+                if (distance > SUMMON_RADIUS)
+                    continue;
+
+                if (IsLightPathBlocked(summonTileX, summonTileY, tileX, tileY))
+                    continue;
+
+                // Linear falloff
+                float falloff = 1.0f - (distance / SUMMON_RADIUS);
+                float lightStrength = SUMMON_BRIGHTNESS * falloff;
+
+                // Soft curve for gentle glow
+                lightStrength = (float)Math.Pow(lightStrength, 0.7);
+
+                maxSummonLight = Math.Max(maxSummonLight, lightStrength);
+            }
+
+            return maxSummonLight;
         }
 
         private bool IsLightPathBlocked(int fromX, int fromY, int toX, int toY)

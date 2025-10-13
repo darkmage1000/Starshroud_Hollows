@@ -2,10 +2,11 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Claude4_5Terraria.Enums;
 using System;
+using Claude4_5Terraria.Interfaces;
 
 namespace Claude4_5Terraria.Entities
 {
-    public class Enemy
+    public class Enemy : IDamageable
     {
         public Vector2 Position { get; set; }
         public float Health { get; private set; }
