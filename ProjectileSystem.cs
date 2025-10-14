@@ -106,7 +106,7 @@ namespace Claude4_5Terraria.Systems
         public void Launch(ProjectileType type, Vector2 pos, Vector2 dir, float dmg) { Projectile p = null; switch (type) { case ProjectileType.MagicBolt: p = new MagicBolt(pos, dir, dmg); break; case ProjectileType.FireBolt: p = new FireBolt(pos, dir, dmg); break; case ProjectileType.LightningBlast: p = new LightningBlast(pos, dir, dmg); break; case ProjectileType.WaterBubble: p = new WaterBubble(pos, dir, dmg); break; case ProjectileType.HalfMoonSlash: p = new HalfMoonSlash(pos, dir, dmg); break; case ProjectileType.RunicLaser: p = new RunicLaser(pos, dir, dmg, world); break; } if (p != null) { if (projectileTextures.ContainsKey(type)) p.SetTexture(projectileTextures[type]); activeProjectiles.Add(p); } }
         public void LaunchAtPosition(ProjectileType type, Vector2 pPos, Vector2 tPos, float dmg) { Projectile p = null; if (type == ProjectileType.NatureVine) p = new NatureVine(pPos, tPos, dmg, world); if (p != null) { if (projectileTextures.ContainsKey(type)) p.SetTexture(projectileTextures[type]); activeProjectiles.Add(p); } }
 
-        public void Update(float dT, List<Enemy> enemies)
+        public void Update(float dT, List<Interfaces.IDamageable> enemies)
         {
             foreach (var p in activeProjectiles.Where(p => p.IsAlive).ToList())
             {

@@ -126,8 +126,9 @@ namespace Claude4_5Terraria.Entities
             // Normal AI behavior
             else
             {
-                // Check if we should do charge attack (under 50% HP and cooldown ready)
-                if (Health <= MaxHealth / 2f && chargeCooldownTimer <= 0 && isOnGround)
+                // Check if we should do charge attack (under 50% HP, cooldown ready, on ground, player at medium/long range)
+                float distanceToPlayer = Vector2.Distance(Position, playerPosition);
+                if (Health <= MaxHealth / 2f && chargeCooldownTimer <= 0 && isOnGround && distanceToPlayer > 160f) // 5+ tiles away
                 {
                     StartChargeAttack(playerPosition);
                 }
@@ -165,18 +166,30 @@ namespace Claude4_5Terraria.Entities
             Vector2 directionToPlayer = playerPosition - trollCenter;
             float distanceToPlayer = Math.Abs(directionToPlayer.X);
 
-            // The troll will stop and attack if the player is within this range.
-            // (Half the troll's width + 1.5 tiles of reach)
-            const float ATTACK_RANGE = (WIDTH / 2) + 48f;
+            // Attack ranges:
+            // - Melee range: Very close for positioning
+            // - Ripple range: Medium to long distance for ground ripple AOE (1.5 to 15 tiles away)
+            const float MELEE_RANGE = 48f;               // ~1.5 tiles (very close)
+            const float RIPPLE_MIN_RANGE = 48f;          // Min distance for ripple (1.5 tiles)
+            const float RIPPLE_MAX_RANGE = 480f;         // Max distance for ripple (15 tiles) - INCREASED from 8 tiles
 
-            if (distanceToPlayer > ATTACK_RANGE)
+            if (distanceToPlayer > RIPPLE_MAX_RANGE)
             {
-                // Player is out of range, move towards them
+                // Player is too far, chase them
                 velocity.X = directionToPlayer.X > 0 ? MOVE_SPEED : -MOVE_SPEED;
             }
-            else
+            else if (distanceToPlayer >= RIPPLE_MIN_RANGE)
             {
-                // Player is in range, stop moving and try to attack
+                // Player is at ripple range - use AOE attack (prioritize this!)
+                velocity.X = 0;
+                if (slamTimer <= 0 && isOnGround && !isAttacking)
+                {
+                    PerformSlamAttack(); // This creates the ground ripples
+                }
+            }
+            else if (distanceToPlayer < MELEE_RANGE)
+            {
+                // Player is very close - still use ripple attack
                 velocity.X = 0;
                 if (slamTimer <= 0 && isOnGround && !isAttacking)
                 {

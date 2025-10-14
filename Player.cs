@@ -21,7 +21,7 @@ namespace Claude4_5Terraria.Player
         public float MaxHealth { get; private set; }
         private float lavaDamageTimer = 0f;
         private const float LAVA_DAMAGE_INTERVAL = 0.5f;
-        private const float LAVA_DAMAGE_AMOUNT = 10f;
+        private const float LAVA_DAMAGE_AMOUNT = 15f;  // INCREASED from 10f to make lava more threatening
 
         public float AirBubbles { get; private set; }
         public float MaxAirBubbles { get; private set; }

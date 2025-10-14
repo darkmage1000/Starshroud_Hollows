@@ -17,13 +17,13 @@ namespace Claude4_5Terraria.Systems
 
         private const int MAX_OOZES = 3;
         private const int MAX_ZOMBIES_ON_SCREEN = 5;
-        private const float SPAWN_INTERVAL_MIN = 5.0f;
-        private const float SPAWN_INTERVAL_MAX = 10.0f;
+        private const float SPAWN_INTERVAL_MIN = 15.0f;  // Increased from 5.0f
+        private const float SPAWN_INTERVAL_MAX = 30.0f;  // Increased from 10.0f
         private float oozeSpawnTimer;
         private float nextOozeSpawnTime;
         
         private float zombieSpawnTimer;
-        private const float ZOMBIE_SPAWN_INTERVAL = 8.0f; // Check for zombie spawns every 8 seconds
+        private const float ZOMBIE_SPAWN_INTERVAL = 20.0f; // Increased from 8.0f - Check for zombie spawns every 20 seconds
         
         private const int SPAWN_DISTANCE = 200;
 
@@ -34,7 +34,7 @@ namespace Claude4_5Terraria.Systems
             activeZombies = new List<Zombie>();
             random = new Random();
             ResetOozeSpawnTimer();
-            zombieSpawnTimer = ZOMBIE_SPAWN_INTERVAL;
+            zombieSpawnTimer = 0f;  // FIXED: Start at 0, count UP to ZOMBIE_SPAWN_INTERVAL
 
             Systems.Logger.Log("[SPAWNER] EnemySpawner system initialized with Ooze and Zombie support.");
         }
@@ -42,7 +42,7 @@ namespace Claude4_5Terraria.Systems
         private void ResetOozeSpawnTimer()
         {
             nextOozeSpawnTime = (float)(random.NextDouble() * (SPAWN_INTERVAL_MAX - SPAWN_INTERVAL_MIN) + SPAWN_INTERVAL_MIN);
-            oozeSpawnTimer = nextOozeSpawnTime; // Start ready to spawn
+            oozeSpawnTimer = 0f; // FIXED: Start at 0, count UP to nextOozeSpawnTime
         }
 
         public void Update(float deltaTime, Vector2 playerPosition, TimeSystem timeSystem, Rectangle cameraView)
@@ -50,6 +50,18 @@ namespace Claude4_5Terraria.Systems
             // Remove dead enemies
             activeOozes.RemoveAll(e => !e.IsAlive);
             activeZombies.RemoveAll(z => !z.IsAlive);
+
+            // Despawn zombies that are too far from player (outside screen + buffer)
+            const float ZOMBIE_DESPAWN_DISTANCE = 1500f; // ~47 tiles
+            for (int i = activeZombies.Count - 1; i >= 0; i--)
+            {
+                float distanceToPlayer = Vector2.Distance(activeZombies[i].Position, playerPosition);
+                if (distanceToPlayer > ZOMBIE_DESPAWN_DISTANCE)
+                {
+                    Systems.Logger.Log($"[SPAWNER] Despawned zombie at distance {distanceToPlayer:F0}");
+                    activeZombies.RemoveAt(i);
+                }
+            }
 
             // Despawn surface zombies at dawn
             if (timeSystem.IsDaytime())
@@ -220,9 +232,16 @@ namespace Claude4_5Terraria.Systems
             return count;
         }
 
-        public List<Enemy> GetActiveEnemies()
+        /// <summary>
+        /// Returns ALL active enemies (both Oozes and Zombies) as IDamageable list
+        /// This ensures summons, projectiles, and combat systems can target everything
+        /// </summary>
+        public List<Interfaces.IDamageable> GetActiveEnemies()
         {
-            return activeOozes;
+            var allEnemies = new List<Interfaces.IDamageable>();
+            allEnemies.AddRange(activeOozes.Cast<Interfaces.IDamageable>());
+            allEnemies.AddRange(activeZombies.Cast<Interfaces.IDamageable>());
+            return allEnemies;
         }
 
         public List<Zombie> GetActiveZombies()

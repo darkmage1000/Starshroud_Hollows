@@ -180,7 +180,7 @@ namespace Claude4_5Terraria
             timeSystem.Update(deltaTime);
             UpdateRainParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
             UpdateSnowParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
-            liquidSystem.UpdateFlow();
+            liquidSystem?.UpdateFlow();  // FIXED: Added null check
 
             Vector2 oldPlayerPos = player.Position;
             player.Update(gameTime);
@@ -237,7 +237,7 @@ namespace Claude4_5Terraria
             if (isSword) combatSystem?.Update(deltaTime, player.Position, player.GetFacingRight(), mouseState, previousMouseState, heldItem);
 
             magicSystem?.Update(deltaTime, mouseState, previousMouseState, heldItem);
-            projectileSystem?.Update(deltaTime, enemySpawner?.GetActiveEnemies() ?? new List<Enemy>());
+            projectileSystem?.Update(deltaTime, enemySpawner?.GetActiveEnemies() ?? new List<Interfaces.IDamageable>());
 
             var summonTargets = new List<Interfaces.IDamageable>();
             if (enemySpawner != null) summonTargets.AddRange(enemySpawner.GetActiveEnemies());
