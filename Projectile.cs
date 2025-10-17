@@ -2,7 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 
-namespace Claude4_5Terraria.Entities
+namespace StarshroudHollows.Entities
 {
     public abstract class Projectile
     {

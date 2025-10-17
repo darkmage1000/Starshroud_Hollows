@@ -1,14 +1,14 @@
 using System;
 using Microsoft.Xna.Framework;
-using Claude4_5Terraria.Enums;
-using Claude4_5Terraria.Systems;
+using StarshroudHollows.Enums;
+using StarshroudHollows.Systems;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class WorldGenerator
     {
         private Random random;
-        private Claude4_5Terraria.World.World world;
+        private StarshroudHollows.World.World world;
         private int seed;
         private ChestSystem chestSystem;
 
@@ -26,7 +26,7 @@ namespace Claude4_5Terraria.Systems
         public int GetSnowBiomeStartX() => snowBiomeStartX;
         public int GetSnowBiomeEndX() => snowBiomeEndX;
 
-        public WorldGenerator(Claude4_5Terraria.World.World world, int seed = 0, ChestSystem chestSystem = null)
+        public WorldGenerator(StarshroudHollows.World.World world, int seed = 0, ChestSystem chestSystem = null)
         {
             this.world = world;
             this.seed = seed == 0 ? Environment.TickCount : seed;
@@ -44,8 +44,8 @@ namespace Claude4_5Terraria.Systems
 
                 // Preload all chunks to ensure SetTile persists during generation
                 Logger.Log("[WORLDGEN] Preloading all chunks...");
-                int chunksWide = (Claude4_5Terraria.World.World.WORLD_WIDTH + Claude4_5Terraria.World.Chunk.CHUNK_SIZE - 1) / Claude4_5Terraria.World.Chunk.CHUNK_SIZE;
-                int chunksHigh = (Claude4_5Terraria.World.World.WORLD_HEIGHT + Claude4_5Terraria.World.Chunk.CHUNK_SIZE - 1) / Claude4_5Terraria.World.Chunk.CHUNK_SIZE;
+                int chunksWide = (StarshroudHollows.World.World.WORLD_WIDTH + StarshroudHollows.World.Chunk.CHUNK_SIZE - 1) / StarshroudHollows.World.Chunk.CHUNK_SIZE;
+                int chunksHigh = (StarshroudHollows.World.World.WORLD_HEIGHT + StarshroudHollows.World.Chunk.CHUNK_SIZE - 1) / StarshroudHollows.World.Chunk.CHUNK_SIZE;
                 for (int cx = 0; cx < chunksWide; cx++)
                 {
                     for (int cy = 0; cy < chunksHigh; cy++)
@@ -53,7 +53,7 @@ namespace Claude4_5Terraria.Systems
                         Point chunkPos = new Point(cx, cy);
                         if (!world.loadedChunks.ContainsKey(chunkPos))
                         {
-                            Claude4_5Terraria.World.Chunk chunk = new Claude4_5Terraria.World.Chunk(cx, cy);
+                            StarshroudHollows.World.Chunk chunk = new StarshroudHollows.World.Chunk(cx, cy);
                             chunk.IsLoaded = true;
                             world.loadedChunks[chunkPos] = chunk;
                         }
@@ -125,11 +125,11 @@ namespace Claude4_5Terraria.Systems
 
         private void GenerateTerrain()
         {
-            int centerX = Claude4_5Terraria.World.World.WORLD_WIDTH / 2;
+            int centerX = StarshroudHollows.World.World.WORLD_WIDTH / 2;
             int flatZoneRadius = 25;
             int transitionZone = 25;
 
-            for (int x = 0; x < Claude4_5Terraria.World.World.WORLD_WIDTH; x++)
+            for (int x = 0; x < StarshroudHollows.World.World.WORLD_WIDTH; x++)
             {
                 double noise1 = Math.Sin(x * 0.015) * 12;
                 double noise2 = Math.Sin(x * 0.04) * 6;
@@ -150,15 +150,15 @@ namespace Claude4_5Terraria.Systems
                     surfaceHeight = (int)Math.Round(SURFACE_LEVEL * (1 - blendFactor) + surfaceHeight * blendFactor);
                 }
 
-                for (int y = 0; y < Claude4_5Terraria.World.World.WORLD_HEIGHT; y++)
+                for (int y = 0; y < StarshroudHollows.World.World.WORLD_HEIGHT; y++)
                 {
                     if (y < surfaceHeight) continue;
                     else if (y == surfaceHeight)
-                        world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.Grass));
+                        world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.Grass));
                     else if (y < surfaceHeight + DIRT_LAYER_THICKNESS)
-                        world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.Dirt));
+                        world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.Dirt));
                     else
-                        world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.Stone));
+                        world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.Stone));
                 }
             }
         }
@@ -168,7 +168,7 @@ namespace Claude4_5Terraria.Systems
 
         private void GenerateCaves()
         {
-            int maxSafeDepth = Claude4_5Terraria.World.World.WORLD_HEIGHT - 150;
+            int maxSafeDepth = StarshroudHollows.World.World.WORLD_HEIGHT - 150;
             // Counts increased by 20%
             caveStartPoints.Clear(); // Clear before generating
             CarveCaves(936, 20, 40, 1, 2, CAVE_START_DEPTH, Math.Min(600, maxSafeDepth));
@@ -192,7 +192,7 @@ namespace Claude4_5Terraria.Systems
 
             for (int i = 0; i < count; i++)
             {
-                int startX = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
+                int startX = random.Next(50, StarshroudHollows.World.World.WORLD_WIDTH - 50);
                 int startY = random.Next(minY, maxY);
                 CarveCaveTunnel(startX, startY, random.Next(minLength, maxLength), minRadius, maxRadius);
 
@@ -239,7 +239,7 @@ namespace Claude4_5Terraria.Systems
 
                 if (floorPos.HasValue && IsValidChestSpot(floorPos.Value))
                 {
-                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new Claude4_5Terraria.World.Tile(tileType));
+                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new StarshroudHollows.World.Tile(tileType));
                     chestSystem.PlaceChest(floorPos.Value, tier, true);
                     Chest chest = chestSystem.GetChest(floorPos.Value);
                     if (chest != null) chestSystem.GenerateChestLoot(chest, random);
@@ -286,7 +286,7 @@ namespace Claude4_5Terraria.Systems
 
                             var tile = world.GetTile(tileX, tileY);
                             if (tile != null && tile.IsActive && tile.Type != TileType.Grass)
-                                world.SetTile(tileX, tileY, new Claude4_5Terraria.World.Tile(TileType.Air));
+                                world.SetTile(tileX, tileY, new StarshroudHollows.World.Tile(TileType.Air));
                         }
                     }
                 }
@@ -305,8 +305,8 @@ namespace Claude4_5Terraria.Systems
                 currentX += (int)(Math.Cos(direction) * moveSpeed);
                 currentY += (int)(Math.Sin(direction) * moveSpeed);
 
-                if (currentX < 50 || currentX >= Claude4_5Terraria.World.World.WORLD_WIDTH - 50 ||
-                    currentY < CAVE_START_DEPTH || currentY >= Claude4_5Terraria.World.World.WORLD_HEIGHT - 150)
+                if (currentX < 50 || currentX >= StarshroudHollows.World.World.WORLD_WIDTH - 50 ||
+                    currentY < CAVE_START_DEPTH || currentY >= StarshroudHollows.World.World.WORLD_HEIGHT - 150)
                     break;
             }
         }
@@ -314,9 +314,9 @@ namespace Claude4_5Terraria.Systems
         private void PlaceCaveTorches()
         {
             int torchesPlaced = 0;
-            for (int x = 50; x < Claude4_5Terraria.World.World.WORLD_WIDTH - 50; x += 8)
+            for (int x = 50; x < StarshroudHollows.World.World.WORLD_WIDTH - 50; x += 8)
             {
-                for (int y = CAVE_START_DEPTH; y < Claude4_5Terraria.World.World.WORLD_HEIGHT - 150; y += 8)
+                for (int y = CAVE_START_DEPTH; y < StarshroudHollows.World.World.WORLD_HEIGHT - 150; y += 8)
                 {
                     var tile = world.GetTile(x, y);
                     if (tile == null || !tile.IsActive)
@@ -336,7 +336,7 @@ namespace Claude4_5Terraria.Systems
                                         world.IsSolidAtPosition(torchX, torchY - 1) ||
                                         world.IsSolidAtPosition(torchX, torchY + 1))
                                     {
-                                        world.SetTile(torchX, torchY, new Claude4_5Terraria.World.Tile(TileType.Torch));
+                                        world.SetTile(torchX, torchY, new StarshroudHollows.World.Tile(TileType.Torch));
                                         torchesPlaced++;
                                     }
                                 }
@@ -352,8 +352,8 @@ namespace Claude4_5Terraria.Systems
         {
             for (int i = 0; i < 3900; i++)
             {
-                int centerX = random.Next(0, Claude4_5Terraria.World.World.WORLD_WIDTH);
-                int centerY = random.Next(CAVE_START_DEPTH, Claude4_5Terraria.World.World.WORLD_HEIGHT - 150);
+                int centerX = random.Next(0, StarshroudHollows.World.World.WORLD_WIDTH);
+                int centerY = random.Next(CAVE_START_DEPTH, StarshroudHollows.World.World.WORLD_HEIGHT - 150);
                 int pocketSize = random.Next(6, 15);
                 for (int j = 0; j < pocketSize; j++)
                 {
@@ -361,7 +361,7 @@ namespace Claude4_5Terraria.Systems
                     int dirtY = centerY + random.Next(-4, 5);
                     var tile = world.GetTile(dirtX, dirtY);
                     if (tile != null && tile.Type == TileType.Stone)
-                        world.SetTile(dirtX, dirtY, new Claude4_5Terraria.World.Tile(TileType.Dirt));
+                        world.SetTile(dirtX, dirtY, new StarshroudHollows.World.Tile(TileType.Dirt));
                 }
             }
         }
@@ -390,18 +390,18 @@ namespace Claude4_5Terraria.Systems
             // Silver Distribution (Reduced by 30%)
             PlaceOreType(TileType.Silver, 2380, 1500, 1900, 5, 7);
             PlaceOreType(TileType.Silver, 10500, 1900, 2100, 6, 9);
-            PlaceOreType(TileType.Silver, 3500, 2100, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 4, 6);
+            PlaceOreType(TileType.Silver, 3500, 2100, StarshroudHollows.World.World.WORLD_HEIGHT - 200, 4, 6);
 
             // Platinum Distribution (Reduced by 30%)
             PlaceOreType(TileType.Platinum, 3150, 1900, 2100, 5, 7);
-            PlaceOreType(TileType.Platinum, 10500, 2100, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200, 6, 9);
+            PlaceOreType(TileType.Platinum, 10500, 2100, StarshroudHollows.World.World.WORLD_HEIGHT - 200, 6, 9);
         }
 
         private void PlaceOreType(TileType oreType, int veinCount, int minDepth, int maxDepth, int minVeinSize, int maxVeinSize)
         {
             for (int i = 0; i < veinCount; i++)
             {
-                int startX = random.Next(0, Claude4_5Terraria.World.World.WORLD_WIDTH);
+                int startX = random.Next(0, StarshroudHollows.World.World.WORLD_WIDTH);
                 int startY = random.Next(minDepth, maxDepth);
                 int veinLength = random.Next(minVeinSize, maxVeinSize + 1);
                 int veinThickness = random.Next(1, 3);
@@ -419,12 +419,12 @@ namespace Claude4_5Terraria.Systems
                             {
                                 int oreX = currentX + dx;
                                 int oreY = currentY + dy;
-                                if (oreX >= 0 && oreX < Claude4_5Terraria.World.World.WORLD_WIDTH &&
-                                    oreY >= 0 && oreY < Claude4_5Terraria.World.World.WORLD_HEIGHT)
+                                if (oreX >= 0 && oreX < StarshroudHollows.World.World.WORLD_WIDTH &&
+                                    oreY >= 0 && oreY < StarshroudHollows.World.World.WORLD_HEIGHT)
                                 {
                                     var tile = world.GetTile(oreX, oreY);
                                     if (tile != null && tile.Type == TileType.Stone)
-                                        world.SetTile(oreX, oreY, new Claude4_5Terraria.World.Tile(oreType));
+                                        world.SetTile(oreX, oreY, new StarshroudHollows.World.Tile(oreType));
                                 }
                             }
                         }
@@ -434,7 +434,7 @@ namespace Claude4_5Terraria.Systems
                     int moveStep = random.Next(1, 3);
                     currentX += (int)(Math.Cos(direction) * moveStep);
                     currentY += (int)(Math.Sin(direction) * moveStep);
-                    if (currentX < 0 || currentX >= Claude4_5Terraria.World.World.WORLD_WIDTH ||
+                    if (currentX < 0 || currentX >= StarshroudHollows.World.World.WORLD_WIDTH ||
                         currentY < minDepth || currentY > maxDepth) break;
                 }
             }
@@ -455,12 +455,12 @@ namespace Claude4_5Terraria.Systems
             // Updated Wood Chest attempts to 1200 - FIXED: Deeper underground only
             for (int attempt = 0; attempt < 1200; attempt++)
             {
-                int x = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
+                int x = random.Next(50, StarshroudHollows.World.World.WORLD_WIDTH - 50);
                 int y = random.Next(350, 600); // Changed from 250 to 350 to prevent surface spawning
                 Point? floorPos = FindCaveFloor(x, y, 600); // Changed maxY from 250 to 600
                 if (floorPos.HasValue && IsValidChestSpot(floorPos.Value))
                 {
-                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new Claude4_5Terraria.World.Tile(TileType.WoodChest));
+                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new StarshroudHollows.World.Tile(TileType.WoodChest));
                     chestSystem.PlaceChest(floorPos.Value, ChestTier.Wood, true);
                     Chest chest = chestSystem.GetChest(floorPos.Value);
                     if (chest != null) chestSystem.GenerateChestLoot(chest, random);
@@ -471,12 +471,12 @@ namespace Claude4_5Terraria.Systems
             // Updated Silver Chest attempts to 500
             for (int attempt = 0; attempt < 500; attempt++)
             {
-                int x = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
+                int x = random.Next(50, StarshroudHollows.World.World.WORLD_WIDTH - 50);
                 int y = random.Next(1250, 1500);
                 Point? floorPos = FindCaveFloor(x, y, 1250);
                 if (floorPos.HasValue && IsValidChestSpot(floorPos.Value))
                 {
-                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new Claude4_5Terraria.World.Tile(TileType.SilverChest));
+                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new StarshroudHollows.World.Tile(TileType.SilverChest));
                     chestSystem.PlaceChest(floorPos.Value, ChestTier.Silver, true);
                     Chest chest = chestSystem.GetChest(floorPos.Value);
                     if (chest != null) chestSystem.GenerateChestLoot(chest, random);
@@ -487,12 +487,12 @@ namespace Claude4_5Terraria.Systems
             // Magic Chest attempts remain at 50 (rare)
             for (int attempt = 0; attempt < 50; attempt++)
             {
-                int x = random.Next(50, Claude4_5Terraria.World.World.WORLD_WIDTH - 50);
-                int y = random.Next(2000, Math.Min(2300, Claude4_5Terraria.World.World.WORLD_HEIGHT - 150));
+                int x = random.Next(50, StarshroudHollows.World.World.WORLD_WIDTH - 50);
+                int y = random.Next(2000, Math.Min(2300, StarshroudHollows.World.World.WORLD_HEIGHT - 150));
                 Point? floorPos = FindCaveFloor(x, y, 2000);
                 if (floorPos.HasValue && IsValidChestSpot(floorPos.Value))
                 {
-                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new Claude4_5Terraria.World.Tile(TileType.MagicChest));
+                    world.SetTile(floorPos.Value.X, floorPos.Value.Y, new StarshroudHollows.World.Tile(TileType.MagicChest));
                     chestSystem.PlaceChest(floorPos.Value, ChestTier.Magic, true);
                     Chest chest = chestSystem.GetChest(floorPos.Value);
                     if (chest != null) chestSystem.GenerateChestLoot(chest, random);
@@ -505,7 +505,7 @@ namespace Claude4_5Terraria.Systems
 
         private Point? FindCaveFloor(int startX, int startY, int maxY)
         {
-            for (int checkY = startY; checkY <= maxY && checkY < Claude4_5Terraria.World.World.WORLD_HEIGHT - 1; checkY++)
+            for (int checkY = startY; checkY <= maxY && checkY < StarshroudHollows.World.World.WORLD_HEIGHT - 1; checkY++)
             {
                 var currentTile = world.GetTile(startX, checkY);
                 var belowTile = world.GetTile(startX, checkY + 1);
@@ -550,7 +550,7 @@ namespace Claude4_5Terraria.Systems
             int treesPlaced = 0;
             for (int i = 0; i < 600; i++)  // INCREASED from 200 to 600
             {
-                int x = random.Next(10, Claude4_5Terraria.World.World.WORLD_WIDTH - 10);
+                int x = random.Next(10, StarshroudHollows.World.World.WORLD_WIDTH - 10);
                 int surfaceY = world.GetSurfaceHeight(x);
                 var groundTile = world.GetTile(x, surfaceY);
                 if (groundTile != null && (groundTile.Type == TileType.Grass || groundTile.Type == TileType.Dirt))
@@ -586,8 +586,8 @@ namespace Claude4_5Terraria.Systems
             // 1. Generate large lava caves at deep depths (1800-2500)
             for (int i = 0; i < 30; i++)
             {
-                int startX = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
-                int startY = random.Next(1800, Math.Min(2500, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200));
+                int startX = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
+                int startY = random.Next(1800, Math.Min(2500, StarshroudHollows.World.World.WORLD_HEIGHT - 200));
                 int caveLength = random.Next(60, 120);
 
                 if (CarveLavaCave(startX, startY, caveLength))
@@ -599,8 +599,8 @@ namespace Claude4_5Terraria.Systems
             // 2. Generate lava pools in existing caves (1500+)
             for (int attempt = 0; attempt < 200; attempt++)
             {
-                int x = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
-                int y = random.Next(1500, Claude4_5Terraria.World.World.WORLD_HEIGHT - 200);
+                int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
+                int y = random.Next(1500, StarshroudHollows.World.World.WORLD_HEIGHT - 200);
 
                 // Check if this is an open cave area
                 var tile = world.GetTile(x, y);
@@ -641,7 +641,7 @@ namespace Claude4_5Terraria.Systems
                             var tile = world.GetTile(tileX, tileY);
                             if (tile != null && tile.IsActive && tile.Type != TileType.Grass)
                             {
-                                world.SetTile(tileX, tileY, new Claude4_5Terraria.World.Tile(TileType.Air));
+                                world.SetTile(tileX, tileY, new StarshroudHollows.World.Tile(TileType.Air));
                             }
                         }
                     }
@@ -660,7 +660,7 @@ namespace Claude4_5Terraria.Systems
                         var tile = world.GetTile(tileX, tileY);
                         if (tile == null || !tile.IsActive)
                         {
-                            world.SetTile(tileX, tileY, new Claude4_5Terraria.World.Tile(TileType.Lava));
+                            world.SetTile(tileX, tileY, new StarshroudHollows.World.Tile(TileType.Lava));
                             lavaPlaced = true;
                         }
                     }
@@ -676,8 +676,8 @@ namespace Claude4_5Terraria.Systems
                 currentY += (int)(Math.Sin(direction) * moveSpeed);
 
                 // Stop if out of bounds
-                if (currentX < 100 || currentX >= Claude4_5Terraria.World.World.WORLD_WIDTH - 100 ||
-                    currentY < 1800 || currentY >= Claude4_5Terraria.World.World.WORLD_HEIGHT - 200)
+                if (currentX < 100 || currentX >= StarshroudHollows.World.World.WORLD_WIDTH - 100 ||
+                    currentY < 1800 || currentY >= StarshroudHollows.World.World.WORLD_HEIGHT - 200)
                     break;
             }
 
@@ -690,7 +690,7 @@ namespace Claude4_5Terraria.Systems
             int floorY = centerY;
             bool foundFloor = false;
 
-            for (int checkY = centerY; checkY < Math.Min(centerY + 30, Claude4_5Terraria.World.World.WORLD_HEIGHT - 1); checkY++)
+            for (int checkY = centerY; checkY < Math.Min(centerY + 30, StarshroudHollows.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
                 if (tile != null && tile.IsActive)
@@ -718,7 +718,7 @@ namespace Claude4_5Terraria.Systems
                     var tile = world.GetTile(lavaX, lavaY);
                     if (tile == null || !tile.IsActive)
                     {
-                        world.SetTile(lavaX, lavaY, new Claude4_5Terraria.World.Tile(TileType.Lava));
+                        world.SetTile(lavaX, lavaY, new StarshroudHollows.World.Tile(TileType.Lava));
                         lavaPlaced = true;
                     }
                 }
@@ -737,7 +737,7 @@ namespace Claude4_5Terraria.Systems
             // 1. Generate surface water pools (small ponds)
             for (int attempt = 0; attempt < 50; attempt++)
             {
-                int x = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
+                int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
                 int surfaceY = world.GetSurfaceHeight(x);
 
                 // Only place on relatively flat areas
@@ -761,7 +761,7 @@ namespace Claude4_5Terraria.Systems
             // 2. Generate small underground pools (depth 300-1000)
             for (int attempt = 0; attempt < 150; attempt++)
             {
-                int x = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
+                int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(300, 1000);
 
                 if (CreateSmallUndergroundPool(x, y))
@@ -773,7 +773,7 @@ namespace Claude4_5Terraria.Systems
             // 3. Generate medium underground pools (depth 800-1800)
             for (int attempt = 0; attempt < 80; attempt++)
             {
-                int x = random.Next(100, Claude4_5Terraria.World.World.WORLD_WIDTH - 100);
+                int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(800, 1800);
 
                 if (CreateMediumUndergroundPool(x, y))
@@ -785,7 +785,7 @@ namespace Claude4_5Terraria.Systems
             // 4. Generate large underground pools/lakes (depth 1200-2200)
             for (int attempt = 0; attempt < 30; attempt++)
             {
-                int x = random.Next(150, Claude4_5Terraria.World.World.WORLD_WIDTH - 150);
+                int x = random.Next(150, StarshroudHollows.World.World.WORLD_WIDTH - 150);
                 int y = random.Next(1200, 2200);
 
                 if (CreateLargeUndergroundPool(x, y))
@@ -821,7 +821,7 @@ namespace Claude4_5Terraria.Systems
                     var tile = world.GetTile(poolX, poolY);
                     if (tile != null && tile.IsActive)
                     {
-                        world.SetTile(poolX, poolY, new Claude4_5Terraria.World.Tile(TileType.Air));
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
                     }
                 }
             }
@@ -843,7 +843,7 @@ namespace Claude4_5Terraria.Systems
                     var tile = world.GetTile(poolX, poolY);
                     if (tile == null || !tile.IsActive)
                     {
-                        world.SetTile(poolX, poolY, new Claude4_5Terraria.World.Tile(TileType.Water));
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Water));
                         waterPlaced = true;
                     }
                 }
@@ -857,7 +857,7 @@ namespace Claude4_5Terraria.Systems
             int floorY = -1;
             bool foundCave = false;
 
-            for (int checkY = centerY; checkY < Math.Min(centerY + 50, Claude4_5Terraria.World.World.WORLD_HEIGHT - 1); checkY++)
+            for (int checkY = centerY; checkY < Math.Min(centerY + 50, StarshroudHollows.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
                 var tileBelow = world.GetTile(centerX, checkY + 1);
@@ -886,7 +886,7 @@ namespace Claude4_5Terraria.Systems
                     var tile = world.GetTile(poolX, poolY);
                     if (tile == null || !tile.IsActive)
                     {
-                        world.SetTile(poolX, poolY, new Claude4_5Terraria.World.Tile(TileType.Water));
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Water));
                         waterPlaced = true;
                     }
                 }
@@ -900,7 +900,7 @@ namespace Claude4_5Terraria.Systems
             int floorY = -1;
             bool foundCave = false;
 
-            for (int checkY = centerY; checkY < Math.Min(centerY + 50, Claude4_5Terraria.World.World.WORLD_HEIGHT - 1); checkY++)
+            for (int checkY = centerY; checkY < Math.Min(centerY + 50, StarshroudHollows.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
                 var tileBelow = world.GetTile(centerX, checkY + 1);
@@ -929,7 +929,7 @@ namespace Claude4_5Terraria.Systems
                     var tile = world.GetTile(poolX, poolY);
                     if (tile == null || !tile.IsActive)
                     {
-                        world.SetTile(poolX, poolY, new Claude4_5Terraria.World.Tile(TileType.Water));
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Water));
                         waterPlaced = true;
                     }
                 }
@@ -943,7 +943,7 @@ namespace Claude4_5Terraria.Systems
             int floorY = -1;
             bool foundCave = false;
 
-            for (int checkY = centerY; checkY < Math.Min(centerY + 60, Claude4_5Terraria.World.World.WORLD_HEIGHT - 1); checkY++)
+            for (int checkY = centerY; checkY < Math.Min(centerY + 60, StarshroudHollows.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
                 var tileBelow = world.GetTile(centerX, checkY + 1);
@@ -975,7 +975,7 @@ namespace Claude4_5Terraria.Systems
                     var tile = world.GetTile(poolX, poolY);
                     if (tile == null || !tile.IsActive)
                     {
-                        world.SetTile(poolX, poolY, new Claude4_5Terraria.World.Tile(TileType.Water));
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Water));
                         waterPlaced = true;
                     }
                 }
@@ -988,9 +988,9 @@ namespace Claude4_5Terraria.Systems
         {
             int obsidianCreated = 0;
 
-            for (int x = 1; x < Claude4_5Terraria.World.World.WORLD_WIDTH - 1; x++)
+            for (int x = 1; x < StarshroudHollows.World.World.WORLD_WIDTH - 1; x++)
             {
-                for (int y = 1; y < Claude4_5Terraria.World.World.WORLD_HEIGHT - 1; y++)
+                for (int y = 1; y < StarshroudHollows.World.World.WORLD_HEIGHT - 1; y++)
                 {
                     var tile = world.GetTile(x, y);
 
@@ -1013,7 +1013,7 @@ namespace Claude4_5Terraria.Systems
 
                         if (hasAdjacentWater)
                         {
-                            world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.Obsidian));
+                            world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.Obsidian));
                             obsidianCreated++;
                         }
                     }
@@ -1026,12 +1026,12 @@ namespace Claude4_5Terraria.Systems
         private void PlaceTree(int baseX, int baseY)
         {
             int trunkHeight = random.Next(8, 15);
-            var tree = new Claude4_5Terraria.World.Tree(baseX, baseY, trunkHeight);
+            var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight);
             for (int y = 0; y < trunkHeight; y++)
             {
                 int treeY = baseY - 1 - y;
                 // CRITICAL FIX: Don't set background tiles for tree parts
-                var newTile = new Claude4_5Terraria.World.Tile(TileType.Wood, true);
+                var newTile = new StarshroudHollows.World.Tile(TileType.Wood, true);
                 newTile.IsPartOfTree = true; // Mark as tree so lighting system doesn't add background
                 world.SetTile(baseX, treeY, newTile);
                 tree.AddTile(baseX, treeY);
@@ -1050,7 +1050,7 @@ namespace Claude4_5Terraria.Systems
                         if (existingTile == null || !existingTile.IsActive || existingTile.Type != TileType.Wood)
                         {
                             // CRITICAL FIX: Don't set background tiles for leaves
-                            var newTile = new Claude4_5Terraria.World.Tile(TileType.Leaves, true);
+                            var newTile = new StarshroudHollows.World.Tile(TileType.Leaves, true);
                             newTile.IsPartOfTree = true; // Mark as tree so lighting system doesn't add background
                             world.SetTile(leafX, leafY, newTile);
                             tree.AddTile(leafX, leafY);
@@ -1063,7 +1063,7 @@ namespace Claude4_5Terraria.Systems
 
         private void GenerateGrass()
         {
-            for (int x = 0; x < Claude4_5Terraria.World.World.WORLD_WIDTH; x++)
+            for (int x = 0; x < StarshroudHollows.World.World.WORLD_WIDTH; x++)
             {
                 int surfaceY = world.GetSurfaceHeight(x);
                 var surfaceTile = world.GetTile(x, surfaceY);
@@ -1071,14 +1071,14 @@ namespace Claude4_5Terraria.Systems
                 {
                     var aboveTile = world.GetTile(x, surfaceY - 1);
                     if (aboveTile == null || !aboveTile.IsActive)
-                        world.SetTile(x, surfaceY, new Claude4_5Terraria.World.Tile(TileType.Grass));
+                        world.SetTile(x, surfaceY, new StarshroudHollows.World.Tile(TileType.Grass));
                 }
             }
         }
 
         private void GenerateSnowBiome()
         {
-            const int WORLD_CENTER = Claude4_5Terraria.World.World.WORLD_WIDTH / 2; // 3250
+            const int WORLD_CENTER = StarshroudHollows.World.World.WORLD_WIDTH / 2; // 3250
             const int MIN_DISTANCE_FROM_CENTER = 250;
             const int MAX_DISTANCE_FROM_CENTER = 450;
 
@@ -1106,7 +1106,7 @@ namespace Claude4_5Terraria.Systems
 
             // Ensure boundaries stay within world
             snowBiomeStartX = Math.Max(0, snowBiomeStartX);
-            snowBiomeEndX = Math.Min(Claude4_5Terraria.World.World.WORLD_WIDTH - 1, snowBiomeEndX);
+            snowBiomeEndX = Math.Min(StarshroudHollows.World.World.WORLD_WIDTH - 1, snowBiomeEndX);
 
             Logger.Log($"[WORLDGEN] Generating snow biome from X={snowBiomeStartX} to X={snowBiomeEndX} (width: {snowBiomeEndX - snowBiomeStartX}, side: {(spawnLeft ? "LEFT" : "RIGHT")})");
             Logger.Log($"[WORLDGEN] Snow biome is {Math.Abs((snowBiomeStartX + snowBiomeEndX) / 2 - WORLD_CENTER)} blocks from spawn (world center)");
@@ -1126,15 +1126,15 @@ namespace Claude4_5Terraria.Systems
                         switch (tile.Type)
                         {
                             case TileType.Grass:
-                                world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.SnowGrass));
+                                world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.SnowGrass));
                                 snowTilesConverted++;
                                 break;
                             case TileType.Dirt:
-                                world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.Snow));
+                                world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.Snow));
                                 snowTilesConverted++;
                                 break;
                             case TileType.Leaves:
-                                world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.SnowyLeaves));
+                                world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.SnowyLeaves));
                                 snowTilesConverted++;
                                 break;
                             case TileType.Water:
@@ -1143,7 +1143,7 @@ namespace Claude4_5Terraria.Systems
                                 // If air above, this is the top layer - freeze it
                                 if (tileAbove == null || !tileAbove.IsActive)
                                 {
-                                    world.SetTile(x, y, new Claude4_5Terraria.World.Tile(TileType.Ice));
+                                    world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.Ice));
                                     snowTilesConverted++;
                                 }
                                 break;
@@ -1172,7 +1172,7 @@ namespace Claude4_5Terraria.Systems
                                 if (hasSpace)
                                 {
                                     // Place icicle
-                                    world.SetTile(x, y + 1, new Claude4_5Terraria.World.Tile(TileType.Icicle));
+                                    world.SetTile(x, y + 1, new StarshroudHollows.World.Tile(TileType.Icicle));
                                     iciclesPlaced++;
                                 }
                             }
@@ -1186,7 +1186,7 @@ namespace Claude4_5Terraria.Systems
 
         public Vector2 GetSpawnPosition(int playerPixelHeight)
         {
-            int spawnX = Claude4_5Terraria.World.World.WORLD_WIDTH / 2;
+            int spawnX = StarshroudHollows.World.World.WORLD_WIDTH / 2;
             int surfaceY = world.GetSurfaceHeight(spawnX);
             Logger.Log($"[SPAWN] Initial spawn X: {spawnX}, Surface tile Y: {surfaceY}");
 
@@ -1204,7 +1204,7 @@ namespace Claude4_5Terraria.Systems
                 }
             }
 
-            Claude4_5Terraria.World.Tile groundTile = world.GetTile(spawnX, surfaceY);
+            StarshroudHollows.World.Tile groundTile = world.GetTile(spawnX, surfaceY);
             if (groundTile == null || !groundTile.IsActive)
             {
                 for (int searchRadius = 1; searchRadius <= 50; searchRadius++)
@@ -1213,7 +1213,7 @@ namespace Claude4_5Terraria.Systems
                     {
                         int checkX = spawnX + dx;
                         int checkY = world.GetSurfaceHeight(checkX);
-                        Claude4_5Terraria.World.Tile checkGround = world.GetTile(checkX, checkY);
+                        StarshroudHollows.World.Tile checkGround = world.GetTile(checkX, checkY);
                         if (checkGround != null && checkGround.IsActive &&
                             (checkGround.Type == TileType.Grass || checkGround.Type == TileType.Dirt || checkGround.Type == TileType.Stone))
                         {
@@ -1228,9 +1228,9 @@ namespace Claude4_5Terraria.Systems
                 if (groundTile == null || !groundTile.IsActive) surfaceY = SURFACE_LEVEL;
             }
 
-            int surfacePixelY = surfaceY * Claude4_5Terraria.World.World.TILE_SIZE;
+            int surfacePixelY = surfaceY * StarshroudHollows.World.World.TILE_SIZE;
             int spawnPixelY = surfacePixelY - playerPixelHeight - 2;
-            int spawnPixelX = spawnX * Claude4_5Terraria.World.World.TILE_SIZE;
+            int spawnPixelX = spawnX * StarshroudHollows.World.World.TILE_SIZE;
             return new Vector2(spawnPixelX, spawnPixelY);
         }
     }

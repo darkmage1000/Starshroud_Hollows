@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
-namespace Claude4_5Terraria.World
+namespace StarshroudHollows.World
 {
     public class Tree
     {

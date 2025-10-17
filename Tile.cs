@@ -1,6 +1,6 @@
-﻿using Claude4_5Terraria.Enums;
+﻿using StarshroudHollows.Enums;
 
-namespace Claude4_5Terraria.World
+namespace StarshroudHollows.World
 {
     public class Tile
     {

@@ -34,6 +34,7 @@ namespace StarshroudHollows
         private Texture2D menuBackgroundTexture;
         private Inventory inventory;
         private BossSystem bossSystem;
+        private PortalSystem portalSystem;
         private MiningSystem miningSystem;
         private LightingSystem lightingSystem;
         private TimeSystem timeSystem;
@@ -233,13 +234,38 @@ namespace StarshroudHollows
                     }
                     else if (selectedSlot.ItemType == ItemType.TrollBait)
                     {
-                        string errorMessage = bossSystem.TrySummonCaveTroll(player.Position);
-                        if (errorMessage == null)
+                        // Check if clicking on an altar
+                        int tileX = (int)(player.GetCenterPosition().X / World.World.TILE_SIZE);
+                        int tileY = (int)(player.GetCenterPosition().Y / World.World.TILE_SIZE);
+                        
+                        // Check nearby tiles for altar
+                        bool activatedAltar = false;
+                        for (int dx = -2; dx <= 2; dx++)
                         {
-                            inventory.RemoveItem(ItemType.TrollBait, 1);
-                            Logger.Log("[BOSS] Cave Troll summoned! Troll Bait consumed.");
+                            for (int dy = -2; dy <= 2; dy++)
+                            {
+                                Point altarPos = new Point(tileX + dx, tileY + dy);
+                                if (portalSystem.TryActivateAltar(altarPos, ItemType.TrollBait, inventory))
+                                {
+                                    activatedAltar = true;
+                                    Logger.Log("[PORTAL] Altar activated! Portal spawned!");
+                                    break;
+                                }
+                            }
+                            if (activatedAltar) break;
                         }
-                        else Logger.Log($"[BOSS] Cannot summon: {errorMessage}");
+                        
+                        // If no altar nearby, do direct summon (old way)
+                        if (!activatedAltar)
+                        {
+                            string errorMessage = bossSystem.TrySummonCaveTroll(player.Position);
+                            if (errorMessage == null)
+                            {
+                                inventory.RemoveItem(ItemType.TrollBait, 1);
+                                Logger.Log("[BOSS] Cave Troll summoned! Troll Bait consumed.");
+                            }
+                            else Logger.Log($"[BOSS] Cannot summon: {errorMessage}");
+                        }
                     }
                 }
             }
@@ -281,6 +307,48 @@ namespace StarshroudHollows
             // Corrected player type argument: Player.Player
             bossSystem?.Update(deltaTime, playerCenter, player, inventory, combatSystem, projectileSystem, heldItem);
 
+            // Portal system update
+            portalSystem?.Update(deltaTime, player.Position, Player.Player.PLAYER_WIDTH, Player.Player.PLAYER_HEIGHT);
+
+            // Check if player entered arena
+            if (portalSystem != null && portalSystem.IsInArena)
+            {
+                // Teleport player to arena spawn
+                Vector2 arenaSpawn = portalSystem.GetArenaPlayerSpawn();
+                if (player.Position != arenaSpawn)
+                {
+                    player.Position = arenaSpawn;
+                    camera.Position = player.Position;
+                }
+
+                // Spawn boss if not already active
+                if (!bossSystem.HasActiveBoss)
+                {
+                    Vector2 bossSpawn = portalSystem.GetArenaBossSpawn();
+                    string error = bossSystem.TrySummonCaveTroll(bossSpawn);
+                    if (error != null)
+                    {
+                        Logger.Log($"[PORTAL] Failed to spawn boss in arena: {error}");
+                    }
+                }
+
+                // Check if boss was defeated - spawn exit portal
+                if (bossSystem != null && !bossSystem.HasActiveBoss && bossSystem.ActiveTroll != null && !bossSystem.ActiveTroll.IsAlive)
+                {
+                    portalSystem.OnBossDefeated();
+                }
+            }
+            else if (portalSystem != null && !portalSystem.IsInArena)
+            {
+                // Player left arena - teleport to return position
+                Vector2 returnPos = portalSystem.GetReturnPosition();
+                if (returnPos != Vector2.Zero && Vector2.Distance(player.Position, returnPos) > 100)
+                {
+                    player.Position = returnPos;
+                    camera.Position = player.Position;
+                }
+            }
+
             if (enemySpawner != null)
             {
                 Rectangle cameraView = camera.GetVisibleArea(World.World.TILE_SIZE);
@@ -317,6 +385,7 @@ namespace StarshroudHollows
             camera = new Camera(GraphicsDevice.Viewport) { Position = player.Position };
             inventory = new Inventory();
             bossSystem = new BossSystem(world);
+            portalSystem = new PortalSystem(world);
             miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume);
             miningSystem.SetItemTextureMap(itemTextureMap);
             miningSystem.OnChestMined += HandleChestMined;
@@ -372,6 +441,7 @@ namespace StarshroudHollows
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, camera.GetTransformMatrix());
 
             world.Draw(spriteBatch, camera, pixelTexture, lightingSystem, miningSystem, player.IsDebugModeActive());
+            portalSystem?.Draw(spriteBatch, pixelTexture);
             enemySpawner?.DrawEnemies(spriteBatch, oozeEnemyTexture, zombieEnemyTexture, pixelTexture);
             bossSystem?.Draw(spriteBatch, caveTrollBossTexture, pixelTexture);
             projectileSystem?.Draw(spriteBatch, pixelTexture);
@@ -528,6 +598,14 @@ namespace StarshroudHollows
         private void HandleChestPlaced(Point position, ItemType itemType)
         {
             TileType chestTileType = itemType.ToTileType();
+            
+            // Check if placing a summon altar
+            if (chestTileType == TileType.SummonAltar)
+            {
+                portalSystem?.PlaceAltar(position, BossType.CaveTroll);
+                return;
+            }
+            
             ChestTier tier = ChestTier.Wood;
 
             // FIX: Explicitly cast the TileType to ChestTier
@@ -600,21 +678,12 @@ namespace StarshroudHollows
             // Use Player.Player.PLAYER_HEIGHT
             InitializeGameSystems(worldGenerator.GetSpawnPosition(Player.Player.PLAYER_HEIGHT), true);
 
-            inventory.AddItem(ItemType.RunicPickaxe, 1);
-            inventory.AddItem(ItemType.Torch, 50);
+            inventory.AddItem(ItemType.WoodPickaxe, 1);
             inventory.AddItem(ItemType.WoodSword, 1);
-            inventory.AddItem(ItemType.CopperSword, 1);
-            inventory.AddItem(ItemType.IronSword, 1);
-            inventory.AddItem(ItemType.GoldSword, 1);
             inventory.AddItem(ItemType.WoodWand, 1);
-            inventory.AddItem(ItemType.FireWand, 1);
-            inventory.AddItem(ItemType.LightningWand, 1);
-            inventory.AddItem(ItemType.NatureWand, 1);
-            inventory.AddItem(ItemType.WaterWand, 1);
-            inventory.AddItem(ItemType.HalfMoonWand, 1);
-            inventory.AddItem(ItemType.RunicLaserWand, 1);
             inventory.AddItem(ItemType.WoodSummonStaff, 1);
-            inventory.AddItem(ItemType.PieceOfFlesh, 75);
+            inventory.AddItem(ItemType.Torch, 50);
+            inventory.AddItem(ItemType.RecallPotion, 1);
         }
 
         private void LoadTileSprites(World.World world)

@@ -1,10 +1,10 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Enums;
 using System;
 using Microsoft.Xna.Framework.Content;
 
-namespace Claude4_5Terraria.Entities
+namespace StarshroudHollows.Entities
 {
     public class DroppedItem
     {
@@ -71,15 +71,15 @@ namespace Claude4_5Terraria.Entities
             }
         }
 
-        public void Update(float deltaTime, World.World world)
+        public void Update(float deltaTime, StarshroudHollows.World.World world)
         {
             lifetime += deltaTime;
             if (pickupDelay > 0) pickupDelay -= deltaTime;
             if (!isOnGround) Velocity.Y = Math.Min(Velocity.Y + GRAVITY, MAX_FALL_SPEED);
 
             Vector2 newPosition = Position + Velocity;
-            int tileX = (int)(newPosition.X / World.World.TILE_SIZE);
-            int tileY = (int)((newPosition.Y + ITEM_SIZE) / World.World.TILE_SIZE);
+            int tileX = (int)(newPosition.X / StarshroudHollows.World.World.TILE_SIZE);
+            int tileY = (int)((newPosition.Y + ITEM_SIZE) / StarshroudHollows.World.World.TILE_SIZE);
 
             if (world.IsSolidAtPosition(tileX, tileY))
             {

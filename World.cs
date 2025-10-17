@@ -1,16 +1,19 @@
-﻿using Claude4_5Terraria.Enums;
-using Claude4_5Terraria.Player;
-using Claude4_5Terraria.Systems;
-using Claude4_5Terraria.UI;
+﻿using StarshroudHollows;
+using StarshroudHollows.Enums;
+using StarshroudHollows.Systems;
+using StarshroudHollows.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using StarshroudHollows.UI;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+// 1. ALIAS THE PLAYER NAMESPACE to 'P' to resolve ambiguity (Player namespace vs Player class)
+using P = StarshroudHollows.Player;
 
 
-namespace Claude4_5Terraria.World
+namespace StarshroudHollows.World
 {
     public class World
     {
@@ -43,7 +46,7 @@ namespace Claude4_5Terraria.World
         private HUD hudReference;
 
         // NEW: Player reference for access by HUD/Systems
-        private Claude4_5Terraria.Player.Player playerReference;
+        private P.Player playerReference; // CORRECTED using alias P
 
         // NEW: Reference to the Liquid System
         private LiquidSystem liquidSystemReference;
@@ -74,17 +77,17 @@ namespace Claude4_5Terraria.World
         // NEW: Setter for LiquidSystem reference
         public void SetLiquidSystem(LiquidSystem liquidSystem)
         {
-            this.liquidSystemReference = liquidSystem;
+            liquidSystemReference = liquidSystem;
         }
 
         // NEW: Setter for player reference (used by Game1 on load/generation)
-        public void SetPlayer(Claude4_5Terraria.Player.Player player)
+        public void SetPlayer(P.Player player) // CORRECTED using alias P
         {
-            this.playerReference = player;
+            playerReference = player;
         }
 
         // NEW: Getter for player reference (used by HUD)
-        public Claude4_5Terraria.Player.Player GetPlayer()
+        public P.Player GetPlayer() // CORRECTED using alias P
         {
             return playerReference;
         }
@@ -436,10 +439,10 @@ namespace Claude4_5Terraria.World
             lightingSystem.UpdateTorchCache(camera.Position);
 
             Rectangle visibleArea = camera.GetVisibleArea(TILE_SIZE);
-            int startTileX = Math.Max(0, (int)(visibleArea.Left / TILE_SIZE));
-            int endTileX = Math.Min(WORLD_WIDTH - 1, (int)(visibleArea.Right / TILE_SIZE));
-            int startTileY = Math.Max(0, (int)(visibleArea.Top / TILE_SIZE));
-            int endTileY = Math.Min(WORLD_HEIGHT - 1, (int)(visibleArea.Bottom / TILE_SIZE));
+            int startTileX = Math.Max(0, visibleArea.Left / TILE_SIZE);
+            int endTileX = Math.Min(WORLD_WIDTH - 1, visibleArea.Right / TILE_SIZE);
+            int startTileY = Math.Max(0, visibleArea.Top / TILE_SIZE);
+            int endTileY = Math.Min(WORLD_HEIGHT - 1, visibleArea.Bottom / TILE_SIZE);
 
             // Draw underground background
             for (int x = startTileX; x <= endTileX; x++)
@@ -644,7 +647,7 @@ namespace Claude4_5Terraria.World
 
                             Rectangle barFill = new Rectangle(x * TILE_SIZE + 2, (y - 1) * TILE_SIZE - 2,
                                 (int)((TILE_SIZE - 4) * (1f - progress)), 4);
-                            Color barColor = progress < 0.3f ? Color.Green : (progress < 0.7f ? Color.Yellow : Color.Red);
+                            Color barColor = progress < 0.3f ? Color.Green : progress < 0.7f ? Color.Yellow : Color.Red;
                             spriteBatch.Draw(pixelTexture, barFill, barColor);
                             DrawBorder(spriteBatch, pixelTexture, barBg, 1, Color.White * 0.5f);
 

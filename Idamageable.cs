@@ -1,6 +1,6 @@
 ﻿using Microsoft.Xna.Framework;
 
-namespace Claude4_5Terraria.Interfaces
+namespace StarshroudHollows.Interfaces
 {
     public interface IDamageable
     {

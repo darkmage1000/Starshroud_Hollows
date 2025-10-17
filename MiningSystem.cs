@@ -1,6 +1,6 @@
-﻿using Claude4_5Terraria.Entities;
-using Claude4_5Terraria.Enums;
-using Claude4_5Terraria.World;
+﻿using StarshroudHollows.Entities;
+using StarshroudHollows.Enums;
+using StarshroudHollows.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -8,11 +8,11 @@ using Microsoft.Xna.Framework.Audio;
 using System;
 using System.Collections.Generic;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class MiningSystem
     {
-        private World.World world;
+        private StarshroudHollows.World.World world;
         private Inventory inventory;
         private const int MINING_RANGE = 4;
         private const int PLACEMENT_RANGE = 4;
@@ -44,7 +44,7 @@ namespace Claude4_5Terraria.Systems
 
         private float gameSoundVolume = 1.0f;
 
-        public MiningSystem(World.World world, Inventory inventory, SoundEffect mineDirt, SoundEffect mineStone, SoundEffect mineTorch, SoundEffect placeTorch, float initialSoundVolume)
+        public MiningSystem(StarshroudHollows.World.World world, Inventory inventory, SoundEffect mineDirt, SoundEffect mineStone, SoundEffect mineTorch, SoundEffect placeTorch, float initialSoundVolume)
         {
             this.world = world;
             this.inventory = inventory;
@@ -139,11 +139,11 @@ namespace Claude4_5Terraria.Systems
 
                 if (lastPlayerDirection.X != 0)
                 {
-                    miningWorldPos.X += lastPlayerDirection.X * World.World.TILE_SIZE * 1.0f;
+                    miningWorldPos.X += lastPlayerDirection.X * StarshroudHollows.World.World.TILE_SIZE * 1.0f;
                 }
                 else
                 {
-                    miningWorldPos += lastPlayerDirection * World.World.TILE_SIZE * 1.5f;
+                    miningWorldPos += lastPlayerDirection * StarshroudHollows.World.World.TILE_SIZE * 1.5f;
                 }
             }
             else if (mouseState.LeftButton == ButtonState.Pressed)
@@ -156,15 +156,15 @@ namespace Claude4_5Terraria.Systems
                 miningWorldPos = GetMouseWorldPosition(mouseState, camera);
             }
 
-            targetX = (int)(miningWorldPos.X / World.World.TILE_SIZE);
-            targetY = (int)(miningWorldPos.Y / World.World.TILE_SIZE);
+            targetX = (int)(miningWorldPos.X / StarshroudHollows.World.World.TILE_SIZE);
+            targetY = (int)(miningWorldPos.Y / StarshroudHollows.World.World.TILE_SIZE);
 
-            float maxDistance = MINING_RANGE * World.World.TILE_SIZE;
+            float maxDistance = MINING_RANGE * StarshroudHollows.World.World.TILE_SIZE;
 
             float distanceToTile = Vector2.Distance(
                 playerCenter,
-                new Vector2(targetX * World.World.TILE_SIZE + World.World.TILE_SIZE / 2,
-                           targetY * World.World.TILE_SIZE + World.World.TILE_SIZE / 2)
+                new Vector2(targetX * StarshroudHollows.World.World.TILE_SIZE + StarshroudHollows.World.World.TILE_SIZE / 2,
+                           targetY * StarshroudHollows.World.World.TILE_SIZE + StarshroudHollows.World.World.TILE_SIZE / 2)
             );
 
             Tile targetTile = world.GetTile(targetX, targetY);
@@ -185,9 +185,9 @@ namespace Claude4_5Terraria.Systems
                 if (autoMiningActive && horizontalDir != 0)
                 {
                     // Horizontal auto-mining (left/right)
-                    int targetX_Multi = (int)((playerPosition.X + (playerWidth / 2) + (horizontalDir * (World.World.TILE_SIZE / 2 + 1))) / World.World.TILE_SIZE);
-                    int playerTopTileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
-                    int playerBottomTileY = (int)((playerPosition.Y + playerHeight - 1) / World.World.TILE_SIZE);
+                    int targetX_Multi = (int)((playerPosition.X + (playerWidth / 2) + (horizontalDir * (StarshroudHollows.World.World.TILE_SIZE / 2 + 1))) / StarshroudHollows.World.World.TILE_SIZE);
+                    int playerTopTileY = (int)(playerPosition.Y / StarshroudHollows.World.World.TILE_SIZE);
+                    int playerBottomTileY = (int)((playerPosition.Y + playerHeight - 1) / StarshroudHollows.World.World.TILE_SIZE);
                     int targetHeadY = playerTopTileY;
                     int targetFootY = playerBottomTileY;
                     ProcessHorizontalAutoMining(targetX_Multi, targetHeadY, targetFootY, deltaTime, lastPlayerDirection);
@@ -195,9 +195,9 @@ namespace Claude4_5Terraria.Systems
                 else if (autoMiningActive && verticalDir != 0)
                 {
                     // Vertical auto-mining (up/down)
-                    int playerLeftTileX = (int)(playerPosition.X / World.World.TILE_SIZE);
-                    int playerRightTileX = (int)((playerPosition.X + playerWidth - 1) / World.World.TILE_SIZE);
-                    int targetY_Multi = (int)((playerPosition.Y + (playerHeight / 2) + (verticalDir * (World.World.TILE_SIZE / 2 + 1))) / World.World.TILE_SIZE);
+                    int playerLeftTileX = (int)(playerPosition.X / StarshroudHollows.World.World.TILE_SIZE);
+                    int playerRightTileX = (int)((playerPosition.X + playerWidth - 1) / StarshroudHollows.World.World.TILE_SIZE);
+                    int targetY_Multi = (int)((playerPosition.Y + (playerHeight / 2) + (verticalDir * (StarshroudHollows.World.World.TILE_SIZE / 2 + 1))) / StarshroudHollows.World.World.TILE_SIZE);
                     ProcessVerticalAutoMining(playerLeftTileX, playerRightTileX, targetY_Multi, deltaTime, lastPlayerDirection);
                 }
                 else if (targetedTile.HasValue && targetTile != null && targetTile.IsActive)
@@ -220,10 +220,10 @@ namespace Claude4_5Terraria.Systems
 
             if (mouseState.RightButton == ButtonState.Pressed && placementCooldown <= 0)
             {
-                if (distanceToTile <= PLACEMENT_RANGE * World.World.TILE_SIZE)
+                if (distanceToTile <= PLACEMENT_RANGE * StarshroudHollows.World.World.TILE_SIZE)
                 {
-                    int placeX = (int)(GetMouseWorldPosition(mouseState, camera).X / World.World.TILE_SIZE);
-                    int placeY = (int)(GetMouseWorldPosition(mouseState, camera).Y / World.World.TILE_SIZE);
+                    int placeX = (int)(GetMouseWorldPosition(mouseState, camera).X / StarshroudHollows.World.World.TILE_SIZE);
+                    int placeY = (int)(GetMouseWorldPosition(mouseState, camera).Y / StarshroudHollows.World.World.TILE_SIZE);
                     InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
                     if (selectedSlot != null && !selectedSlot.IsEmpty() && selectedSlot.ItemType == ItemType.Acorn)
                     {
@@ -250,7 +250,7 @@ namespace Claude4_5Terraria.Systems
                         Tile below = world.GetTile(placeX, placeY + 1);
                         if (below != null && below.IsActive && (placeTile == null || !placeTile.IsActive))
                         {
-                            Rectangle blockRect = new Rectangle(placeX * World.World.TILE_SIZE, placeY * World.World.TILE_SIZE, World.World.TILE_SIZE, World.World.TILE_SIZE);
+                            Rectangle blockRect = new Rectangle(placeX * StarshroudHollows.World.World.TILE_SIZE, placeY * StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE);
                             Rectangle playerRect = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
                             if (!blockRect.Intersects(playerRect))
                             {
@@ -282,7 +282,7 @@ namespace Claude4_5Terraria.Systems
                         }
                         else
                         {
-                            Rectangle blockRect = new Rectangle(placeX * World.World.TILE_SIZE, placeY * World.World.TILE_SIZE, World.World.TILE_SIZE, World.World.TILE_SIZE);
+                            Rectangle blockRect = new Rectangle(placeX * StarshroudHollows.World.World.TILE_SIZE, placeY * StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE);
                             Rectangle playerRect = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
                             if (!blockRect.Intersects(playerRect))
                             {
@@ -613,9 +613,12 @@ namespace Claude4_5Terraria.Systems
                 int woodBlockCount = CountTreeWoodBlocks(x, y);
                 world.RemoveTree(x, y);
                 droppedItemType = ItemType.Wood;
-                if (woodBlockCount <= 10) dropCount = 3; else if (woodBlockCount <= 13) dropCount = 4; else dropCount = 5;
+                // Give more wood: multiply by 2
+                if (woodBlockCount <= 10) dropCount = woodBlockCount * 2; 
+                else if (woodBlockCount <= 13) dropCount = woodBlockCount * 2; 
+                else dropCount = woodBlockCount * 2;
                 breakSound = mineTorchSound;
-                Vector2 acornPosition = new Vector2(x * World.World.TILE_SIZE + 8, y * World.World.TILE_SIZE + 8);
+                Vector2 acornPosition = new Vector2(x * StarshroudHollows.World.World.TILE_SIZE + 8, y * StarshroudHollows.World.World.TILE_SIZE + 8);
                 int acornCount = random.Next(1, 3);
                 for (int i = 0; i < acornCount; i++) droppedItems.Add(new DroppedItem(acornPosition + new Vector2((float)(random.NextDouble() - 0.5) * 20, (float)(random.NextDouble() - 0.5) * 20), ItemType.Acorn));
             }
@@ -631,7 +634,7 @@ namespace Claude4_5Terraria.Systems
                 droppedItemType = (tileType == TileType.Grass) ? ItemType.Dirt : ItemTypeExtensions.FromTileType(tileType);
             }
             breakSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
-            Vector2 basePosition = new Vector2(x * World.World.TILE_SIZE + 8, y * World.World.TILE_SIZE + 8);
+            Vector2 basePosition = new Vector2(x * StarshroudHollows.World.World.TILE_SIZE + 8, y * StarshroudHollows.World.World.TILE_SIZE + 8);
             for (int i = 0; i < dropCount; i++) droppedItems.Add(new DroppedItem(basePosition + new Vector2((float)(random.NextDouble() - 0.5) * 16, (float)(random.NextDouble() - 0.5) * 16), droppedItemType));
         }
 
@@ -642,7 +645,7 @@ namespace Claude4_5Terraria.Systems
 
         private bool IsPlaceable(TileType type)
         {
-            switch (type) { case TileType.Dirt: case TileType.Grass: case TileType.Stone: case TileType.Wood: case TileType.WoodCraftingBench: case TileType.CopperCraftingBench: case TileType.WoodChest: case TileType.SilverChest: case TileType.MagicChest: case TileType.Torch: return true; default: return false; }
+            switch (type) { case TileType.Dirt: case TileType.Grass: case TileType.Stone: case TileType.Wood: case TileType.WoodCraftingBench: case TileType.CopperCraftingBench: case TileType.WoodChest: case TileType.SilverChest: case TileType.MagicChest: case TileType.Torch: case TileType.SummonAltar: return true; default: return false; }
         }
 
         public void DrawItems(SpriteBatch spriteBatch, Texture2D pixelTexture)
@@ -657,7 +660,7 @@ namespace Claude4_5Terraria.Systems
 
         private float GetMiningTime(TileType type)
         {
-            switch (type) { case TileType.Dirt: case TileType.Grass: return 0.5f; case TileType.Stone: return 1.0f; case TileType.Copper: return 1.5f; case TileType.Silver: return 2.0f; case TileType.Platinum: return 3.0f; case TileType.Wood: case TileType.Leaves: return 0.8f; case TileType.Coal: return 0.7f; case TileType.Torch: return 0.3f; case TileType.WoodCraftingBench: case TileType.CopperCraftingBench: case TileType.Sapling: return 0.3f; case TileType.WoodChest: case TileType.SilverChest: case TileType.MagicChest: return 0.5f; default: return 1.0f; }
+            switch (type) { case TileType.Dirt: case TileType.Grass: return 0.5f; case TileType.Stone: return 1.0f; case TileType.Copper: return 1.5f; case TileType.Silver: return 2.0f; case TileType.Platinum: return 3.0f; case TileType.Wood: case TileType.Leaves: return 0.8f; case TileType.Coal: return 0.7f; case TileType.Torch: return 0.3f; case TileType.WoodCraftingBench: case TileType.CopperCraftingBench: case TileType.Sapling: return 0.3f; case TileType.WoodChest: case TileType.SilverChest: case TileType.MagicChest: return 0.5f; case TileType.SummonAltar: return 1.5f; default: return 1.0f; }
         }
 
         private int CountTreeWoodBlocks(int x, int y)

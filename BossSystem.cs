@@ -11,6 +11,7 @@ namespace StarshroudHollows.Systems
 {
     /// <summary>
     /// Manages boss spawning, combat, and loot drops
+    /// Integrates with PortalSystem for arena-based boss fights
     /// </summary>
     public class BossSystem
     {
@@ -31,7 +32,7 @@ namespace StarshroudHollows.Systems
         /// Attempts to summon Cave Troll boss
         /// Returns error message if failed, null if successful
         /// </summary>
-         public string TrySummonCaveTroll(Vector2 playerPosition)
+        public string TrySummonCaveTroll(Vector2 playerPosition)
         {
             if (HasActiveBoss)
             {
@@ -104,33 +105,88 @@ namespace StarshroudHollows.Systems
 
         private void SpawnCaveTroll(Vector2 playerPosition, int groundTileY)
         {
-            int spawnDistance = random.Next(15, 21) * StarshroudHollows.World.World.TILE_SIZE;
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
+            int spawnDistance = random.Next(15, 21) * tileSize;
             int direction = random.Next(2) == 0 ? -1 : 1;
             float spawnX = playerPosition.X + (spawnDistance * direction);
-            float spawnY = groundTileY * StarshroudHollows.World.World.TILE_SIZE - 160;
+
+            // Find the actual ground level at spawn location
+            int spawnTileX = (int)(spawnX / tileSize);
+            int actualGroundY = groundTileY;
+
+            // Search downward to find solid ground
+            for (int y = groundTileY - 10; y < groundTileY + 20; y++)
+            {
+                if (world.IsSolidAtPosition(spawnTileX, y))
+                {
+                    actualGroundY = y;
+                    break;
+                }
+            }
+
+            // Spawn troll on top of the ground (subtract troll height to place him on surface)
+            float spawnY = actualGroundY * tileSize - 160; // 160 = troll height
 
             activeTroll = new CaveTroll(new Vector2(spawnX, spawnY), world);
-            Logger.Log("[BOSS] Cave Troll summoned!");
+            Logger.Log("[BOSS] Cave Troll summoned! Prepare for battle!");
+            Logger.Log($"[BOSS] Health: 100 | Club Swing: 30 DMG | AOE Ripple: 25 DMG | Dash (at 50% HP): 50 DMG");
         }
 
-        // Corrected Player type usage
         public void Update(float deltaTime, Vector2 playerPosition, Player.Player player, Inventory playerInventory, CombatSystem combatSystem, ProjectileSystem projectileSystem, ItemType heldItem)
         {
             if (activeTroll == null) return;
 
-            if (activeTroll.IsAlive && activeTroll.CanBeDamaged())
+            // Check for player damage from boss attacks
+            if (activeTroll.IsAlive)
             {
-                if (combatSystem != null && combatSystem.IsAttacking() && !combatSystem.HasAlreadyHit(activeTroll))
+                // Club swing melee damage (when very close)
+                if (activeTroll.GetHitbox().Intersects(player.GetHitbox()))
                 {
-                    // Corrected constant access
-                    Rectangle swordHitbox = combatSystem.GetAttackHitbox(player.Position, Player.Player.PLAYER_WIDTH, Player.Player.PLAYER_HEIGHT);
-                    if (swordHitbox.Intersects(activeTroll.GetHitbox()))
+                    if (activeTroll.IsAttackingAnimation())
                     {
-                        activeTroll.TakeDamage(combatSystem.GetAttackDamage(heldItem));
-                        combatSystem.RegisterHit(activeTroll);
+                        player.TakeDamage(CaveTroll.CLUB_SWING_DAMAGE);
+                        Logger.Log($"[BOSS] Cave Troll club swing! {CaveTroll.CLUB_SWING_DAMAGE} damage!");
                     }
                 }
 
+                // Charge attack damage (50 damage at 50% HP)
+                if (activeTroll.IsChargingAttack() && activeTroll.GetHitbox().Intersects(player.GetHitbox()))
+                {
+                    player.TakeDamage(CaveTroll.DASH_DAMAGE);
+                    Logger.Log($"[BOSS] Cave Troll CHARGE HIT! {CaveTroll.DASH_DAMAGE} damage!");
+                }
+
+                // Ground ripple AOE damage
+                foreach (var ripple in activeTroll.ActiveRipples)
+                {
+                    if (ripple.IsActive && ripple.GetHitbox().Intersects(player.GetHitbox()))
+                    {
+                        if (player.IsOnGround())
+                        {
+                            player.TakeDamage(CaveTroll.AOE_RIPPLE_DAMAGE);
+                            Logger.Log($"[BOSS] Ground ripple hit! {CaveTroll.AOE_RIPPLE_DAMAGE} AOE damage!");
+                        }
+                    }
+                }
+            }
+
+            // Check for player damaging the boss
+            if (activeTroll.IsAlive && activeTroll.CanBeDamaged())
+            {
+                // Sword damage
+                if (combatSystem != null && combatSystem.IsAttacking() && !combatSystem.HasAlreadyHit(activeTroll))
+                {
+                    Rectangle swordHitbox = combatSystem.GetAttackHitbox(player.Position, Player.Player.PLAYER_WIDTH, Player.Player.PLAYER_HEIGHT);
+                    if (swordHitbox.Intersects(activeTroll.GetHitbox()))
+                    {
+                        float damage = combatSystem.GetAttackDamage(heldItem);
+                        activeTroll.TakeDamage(damage);
+                        combatSystem.RegisterHit(activeTroll);
+                        Logger.Log($"[BOSS] Hit Cave Troll for {damage} damage! HP: {activeTroll.Health}/{activeTroll.MaxHealth}");
+                    }
+                }
+
+                // Projectile damage
                 if (projectileSystem != null)
                 {
                     foreach (var projectile in projectileSystem.GetActiveProjectiles().ToList())
@@ -143,6 +199,7 @@ namespace StarshroudHollows.Systems
                                 {
                                     activeTroll.TakeDamage(laser.Damage);
                                     laser.RegisterHit(activeTroll);
+                                    Logger.Log($"[BOSS] Laser hit! {laser.Damage} damage! HP: {activeTroll.Health}/{activeTroll.MaxHealth}");
                                     break;
                                 }
                             }
@@ -151,61 +208,43 @@ namespace StarshroudHollows.Systems
                         {
                             activeTroll.TakeDamage(projectile.Damage);
                             projectile.OnHit();
+                            Logger.Log($"[BOSS] Projectile hit! {projectile.Damage} damage! HP: {activeTroll.Health}/{activeTroll.MaxHealth}");
                         }
                     }
                 }
             }
 
+            // Update boss AI
             if (activeTroll.IsAlive)
             {
                 activeTroll.Update(deltaTime, playerPosition);
-
-                // Corrected constant access
-                if (activeTroll.GetHitbox().Intersects(player.GetHitbox()))
-                {
-                    if (activeTroll.IsAlive)
-                    {
-                        player.TakeDamage(CaveTroll.SLAM_DAMAGE);
-                    }
-                }
-
-                foreach (var ripple in activeTroll.ActiveRipples)
-                {
-                    if (ripple.IsActive && ripple.GetHitbox().Intersects(player.GetHitbox()))
-                    {
-                        if (player.IsOnGround())
-                        {
-                            player.TakeDamage(CaveTroll.AOE_DAMAGE);
-                        }
-                    }
-                }
             }
             else if (activeTroll.IsDefeated)
             {
+                Logger.Log("[BOSS] CAVE TROLL DEFEATED! Victory!");
                 DropLoot(activeTroll.Position, player, playerInventory);
                 activeTroll = null;
             }
         }
 
-        // Corrected Player type usage
         private void DropLoot(Vector2 bossPosition, Player.Player player, Inventory playerInventory)
         {
-            int barCount = random.Next(10, 20);
-
+            // Drop 10-20 Troll Bars (guaranteed)
+            int barCount = random.Next(10, 21);
             for (int i = 0; i < barCount; i++)
             {
                 playerInventory.AddItem(ItemType.TrollBar, 1);
             }
-
             Logger.Log($"[BOSS] Dropped {barCount} Troll Bars!");
 
+            // 5% chance to drop Troll Club weapon
             if (random.Next(100) < 5)
             {
                 playerInventory.AddItem(ItemType.TrollClub, 1);
-                Logger.Log("[BOSS] Rare drop! Troll Club obtained!");
+                Logger.Log("[BOSS] RARE DROP! Troll Club obtained!");
             }
 
-            Logger.Log("[BOSS] Cave Troll defeated! Victory!");
+            Logger.Log("[BOSS] Boss fight complete! Check your inventory for rewards.");
         }
 
         public void Draw(SpriteBatch spriteBatch, Texture2D trollTexture, Texture2D pixelTexture)
@@ -214,6 +253,7 @@ namespace StarshroudHollows.Systems
             {
                 activeTroll.Draw(spriteBatch, trollTexture, pixelTexture);
 
+                // Draw all ground ripples
                 foreach (var ripple in activeTroll.ActiveRipples)
                 {
                     ripple.Draw(spriteBatch, pixelTexture);

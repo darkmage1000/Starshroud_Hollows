@@ -1,12 +1,12 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Claude4_5Terraria.Systems;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Systems;
+using StarshroudHollows.Enums;
 using System.Collections.Generic;
 using System;
 
-namespace Claude4_5Terraria.UI
+namespace StarshroudHollows.UI
 {
     public class CraftingUI
     {
@@ -60,7 +60,7 @@ namespace Claude4_5Terraria.UI
             itemSprites[itemType] = sprite;
         }
 
-        public void Update(GameTime gameTime, Vector2 playerPosition, World.World world)
+        public void Update(GameTime gameTime, Vector2 playerPosition, StarshroudHollows.World.World world)
         {
             CheckProximityToCraftingBench(playerPosition, world);
             availableRecipes = RecipeDatabase.GetAvailableRecipes(nearCraftingBench, nearCopperBench);
@@ -243,7 +243,7 @@ namespace Claude4_5Terraria.UI
             }
         }
 
-        private void CheckProximityToCraftingBench(Vector2 playerPosition, World.World world)
+        private void CheckProximityToCraftingBench(Vector2 playerPosition, StarshroudHollows.World.World world)
         {
             if (world == null)
             {
@@ -252,8 +252,8 @@ namespace Claude4_5Terraria.UI
                 return;
             }
 
-            int playerTileX = (int)(playerPosition.X / World.World.TILE_SIZE);
-            int playerTileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
+            int playerTileX = (int)(playerPosition.X / StarshroudHollows.World.World.TILE_SIZE);
+            int playerTileY = (int)(playerPosition.Y / StarshroudHollows.World.World.TILE_SIZE);
 
             bool foundWoodBench = false;
             bool foundCopperBench = false;
@@ -493,6 +493,7 @@ namespace Claude4_5Terraria.UI
                 case ItemType.CopperPickaxe: return "Copper Pickaxe";
                 case ItemType.SilverPickaxe: return "Silver Pickaxe";
                 case ItemType.PlatinumPickaxe: return "Platinum Pickaxe";
+                case ItemType.SummonAltar: return "Summon Altar";
                 default: return type.ToString();
             }
         }
@@ -522,6 +523,7 @@ namespace Claude4_5Terraria.UI
                 case ItemType.CopperPickaxe: return new Color(255, 140, 0);
                 case ItemType.SilverPickaxe: return new Color(192, 192, 192);
                 case ItemType.PlatinumPickaxe: return new Color(144, 238, 144);
+                case ItemType.SummonAltar: return new Color(80, 80, 120);
                 default: return Color.White;
             }
         }

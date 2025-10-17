@@ -1,10 +1,10 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.Interfaces;
+using StarshroudHollows.Interfaces;
 using System;
 using System.Collections.Generic;
 
-namespace Claude4_5Terraria.Systems.Summons
+namespace StarshroudHollows.Systems.Summons
 {
     public class EchoWisp : Summon
     {
@@ -23,7 +23,7 @@ namespace Claude4_5Terraria.Systems.Summons
         public EchoWisp(Vector2 spawnPosition)
             : base(spawnPosition, 1f, 40f, 20f) { }
 
-        public override void Update(float deltaTime, Vector2 playerPosition, List<IDamageable> targets, World.World world)
+        public override void Update(float deltaTime, Vector2 playerPosition, List<IDamageable> targets, StarshroudHollows.World.World world)
         {
             if (!IsActive) return;
 
@@ -78,7 +78,7 @@ namespace Claude4_5Terraria.Systems.Summons
             }
         }
 
-        private void IdleHoverBehavior(float deltaTime, Vector2 playerPosition, World.World world)
+        private void IdleHoverBehavior(float deltaTime, Vector2 playerPosition, StarshroudHollows.World.World world)
         {
             hoverTimer += deltaTime;
             float hoverX = (float)Math.Sin(hoverTimer * 2f) * IDLE_HOVER_RANGE;
@@ -88,7 +88,7 @@ namespace Claude4_5Terraria.Systems.Summons
             MoveTowards(targetIdlePos, IDLE_HOVER_SPEED, deltaTime, world);
         }
 
-        private void MoveTowards(Vector2 target, float speed, float deltaTime, World.World world)
+        private void MoveTowards(Vector2 target, float speed, float deltaTime, StarshroudHollows.World.World world)
         {
             Vector2 direction = target - Position;
             if (direction.LengthSquared() < 1) return;
@@ -96,28 +96,41 @@ namespace Claude4_5Terraria.Systems.Summons
 
             Vector2 desiredPosition = Position + direction * speed * deltaTime;
 
+            // Try direct path first
             if (CanMoveTo(desiredPosition, world))
             {
                 Position = desiredPosition;
+                return;
+            }
+
+            // If blocked, try sliding along walls (perpendicular movement)
+            Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
+            Vector2 slideRight = Position + perpendicular * speed * deltaTime;
+            Vector2 slideLeft = Position - perpendicular * speed * deltaTime;
+            
+            if (CanMoveTo(slideRight, world))
+            {
+                Position = slideRight;
+            }
+            else if (CanMoveTo(slideLeft, world))
+            {
+                Position = slideLeft;
             }
             else
             {
-                Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
-                if (CanMoveTo(Position + perpendicular * speed * deltaTime, world))
+                // Try moving up if both sides blocked
+                Vector2 moveUp = Position + new Vector2(0, -speed * deltaTime);
+                if (CanMoveTo(moveUp, world))
                 {
-                    Position += perpendicular * speed * deltaTime;
-                }
-                else if (CanMoveTo(Position - perpendicular * speed * deltaTime, world))
-                {
-                    Position -= perpendicular * speed * deltaTime;
+                    Position = moveUp;
                 }
             }
         }
 
-        private bool CanMoveTo(Vector2 targetPosition, World.World world)
+        private bool CanMoveTo(Vector2 targetPosition, StarshroudHollows.World.World world)
         {
-            int tileX = (int)(targetPosition.X / World.World.TILE_SIZE);
-            int tileY = (int)(targetPosition.Y / World.World.TILE_SIZE);
+            int tileX = (int)(targetPosition.X / StarshroudHollows.World.World.TILE_SIZE);
+            int tileY = (int)(targetPosition.Y / StarshroudHollows.World.World.TILE_SIZE);
 
             // --- THIS IS THE FIX ---
             // Reverted to the simple, reliable collision check that exists in your World.cs file.

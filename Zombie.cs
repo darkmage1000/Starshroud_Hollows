@@ -1,10 +1,10 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Enums;
 using System;
-using Claude4_5Terraria.Interfaces;
+using StarshroudHollows.Interfaces;
 
-namespace Claude4_5Terraria.Entities
+namespace StarshroudHollows.Entities
 {
     /// <summary>
     /// Zombie - Slower but smarter enemy with better pathfinding and jumping ability
@@ -45,9 +45,9 @@ namespace Claude4_5Terraria.Entities
         private const float STUCK_THRESHOLD = 2.0f; // If stuck for 2 seconds, try alternative
         private Vector2 lastPosition;
 
-        private World.World world;
+        private StarshroudHollows.World.World world;
 
-        public Zombie(Vector2 spawnPosition, World.World world, bool isSurfaceSpawn = false)
+        public Zombie(Vector2 spawnPosition, StarshroudHollows.World.World world, bool isSurfaceSpawn = false)
         {
             Position = spawnPosition;
             lastPosition = spawnPosition;
@@ -160,7 +160,7 @@ namespace Claude4_5Terraria.Entities
             Vector2 directionToPlayer = playerPosition - Position;
             if (Math.Abs(directionToPlayer.X) < 10) return; // Too close, don't need pathfinding
 
-            int tileSize = World.World.TILE_SIZE;
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
             int horizontalDir = directionToPlayer.X > 0 ? 1 : -1;
             
             // Check 1-2 tiles ahead
@@ -227,8 +227,8 @@ namespace Claude4_5Terraria.Entities
                 if (velocity.Y > 0)
                 {
                     // Landing on ground
-                    int hitTileY = (int)((Position.Y + velocity.Y + HEIGHT) / World.World.TILE_SIZE);
-                    Position = new Vector2(Position.X, hitTileY * World.World.TILE_SIZE - HEIGHT);
+                    int hitTileY = (int)((Position.Y + velocity.Y + HEIGHT) / StarshroudHollows.World.World.TILE_SIZE);
+                    Position = new Vector2(Position.X, hitTileY * StarshroudHollows.World.World.TILE_SIZE - HEIGHT);
                     isOnGround = true;
                 }
                 velocity.Y = 0;
@@ -237,7 +237,7 @@ namespace Claude4_5Terraria.Entities
 
         private bool CheckCollision(Vector2 position)
         {
-            int tileSize = World.World.TILE_SIZE;
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
             Vector2[] checkPoints = new Vector2[]
             {
                 new Vector2(position.X + 2, position.Y + 2),

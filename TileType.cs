@@ -1,4 +1,4 @@
-namespace Claude4_5Terraria.Enums
+namespace StarshroudHollows.Enums
 {
     public enum TileType
     {
@@ -29,6 +29,7 @@ namespace Claude4_5Terraria.Enums
         SnowGrass,
         Ice,
         Icicle,
-        SnowyLeaves
+        SnowyLeaves,
+        SummonAltar   // NEW: Boss summoning altar (placeable, minable)
     }
 }

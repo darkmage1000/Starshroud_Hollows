@@ -35,6 +35,7 @@ namespace StarshroudHollows.Enums
         SilverChest,
         MagicChest,
         Bed,
+        SummonAltar,   // NEW: Boss summoning altar (craftable, placeable)
 
         // Consumables
         HealthPotion,  // Restores player health
@@ -102,6 +103,7 @@ namespace StarshroudHollows.Enums
                 case ItemType.SilverChest: return TileType.SilverChest;
                 case ItemType.MagicChest: return TileType.MagicChest;
                 case ItemType.Bed: return TileType.Bed;
+                case ItemType.SummonAltar: return TileType.SummonAltar;
                 default: return TileType.Air;
             }
         }
@@ -127,6 +129,7 @@ namespace StarshroudHollows.Enums
                 case TileType.SilverChest: return ItemType.SilverChest;
                 case TileType.MagicChest: return ItemType.MagicChest;
                 case TileType.Bed: return ItemType.Bed;
+                case TileType.SummonAltar: return ItemType.SummonAltar;
                 default: return ItemType.Dirt;
             }
         }
@@ -146,6 +149,7 @@ namespace StarshroudHollows.Enums
                 case ItemType.SilverChest:
                 case ItemType.MagicChest:
                 case ItemType.Bed:
+                case ItemType.SummonAltar:
                     return true;
                 default:
                     return false; // WoodWand is not placeable and is caught here

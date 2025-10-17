@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Enums;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class InventorySlot
     {
@@ -36,7 +36,8 @@ namespace Claude4_5Terraria.Systems
             // Give starter items
             AddItem(ItemType.RunicPickaxe, 1);
             AddItem(ItemType.Torch, 50);
-            AddItem(ItemType.RecallPotion, 5);  // NEW: 5 starter Recall Potions
+            AddItem(ItemType.RecallPotion, 5);  // 5 starter Recall Potions
+            AddItem(ItemType.HealthPotion, 5);  // 5 starter Health Potions
         }
 
         public bool AddItem(ItemType itemType, int amount = 1)

@@ -1,9 +1,9 @@
-﻿using Claude4_5Terraria.Enums;
+﻿using StarshroudHollows.Enums;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 
-namespace Claude4_5Terraria.World
+namespace StarshroudHollows.World
 {
     public class Chunk
     {

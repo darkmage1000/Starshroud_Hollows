@@ -1,4 +1,4 @@
-namespace Claude4_5Terraria.Enums
+namespace StarshroudHollows.Enums
 {
     public enum ProjectileType
     {
