@@ -1,27 +1,27 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.Entities;
-using Claude4_5Terraria.Enums;
-using Claude4_5Terraria.Player;
+using StarshroudHollows.Entities;
+using StarshroudHollows.Enums;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using StarshroudHollows.Player;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     /// <summary>
     /// Manages boss spawning, combat, and loot drops
     /// </summary>
     public class BossSystem
     {
-        private World.World world;
+        private StarshroudHollows.World.World world;
         private CaveTroll activeTroll;
         private Random random;
 
         public bool HasActiveBoss => activeTroll != null && activeTroll.IsAlive;
         public CaveTroll ActiveTroll => activeTroll;
 
-        public BossSystem(World.World world)
+        public BossSystem(StarshroudHollows.World.World world)
         {
             this.world = world;
             random = new Random();
@@ -31,14 +31,14 @@ namespace Claude4_5Terraria.Systems
         /// Attempts to summon Cave Troll boss
         /// Returns error message if failed, null if successful
         /// </summary>
-        public string TrySummonCaveTroll(Vector2 playerPosition)
+         public string TrySummonCaveTroll(Vector2 playerPosition)
         {
             if (HasActiveBoss)
             {
                 return "A boss is already active!";
             }
 
-            int tileSize = World.World.TILE_SIZE;
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
             int playerTileX = (int)(playerPosition.X / tileSize);
             int playerTileY = (int)(playerPosition.Y / tileSize);
 
@@ -53,13 +53,12 @@ namespace Claude4_5Terraria.Systems
                 }
             }
 
-            // --- NEW LOGIC ---
-            // Define underground as being below a certain depth (e.g., 100 tiles)
-            bool isUnderground = groundY >= 100;
+            // Get surface height to determine if player is on surface or underground
+            int surfaceHeight = world.GetSurfaceHeight(playerTileX);
+            bool isOnSurface = groundY <= surfaceHeight + 5; // Within 5 tiles of surface = on surface
 
-            // If the player is underground, enforce arena requirements.
-            // If they are on the surface, these checks are skipped.
-            if (isUnderground)
+            // Only enforce arena requirements if underground
+            if (!isOnSurface)
             {
                 const int REQUIRED_FLAT_WIDTH = 40;
                 const int REQUIRED_HEIGHT = 10;
@@ -105,15 +104,16 @@ namespace Claude4_5Terraria.Systems
 
         private void SpawnCaveTroll(Vector2 playerPosition, int groundTileY)
         {
-            int spawnDistance = random.Next(15, 21) * World.World.TILE_SIZE;
+            int spawnDistance = random.Next(15, 21) * StarshroudHollows.World.World.TILE_SIZE;
             int direction = random.Next(2) == 0 ? -1 : 1;
             float spawnX = playerPosition.X + (spawnDistance * direction);
-            float spawnY = groundTileY * World.World.TILE_SIZE - 160;
+            float spawnY = groundTileY * StarshroudHollows.World.World.TILE_SIZE - 160;
 
             activeTroll = new CaveTroll(new Vector2(spawnX, spawnY), world);
             Logger.Log("[BOSS] Cave Troll summoned!");
         }
 
+        // Corrected Player type usage
         public void Update(float deltaTime, Vector2 playerPosition, Player.Player player, Inventory playerInventory, CombatSystem combatSystem, ProjectileSystem projectileSystem, ItemType heldItem)
         {
             if (activeTroll == null) return;
@@ -122,6 +122,7 @@ namespace Claude4_5Terraria.Systems
             {
                 if (combatSystem != null && combatSystem.IsAttacking() && !combatSystem.HasAlreadyHit(activeTroll))
                 {
+                    // Corrected constant access
                     Rectangle swordHitbox = combatSystem.GetAttackHitbox(player.Position, Player.Player.PLAYER_WIDTH, Player.Player.PLAYER_HEIGHT);
                     if (swordHitbox.Intersects(activeTroll.GetHitbox()))
                     {
@@ -159,6 +160,7 @@ namespace Claude4_5Terraria.Systems
             {
                 activeTroll.Update(deltaTime, playerPosition);
 
+                // Corrected constant access
                 if (activeTroll.GetHitbox().Intersects(player.GetHitbox()))
                 {
                     if (activeTroll.IsAlive)
@@ -185,6 +187,7 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
+        // Corrected Player type usage
         private void DropLoot(Vector2 bossPosition, Player.Player player, Inventory playerInventory)
         {
             int barCount = random.Next(10, 20);
