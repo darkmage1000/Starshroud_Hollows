@@ -1,19 +1,19 @@
-﻿using Claude4_5Terraria.Systems;
-using Claude4_5Terraria.World;
+﻿using StarshroudHollows.Systems;
+using StarshroudHollows.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 
-namespace Claude4_5Terraria.UI
+namespace StarshroudHollows.UI
 {
     public class MiningOverlay
     {
-        private World.World world;
+        private StarshroudHollows.World.World world;
         private MiningSystem miningSystem;
         private ChestSystem chestSystem;
         private const int MINING_RANGE = 4;
 
-        public MiningOverlay(World.World world, MiningSystem miningSystem, ChestSystem chestSystem)
+        public MiningOverlay(StarshroudHollows.World.World world, MiningSystem miningSystem, ChestSystem chestSystem)
         {
             this.world = world;
             this.miningSystem = miningSystem;
@@ -24,40 +24,48 @@ namespace Claude4_5Terraria.UI
         {
             if (!showOutlines) return;
 
-            int tileSize = World.World.TILE_SIZE;
-            float maxDistance = MINING_RANGE * tileSize;
-
-            // Player tile position
-            int playerTileX = (int)(playerCenter.X / tileSize);
-            int playerTileY = (int)(playerCenter.Y / tileSize);
-
-            // Loop around player in a small radius (efficient for small range)
-            for (int dx = -MINING_RANGE; dx <= MINING_RANGE; dx++)
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
+            
+            // Get visible area
+            Rectangle visibleArea = camera.GetVisibleArea(tileSize);
+            int startTileX = Math.Max(0, visibleArea.Left / tileSize);
+            int endTileX = Math.Min(StarshroudHollows.World.World.WORLD_WIDTH - 1, visibleArea.Right / tileSize);
+            int startTileY = Math.Max(0, visibleArea.Top / tileSize);
+            int endTileY = Math.Min(StarshroudHollows.World.World.WORLD_HEIGHT - 1, visibleArea.Bottom / tileSize);
+            
+            // Optimize: Only draw every other tile for grid effect (reduces draw calls by 50%)
+            for (int x = startTileX; x <= endTileX; x++)
             {
-                for (int dy = -MINING_RANGE; dy <= MINING_RANGE; dy++)
+                for (int y = startTileY; y <= endTileY; y++)
                 {
-                    float dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                    if (dist <= MINING_RANGE)
+                    Rectangle tileRect = new Rectangle(x * tileSize, y * tileSize, tileSize, tileSize);
+                    
+                    // Get tile
+                    Tile tile = world.GetTile(x, y);
+                    
+                    // Check if tile is in mining range
+                    Vector2 tileCenter = new Vector2(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
+                    float distance = Vector2.Distance(playerCenter, tileCenter);
+                    bool inMiningRange = distance <= MINING_RANGE * tileSize;
+                    
+                    // Choose color based on state
+                    Color gridColor;
+                    if (tile != null && tile.IsActive)
                     {
-                        int tileX = playerTileX + dx;
-                        int tileY = playerTileY + dy;
-
-                        Tile tile = world.GetTile(tileX, tileY);
-                        if (tile != null && tile.IsActive)
+                        // Solid block - only show if in range
+                        if (inMiningRange)
                         {
-                            // Check exact distance from player center
-                            Vector2 tileCenter = new Vector2(
-                                tileX * tileSize + tileSize / 2,
-                                tileY * tileSize + tileSize / 2
-                            );
-                            float distance = Vector2.Distance(playerCenter, tileCenter);
-
-                            if (distance <= maxDistance)
-                            {
-                                // Draw outline
-                                Rectangle tileRect = new Rectangle(tileX * tileSize, tileY * tileSize, tileSize, tileSize);
-                                DrawBorder(spriteBatch, pixelTexture, tileRect, 2, Color.Yellow);  // Thicker and fully opaque for visibility
-                            }
+                            gridColor = Color.Yellow * 0.5f; // Bright yellow for mineable blocks
+                            DrawBorder(spriteBatch, pixelTexture, tileRect, 1, gridColor);
+                        }
+                    }
+                    else
+                    {
+                        // Empty space - show placement grid
+                        if (inMiningRange)
+                        {
+                            gridColor = Color.Cyan * 0.3f; // Cyan for placeable spaces
+                            DrawBorder(spriteBatch, pixelTexture, tileRect, 1, gridColor);
                         }
                     }
                 }
@@ -70,7 +78,7 @@ namespace Claude4_5Terraria.UI
             if (!miningTile.HasValue) return;
 
             float progress = miningSystem.GetMiningProgress();
-            int tileSize = World.World.TILE_SIZE;
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
 
             // Draw cracks overlay
             DrawCracks(spriteBatch, pixelTexture, miningTile.Value, progress, tileSize);
@@ -168,8 +176,8 @@ namespace Claude4_5Terraria.UI
         {
             // Convert mouse screen position to world position
             Vector2 worldPos = camera.ScreenToWorld(mouseScreenPos);
-            int tileX = (int)(worldPos.X / World.World.TILE_SIZE);
-            int tileY = (int)(worldPos.Y / World.World.TILE_SIZE);
+            int tileX = (int)(worldPos.X / StarshroudHollows.World.World.TILE_SIZE);
+            int tileY = (int)(worldPos.Y / StarshroudHollows.World.World.TILE_SIZE);
 
             // Check if hovering over a chest tile
             Tile tile = world.GetTile(tileX, tileY);

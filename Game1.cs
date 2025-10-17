@@ -46,6 +46,7 @@ namespace StarshroudHollows
         private MagicSystem magicSystem;
         private ProjectileSystem projectileSystem;
         private Systems.Summons.SummonSystem summonSystem;
+        private Systems.Housing.HousingSystem housingSystem;
         private InventoryUI inventoryUI;
         private PauseMenu pauseMenu;
         private MiningOverlay miningOverlay;
@@ -283,6 +284,7 @@ namespace StarshroudHollows
             var heldItem = inventory.GetSlot(miningSystem.GetSelectedHotbarSlot())?.ItemType ?? ItemType.None;
             bool isSword = (heldItem >= ItemType.WoodSword && heldItem <= ItemType.RunicSword) || heldItem == ItemType.TrollClub;
             bool isWand = (heldItem >= ItemType.WoodWand && heldItem <= ItemType.RunicLaserWand);
+            bool isHammer = heldItem == ItemType.Hammer;
 
             if (inventoryUI?.IsInventoryOpen == false)
             {
@@ -303,6 +305,15 @@ namespace StarshroudHollows
             if (enemySpawner != null) summonTargets.AddRange(enemySpawner.GetActiveEnemies());
             if (bossSystem != null && bossSystem.HasActiveBoss) summonTargets.Add(bossSystem.ActiveTroll);
             summonSystem?.Update(deltaTime, playerCenter, summonTargets);
+            
+            // Update housing system
+            housingSystem?.Update(deltaTime);
+            
+            // Update housing system with first night status
+            if (housingSystem != null && timeSystem != null && timeSystem.HasCompletedFirstNight)
+            {
+                housingSystem.PlayerSurvivedFirstNight = true;
+            }
 
             // Corrected player type argument: Player.Player
             bossSystem?.Update(deltaTime, playerCenter, player, inventory, combatSystem, projectileSystem, heldItem);
@@ -396,6 +407,7 @@ namespace StarshroudHollows
             LoadSpellTextures(projectileSystem);
             summonSystem = new Systems.Summons.SummonSystem(world);
             summonSystem.LoadTextures(echoWispTexture);
+            housingSystem = new Systems.Housing.HousingSystem(world);
             magicSystem = new MagicSystem(player, projectileSystem, summonSystem, world, camera);
             inventoryUI = new InventoryUI(inventory, miningSystem);
             inventoryUI.Initialize(pixelTexture, font);
@@ -442,6 +454,7 @@ namespace StarshroudHollows
 
             world.Draw(spriteBatch, camera, pixelTexture, lightingSystem, miningSystem, player.IsDebugModeActive());
             portalSystem?.Draw(spriteBatch, pixelTexture);
+            housingSystem?.Draw(spriteBatch, pixelTexture); // Draw NPCs
             enemySpawner?.DrawEnemies(spriteBatch, oozeEnemyTexture, zombieEnemyTexture, pixelTexture);
             bossSystem?.Draw(spriteBatch, caveTrollBossTexture, pixelTexture);
             projectileSystem?.Draw(spriteBatch, pixelTexture);
@@ -679,11 +692,18 @@ namespace StarshroudHollows
             InitializeGameSystems(worldGenerator.GetSpawnPosition(Player.Player.PLAYER_HEIGHT), true);
 
             inventory.AddItem(ItemType.WoodPickaxe, 1);
+            inventory.AddItem(ItemType.Hammer, 1);
             inventory.AddItem(ItemType.WoodSword, 1);
             inventory.AddItem(ItemType.WoodWand, 1);
             inventory.AddItem(ItemType.WoodSummonStaff, 1);
             inventory.AddItem(ItemType.Torch, 50);
             inventory.AddItem(ItemType.RecallPotion, 1);
+            inventory.AddItem(ItemType.Door, 2);
+            
+            // Starting walls for testing
+            inventory.AddItem(ItemType.DirtWall, 100);
+            inventory.AddItem(ItemType.StoneWall, 100);
+            inventory.AddItem(ItemType.WoodWall, 100);
         }
 
         private void LoadTileSprites(World.World world)

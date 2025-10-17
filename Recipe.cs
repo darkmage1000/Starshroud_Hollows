@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Enums;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class RecipeIngredient
     {
@@ -73,6 +73,11 @@ namespace Claude4_5Terraria.Systems
             woodPickaxe.AddIngredient(ItemType.Wood, 12);
             woodPickaxe.AddIngredient(ItemType.Stick, 4);
             recipes.Add(woodPickaxe);
+
+            Recipe hammer = new Recipe(ItemType.Hammer, 1, requiresWoodBench: true);
+            hammer.AddIngredient(ItemType.Wood, 8);
+            hammer.AddIngredient(ItemType.Stone, 5);
+            recipes.Add(hammer);
 
             Recipe stonePickaxe = new Recipe(ItemType.StonePickaxe, 1, requiresWoodBench: true);
             stonePickaxe.AddIngredient(ItemType.Stone, 15);
@@ -146,6 +151,11 @@ namespace Claude4_5Terraria.Systems
             bed.AddIngredient(ItemType.Wood, 10);
             recipes.Add(bed);
 
+            // NEW: Door recipe (wood bench)
+            Recipe door = new Recipe(ItemType.Door, 1, requiresWoodBench: true);
+            door.AddIngredient(ItemType.Wood, 6);
+            recipes.Add(door);
+
             // NEW: Bucket recipe (copper bench)
             Recipe bucket = new Recipe(ItemType.EmptyBucket, 1, requiresCopperBench: true);
             bucket.AddIngredient(ItemType.SilverBar, 15);
@@ -155,6 +165,45 @@ namespace Claude4_5Terraria.Systems
             Recipe trollBait = new Recipe(ItemType.TrollBait, 1);
             trollBait.AddIngredient(ItemType.PieceOfFlesh, 25);
             recipes.Add(trollBait);
+
+            // NEW: Summon Altar - for portal-based boss fights
+            Recipe summonAltar = new Recipe(ItemType.SummonAltar, 1, requiresWoodBench: true);
+            summonAltar.AddIngredient(ItemType.Stone, 20);
+            summonAltar.AddIngredient(ItemType.Wood, 10);
+            recipes.Add(summonAltar);
+
+            // WALLS - Convert blocks to walls (4 walls per 1 block)
+            Recipe dirtWall = new Recipe(ItemType.DirtWall, 4);
+            dirtWall.AddIngredient(ItemType.Dirt, 1);
+            recipes.Add(dirtWall);
+
+            Recipe stoneWall = new Recipe(ItemType.StoneWall, 4);
+            stoneWall.AddIngredient(ItemType.Stone, 1);
+            recipes.Add(stoneWall);
+
+            Recipe woodWall = new Recipe(ItemType.WoodWall, 4);
+            woodWall.AddIngredient(ItemType.Wood, 1);
+            recipes.Add(woodWall);
+
+            Recipe copperWall = new Recipe(ItemType.CopperWall, 4, requiresWoodBench: true);
+            copperWall.AddIngredient(ItemType.CopperBar, 1);
+            recipes.Add(copperWall);
+
+            Recipe ironWall = new Recipe(ItemType.IronWall, 4, requiresWoodBench: true);
+            ironWall.AddIngredient(ItemType.IronBar, 1);
+            recipes.Add(ironWall);
+
+            Recipe silverWall = new Recipe(ItemType.SilverWall, 4, requiresWoodBench: true);
+            silverWall.AddIngredient(ItemType.SilverBar, 1);
+            recipes.Add(silverWall);
+
+            Recipe goldWall = new Recipe(ItemType.GoldWall, 4, requiresWoodBench: true);
+            goldWall.AddIngredient(ItemType.GoldBar, 1);
+            recipes.Add(goldWall);
+
+            Recipe platinumWall = new Recipe(ItemType.PlatinumWall, 4, requiresWoodBench: true);
+            platinumWall.AddIngredient(ItemType.PlatinumBar, 1);
+            recipes.Add(platinumWall);
 
             // Note: Magic chests are NOT craftable - they can only be found
             // Note: Runic pickaxe is NOT craftable - only found in Magic chests

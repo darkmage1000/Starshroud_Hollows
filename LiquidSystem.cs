@@ -1,15 +1,15 @@
-using Claude4_5Terraria.Enums;
-using Claude4_5Terraria.World;
+using StarshroudHollows.Enums;
+using StarshroudHollows.World;
 using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class LiquidSystem
     {
-        private World.World world;
+        private StarshroudHollows.World.World world;
         private Random random;
 
         // HashSet to track all tiles that need a flow update in the next frame.
@@ -21,7 +21,7 @@ namespace Claude4_5Terraria.Systems
         private const int MAX_TRACKED_SLIVERS = 200; // Limit tracking to prevent FPS drops
 
         // Time-slicing constant: Max flow operations per frame to prevent lag/crash.
-        private const int MAX_MOVES_PER_FRAME = 50;
+        private const int MAX_MOVES_PER_FRAME = 20; // REDUCED from 50 to prevent stutters
 
         // UPDATED CONSTANTS for volumetric flow
         private const float MAX_FLOW_RATE = 0.10f; // INCREASED - faster flow
@@ -29,7 +29,7 @@ namespace Claude4_5Terraria.Systems
         private const float MIN_VOLUME_FOR_EXISTENCE = 0.03f; // Aggressive cleanup
         private const float HORIZONTAL_DECAY = 0.0005f; // REDUCED - less friction, faster spread
 
-        public LiquidSystem(World.World world)
+        public LiquidSystem(StarshroudHollows.World.World world)
         {
             this.world = world;
             this.random = new Random();
@@ -155,8 +155,8 @@ namespace Claude4_5Terraria.Systems
                 stabilizationIterations = iteration + 1;
                 bool liquidMoved = false;
 
-                int worldW = World.World.WORLD_WIDTH;
-                int worldH = World.World.WORLD_HEIGHT;
+                int worldW = StarshroudHollows.World.World.WORLD_WIDTH;
+                int worldH = StarshroudHollows.World.World.WORLD_HEIGHT;
 
                 // Create a list of all liquid tiles across the world to check in this pass
                 List<Point> allLiquidTiles = new List<Point>();
@@ -197,8 +197,8 @@ namespace Claude4_5Terraria.Systems
         public void ActivateAllLiquids()
         {
             Logger.Log("[LIQUID] Activating all liquid tiles from save...");
-            int worldW = World.World.WORLD_WIDTH;
-            int worldH = World.World.WORLD_HEIGHT;
+            int worldW = StarshroudHollows.World.World.WORLD_WIDTH;
+            int worldH = StarshroudHollows.World.World.WORLD_HEIGHT;
             int liquidCount = 0;
 
             for (int x = 0; x < worldW; x++)
@@ -241,7 +241,7 @@ namespace Claude4_5Terraria.Systems
             // 1. Check if the tile is occupied by the player (flow should pass through the player)
             if (world.GetPlayer() != null)
             {
-                Point playerTile = new Point((int)(world.GetPlayer().Position.X / World.World.TILE_SIZE), (int)(world.GetPlayer().Position.Y / World.World.TILE_SIZE));
+                Point playerTile = new Point((int)(world.GetPlayer().Position.X / StarshroudHollows.World.World.TILE_SIZE), (int)(world.GetPlayer().Position.Y / StarshroudHollows.World.World.TILE_SIZE));
 
                 // Check the 2x3 grid typically occupied by the player
                 if (x >= playerTile.X && x <= playerTile.X + 1 && y >= playerTile.Y && y <= playerTile.Y + 2)
@@ -269,7 +269,7 @@ namespace Claude4_5Terraria.Systems
 
         private void QueueNeighborForFlow(int x, int y)
         {
-            if (x >= 0 && x < World.World.WORLD_WIDTH && y >= 0 && y < World.World.WORLD_HEIGHT)
+            if (x >= 0 && x < StarshroudHollows.World.World.WORLD_WIDTH && y >= 0 && y < StarshroudHollows.World.World.WORLD_HEIGHT)
             {
                 // Only add it if it has volume or if it's the destination of flow (air)
                 Tile tile = world.GetTile(x, y);

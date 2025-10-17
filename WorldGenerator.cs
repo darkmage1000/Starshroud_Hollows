@@ -66,6 +66,9 @@ namespace StarshroudHollows.Systems
 
                 OnProgressUpdate?.Invoke(0.15f, "Carving caves...");
                 GenerateCaves();
+                
+                OnProgressUpdate?.Invoke(0.2f, "Placing natural walls...");
+                GenerateNaturalWalls();
 
                 // NEW STEP: Guarantee at least one chest per layer's major starting area
                 OnProgressUpdate?.Invoke(0.25f, "Placing guaranteed chests...");
@@ -180,6 +183,49 @@ namespace StarshroudHollows.Systems
             {
                 CarveCaves(390, 100, 180, 4, 7, 2500, maxSafeDepth);
             }
+        }
+
+        private void GenerateNaturalWalls()
+        {
+            int wallsPlaced = 0;
+            
+            // Add natural walls behind underground tiles
+            for (int x = 0; x < StarshroudHollows.World.World.WORLD_WIDTH; x++)
+            {
+                for (int y = CAVE_START_DEPTH; y < StarshroudHollows.World.World.WORLD_HEIGHT - 150; y++)
+                {
+                    var tile = world.GetTile(x, y);
+                    
+                    // Only add walls to solid tiles underground
+                    if (tile != null && tile.IsActive && !tile.IsPartOfTree)
+                    {
+                        // Determine wall type based on depth and tile type
+                        TileType wallType = TileType.DirtWall;
+                        
+                        // Dirt walls in upper layers (230-600)
+                        if (y < 600)
+                        {
+                            wallType = TileType.DirtWall;
+                        }
+                        // Stone walls in deeper layers (600+)
+                        else
+                        {
+                            wallType = TileType.StoneWall;
+                        }
+                        
+                        // Don't place walls behind chests, torches, or special tiles
+                        if (tile.Type != TileType.WoodChest && tile.Type != TileType.SilverChest && 
+                            tile.Type != TileType.MagicChest && tile.Type != TileType.Torch &&
+                            tile.Type != TileType.WoodCraftingBench && tile.Type != TileType.CopperCraftingBench)
+                        {
+                            tile.WallType = wallType;
+                            wallsPlaced++;
+                        }
+                    }
+                }
+            }
+            
+            Logger.Log($"[WORLDGEN] Placed {wallsPlaced} natural background walls");
         }
 
         private void CarveCaves(int count, int minLength, int maxLength, int minRadius, int maxRadius, int minY, int maxY)

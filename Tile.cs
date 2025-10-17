@@ -8,6 +8,10 @@ namespace StarshroudHollows.World
         public float Health { get; set; }
         public bool IsPartOfTree { get; set; }
 
+        // NEW: Background wall support
+        public TileType WallType { get; set; }
+        public bool HasWall => WallType != TileType.Air;
+
         // NEW: Liquid Volume property (0.0 to 1.0)
         public float LiquidVolume { get; set; }
 
@@ -20,7 +24,8 @@ namespace StarshroudHollows.World
             Type = TileType.Air;
             Health = 1.0f;
             IsPartOfTree = false;
-            LiquidVolume = 0.0f; // NEW
+            LiquidVolume = 0.0f;
+            WallType = TileType.Air; // NEW: No wall by default
         }
 
         public Tile(TileType type, bool isPartOfTree = false)
@@ -28,6 +33,7 @@ namespace StarshroudHollows.World
             Type = type;
             Health = 1.0f;
             IsPartOfTree = isPartOfTree;
+            WallType = TileType.Air; // NEW: No wall by default
 
             if (type == TileType.Water || type == TileType.Lava)
             {

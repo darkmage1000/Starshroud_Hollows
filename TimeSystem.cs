@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class TimeSystem
     {
@@ -11,8 +11,13 @@ namespace Claude4_5Terraria.Systems
         private bool isRaining = false;
         private const float RAIN_CHANCE_DAILY = 0.25f; // 25% chance of rain per day
         private Random random = new Random();
+        
+        // First night tracking
+        private bool hasCompletedFirstNight = false;
+        private bool isFirstNight = true;
 
         public bool IsRaining => isRaining;
+        public bool HasCompletedFirstNight => hasCompletedFirstNight;
 
         public TimeSystem()
         {
@@ -29,6 +34,15 @@ namespace Claude4_5Terraria.Systems
             if (timeOfDay >= 1.0f)
             {
                 timeOfDay -= 1.0f;
+                
+                // Check if first night is complete
+                if (isFirstNight)
+                {
+                    hasCompletedFirstNight = true;
+                    isFirstNight = false;
+                    Logger.Log("[TIME] First night survived! The Starling Guide may arrive if you build a suitable house.");
+                }
+                
                 // NEW: Trigger the daily weather check when the day wraps around
                 CheckNewDayWeather();
             }

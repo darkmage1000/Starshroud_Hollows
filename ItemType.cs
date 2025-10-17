@@ -36,6 +36,18 @@ namespace StarshroudHollows.Enums
         MagicChest,
         Bed,
         SummonAltar,   // NEW: Boss summoning altar (craftable, placeable)
+        Door,          // NEW: Housing door
+
+        // Background Walls (can also be placed as solid blocks)
+        DirtWall,
+        StoneWall,
+        WoodWall,
+        CopperWall,
+        IronWall,
+        SilverWall,
+        GoldWall,
+        PlatinumWall,
+        SnowWall,
 
         // Consumables
         HealthPotion,  // Restores player health
@@ -76,6 +88,9 @@ namespace StarshroudHollows.Enums
         // Weapons - Staff
         WoodSummonStaff,
         
+        // Tools - Hammer (for walls)
+        Hammer,
+        
         // Boss Weapons
         TrollClub      // 5% drop from Cave Troll boss
     }
@@ -104,6 +119,19 @@ namespace StarshroudHollows.Enums
                 case ItemType.MagicChest: return TileType.MagicChest;
                 case ItemType.Bed: return TileType.Bed;
                 case ItemType.SummonAltar: return TileType.SummonAltar;
+                case ItemType.Door: return TileType.Door;
+                
+                // Walls (can be placed as solid blocks or backgrounds)
+                case ItemType.DirtWall: return TileType.DirtWall;
+                case ItemType.StoneWall: return TileType.StoneWall;
+                case ItemType.WoodWall: return TileType.WoodWall;
+                case ItemType.CopperWall: return TileType.CopperWall;
+                case ItemType.IronWall: return TileType.IronWall;
+                case ItemType.SilverWall: return TileType.SilverWall;
+                case ItemType.GoldWall: return TileType.GoldWall;
+                case ItemType.PlatinumWall: return TileType.PlatinumWall;
+                case ItemType.SnowWall: return TileType.SnowWall;
+                
                 default: return TileType.Air;
             }
         }
@@ -130,6 +158,19 @@ namespace StarshroudHollows.Enums
                 case TileType.MagicChest: return ItemType.MagicChest;
                 case TileType.Bed: return ItemType.Bed;
                 case TileType.SummonAltar: return ItemType.SummonAltar;
+                case TileType.Door: return ItemType.Door;
+                
+                // Walls
+                case TileType.DirtWall: return ItemType.DirtWall;
+                case TileType.StoneWall: return ItemType.StoneWall;
+                case TileType.WoodWall: return ItemType.WoodWall;
+                case TileType.CopperWall: return ItemType.CopperWall;
+                case TileType.IronWall: return ItemType.IronWall;
+                case TileType.SilverWall: return ItemType.SilverWall;
+                case TileType.GoldWall: return ItemType.GoldWall;
+                case TileType.PlatinumWall: return ItemType.PlatinumWall;
+                case TileType.SnowWall: return ItemType.SnowWall;
+                
                 default: return ItemType.Dirt;
             }
         }
@@ -150,6 +191,18 @@ namespace StarshroudHollows.Enums
                 case ItemType.MagicChest:
                 case ItemType.Bed:
                 case ItemType.SummonAltar:
+                case ItemType.Door:
+                
+                // Walls
+                case ItemType.DirtWall:
+                case ItemType.StoneWall:
+                case ItemType.WoodWall:
+                case ItemType.CopperWall:
+                case ItemType.IronWall:
+                case ItemType.SilverWall:
+                case ItemType.GoldWall:
+                case ItemType.PlatinumWall:
+                case ItemType.SnowWall:
                     return true;
                 default:
                     return false; // WoodWand is not placeable and is caught here

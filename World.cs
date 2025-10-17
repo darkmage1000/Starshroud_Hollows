@@ -357,7 +357,8 @@ namespace StarshroudHollows.World
                     Y = kvp.Key.Y,
                     TileType = (int)kvp.Value.Type,
                     IsActive = kvp.Value.IsActive,
-                    LiquidVolume = kvp.Value.LiquidVolume // NEW: Save liquid volume
+                    LiquidVolume = kvp.Value.LiquidVolume,
+                    WallType = (int)kvp.Value.WallType // NEW: Save wall data
                 });
             }
 
@@ -381,7 +382,8 @@ namespace StarshroudHollows.World
             foreach (var change in changes)
             {
                 Tile tile = new Tile((TileType)change.TileType, change.IsActive);
-                tile.LiquidVolume = change.LiquidVolume; // NEW: Restore liquid volume
+                tile.LiquidVolume = change.LiquidVolume;
+                tile.WallType = (TileType)change.WallType; // NEW: Restore wall data
                 SetTile(change.X, change.Y, tile);
             }
 
@@ -497,6 +499,30 @@ namespace StarshroudHollows.World
 
                         spriteBatch.Draw(pixelTexture, destRect, bgColor);
                     }
+                }
+            }
+
+            // Draw walls (background layer) - BEFORE foreground tiles
+            for (int x = startTileX; x <= endTileX; x++)
+            {
+                for (int y = startTileY; y <= endTileY; y++)
+                {
+                    Tile tile = GetTile(x, y);
+                    if (tile == null || !tile.HasWall) continue;
+
+                    Rectangle destRect = new Rectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    Color wallColor = GetWallColor(tile.WallType);
+                    float lightLevel = lightingSystem.GetLightLevel(x, y);
+
+                    // Walls are darker (70% opacity) and affected by lighting
+                    Color litWallColor = new Color(
+                        (byte)(wallColor.R * lightLevel * 0.7f),
+                        (byte)(wallColor.G * lightLevel * 0.7f),
+                        (byte)(wallColor.B * lightLevel * 0.7f),
+                        (byte)180  // Slightly transparent
+                    );
+
+                    spriteBatch.Draw(pixelTexture, destRect, litWallColor);
                 }
             }
 
@@ -723,7 +749,35 @@ namespace StarshroudHollows.World
                 case TileType.Ice: return new Color(175, 238, 238); // Light cyan ice
                 case TileType.Icicle: return new Color(200, 230, 255); // Pale blue icicle
                 case TileType.SnowyLeaves: return new Color(220, 240, 245); // Frosty white-blue leaves
+                case TileType.Door: return new Color(139, 90, 43); // Brown door
+                // Wall blocks (solid, slightly darker than backgrounds)
+                case TileType.DirtWall: return new Color(130, 70, 10);
+                case TileType.StoneWall: return new Color(110, 110, 110);
+                case TileType.WoodWall: return new Color(90, 60, 30);
+                case TileType.CopperWall: return new Color(210, 120, 10);
+                case TileType.IronWall: return new Color(140, 140, 140);
+                case TileType.SilverWall: return new Color(160, 160, 160);
+                case TileType.GoldWall: return new Color(210, 180, 10);
+                case TileType.PlatinumWall: return new Color(120, 200, 120);
+                case TileType.SnowWall: return new Color(210, 220, 230);
                 default: return Color.White;
+            }
+        }
+
+        public Color GetWallColor(TileType wallType)
+        {
+            switch (wallType)
+            {
+                case TileType.DirtWall: return new Color(120, 60, 0);      // Darker brown
+                case TileType.StoneWall: return new Color(100, 100, 100);   // Darker gray
+                case TileType.WoodWall: return new Color(80, 53, 26);       // Darker wood
+                case TileType.CopperWall: return new Color(200, 110, 0);    // Darker orange
+                case TileType.IronWall: return new Color(130, 130, 130);    // Dark gray
+                case TileType.SilverWall: return new Color(150, 150, 150);  // Darker silver
+                case TileType.GoldWall: return new Color(200, 170, 0);      // Darker gold
+                case TileType.PlatinumWall: return new Color(110, 190, 110); // Darker green
+                case TileType.SnowWall: return new Color(200, 210, 220);    // Darker snow
+                default: return new Color(80, 80, 80);                       // Default gray
             }
         }
 
@@ -752,6 +806,8 @@ namespace StarshroudHollows.World
             // Solid if IsActive is true (i.e., not liquid and not air)
             if (tile.IsActive)
             {
+                // Doors don't block movement
+                if (tile.Type == TileType.Door) return false;
                 if (tile.IsPartOfTree || tile.Type == TileType.Torch || tile.Type == TileType.Sapling) return false;
                 return true;
             }

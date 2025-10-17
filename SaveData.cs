@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     [Serializable]
     public class SaveData
@@ -60,6 +60,7 @@ namespace Claude4_5Terraria.Systems
         public int TileType { get; set; }
         public bool IsActive { get; set; }
         public float LiquidVolume { get; set; } // NEW: Save liquid volume for proper flow restoration
+        public int WallType { get; set; } // NEW: Save wall type for background walls
     }
 
     [Serializable]

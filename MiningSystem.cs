@@ -127,6 +127,14 @@ namespace StarshroudHollows.Systems
             }
 
             MouseState mouseState = Mouse.GetState();
+            KeyboardState keyboardState = Keyboard.GetState();
+            
+            // Check if hammer is equipped
+            InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
+            bool isHammerEquipped = selectedSlot != null && selectedSlot.ItemType == ItemType.Hammer;
+            
+            // ONLY hammer can mine walls (no shift)
+            bool shouldMineWalls = isHammerEquipped;
 
             bool isMining = false;
             int targetX, targetY;
@@ -168,9 +176,17 @@ namespace StarshroudHollows.Systems
             );
 
             Tile targetTile = world.GetTile(targetX, targetY);
-            if (targetTile != null && targetTile.IsActive && distanceToTile <= maxDistance)
+            // FIXED: Also target tiles with background walls when hammer is equipped
+            if (targetTile != null && distanceToTile <= maxDistance)
             {
-                targetedTile = new Point(targetX, targetY);
+                if (targetTile.IsActive || (isHammerEquipped && targetTile.HasWall))
+                {
+                    targetedTile = new Point(targetX, targetY);
+                }
+                else
+                {
+                    targetedTile = null;
+                }
             }
             else
             {
@@ -200,9 +216,9 @@ namespace StarshroudHollows.Systems
                     int targetY_Multi = (int)((playerPosition.Y + (playerHeight / 2) + (verticalDir * (StarshroudHollows.World.World.TILE_SIZE / 2 + 1))) / StarshroudHollows.World.World.TILE_SIZE);
                     ProcessVerticalAutoMining(playerLeftTileX, playerRightTileX, targetY_Multi, deltaTime, lastPlayerDirection);
                 }
-                else if (targetedTile.HasValue && targetTile != null && targetTile.IsActive)
+                else if (targetedTile.HasValue && targetTile != null && (targetTile.IsActive || (shouldMineWalls && targetTile.HasWall)))
                 {
-                    ProcessMining(targetedTile.Value.X, targetedTile.Value.Y, deltaTime);
+                    ProcessMining(targetedTile.Value.X, targetedTile.Value.Y, deltaTime, shouldMineWalls);
                 }
                 else
                 {
@@ -224,42 +240,85 @@ namespace StarshroudHollows.Systems
                 {
                     int placeX = (int)(GetMouseWorldPosition(mouseState, camera).X / StarshroudHollows.World.World.TILE_SIZE);
                     int placeY = (int)(GetMouseWorldPosition(mouseState, camera).Y / StarshroudHollows.World.World.TILE_SIZE);
-                    InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
-                    if (selectedSlot != null && !selectedSlot.IsEmpty() && selectedSlot.ItemType == ItemType.Acorn)
+                    
+                    // Special handling: Hammer places BACKGROUND walls from hotbar 2-10
+                    if (isHammerEquipped)
                     {
-                        if (CanPlantAcorn(placeX, placeY))
-                        {
-                            world.SetTile(placeX, placeY, new Tile(TileType.Sapling));
-                            world.AddSapling(placeX, placeY);
-                            selectedSlot.Count--;
-                            if (selectedSlot.Count <= 0)
-                            {
-                                selectedSlot.ItemType = ItemType.None;
-                                selectedSlot.Count = 0;
-                            }
-                            placementCooldown = PLACEMENT_DELAY;
+                    // Look through hotbar slots 1-9 (skip slot 0 which has hammer)
+                    for (int i = 1; i < 10; i++)
+                    {
+                    InventorySlot slot = inventory.GetSlot(i);
+                    if (slot != null && !slot.IsEmpty())
+                    {
+                    ItemType itemType = slot.ItemType;
+                    TileType wallType = ItemTypeExtensions.ToTileType(itemType);
+                    
+                    if (IsWall(wallType))
+                    {
+                    Tile tile = world.GetTile(placeX, placeY);
+                    // Hammer places BACKGROUND walls (not solid blocks)
+                    if (tile != null && !tile.HasWall)
+                    {
+                    tile.WallType = wallType;
+                    slot.Count--;
+                    if (slot.Count <= 0)
+                    {
+                    slot.ItemType = ItemType.None;
+                        slot.Count = 0;
+                    }
+                    placementCooldown = PLACEMENT_DELAY;
+                        break; // Place first wall found
                         }
-                        else
-                        {
-                            placementCooldown = PLACEMENT_DELAY;
+                        }
                         }
                     }
-                    else if (selectedSlot != null && !selectedSlot.IsEmpty() && selectedSlot.ItemType == ItemType.Bed)
+                        return; // Hammer only places background walls
+            }
+                    
+                    InventorySlot currentSlot = inventory.GetSlot(selectedHotbarSlot);
+                    if (currentSlot != null && !currentSlot.IsEmpty() && currentSlot.ItemType == ItemType.Acorn)
                     {
+                    if (CanPlantAcorn(placeX, placeY))
+                    {
+                    world.SetTile(placeX, placeY, new Tile(TileType.Sapling));
+                    world.AddSapling(placeX, placeY);
+                    currentSlot.Count--;
+                    if (currentSlot.Count <= 0)
+                    {
+                    currentSlot.ItemType = ItemType.None;
+                    currentSlot.Count = 0;
+                    }
+                    placementCooldown = PLACEMENT_DELAY;
+                    }
+                    else
+                    {
+                    placementCooldown = PLACEMENT_DELAY;
+                    }
+                    }
+                    else if (currentSlot != null && !currentSlot.IsEmpty() && currentSlot.ItemType == ItemType.Door)
+                    {
+                        // Doors are 2 blocks tall
                         Tile placeTile = world.GetTile(placeX, placeY);
+                        Tile above = world.GetTile(placeX, placeY - 1);
                         Tile below = world.GetTile(placeX, placeY + 1);
-                        if (below != null && below.IsActive && (placeTile == null || !placeTile.IsActive))
+                        
+                        // Need air above, air at placement, solid below
+                        if (below != null && below.IsActive && 
+                            (placeTile == null || !placeTile.IsActive) && 
+                            (above == null || !above.IsActive))
                         {
-                            Rectangle blockRect = new Rectangle(placeX * StarshroudHollows.World.World.TILE_SIZE, placeY * StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE);
+                            Rectangle blockRect = new Rectangle(placeX * StarshroudHollows.World.World.TILE_SIZE, (placeY - 1) * StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE * 2);
                             Rectangle playerRect = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
                             if (!blockRect.Intersects(playerRect))
                             {
-                                world.SetTile(placeX, placeY, new Tile(TileType.Bed));
-                                selectedSlot.Count--;
-                                if (selectedSlot.Count <= 0)
+                                // Place 2-block tall door
+                                world.SetTile(placeX, placeY - 1, new Tile(TileType.Door)); // Top
+                                world.SetTile(placeX, placeY, new Tile(TileType.Door));     // Bottom
+                                currentSlot.Count--;
+                                if (currentSlot.Count <= 0)
                                 {
-                                    selectedSlot.ItemType = ItemType.None;
-                                    selectedSlot.Count = 0;
+                                    currentSlot.ItemType = ItemType.None;
+                                    currentSlot.Count = 0;
                                 }
                                 placementCooldown = PLACEMENT_DELAY;
                             }
@@ -269,78 +328,104 @@ namespace StarshroudHollows.Systems
                             placementCooldown = PLACEMENT_DELAY;
                         }
                     }
+                    else if (currentSlot != null && !currentSlot.IsEmpty() && currentSlot.ItemType == ItemType.Bed)
+                    {
+                    Tile placeTile = world.GetTile(placeX, placeY);
+                    Tile below = world.GetTile(placeX, placeY + 1);
+                    if (below != null && below.IsActive && (placeTile == null || !placeTile.IsActive))
+                    {
+                    Rectangle blockRect = new Rectangle(placeX * StarshroudHollows.World.World.TILE_SIZE, placeY * StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE);
+                    Rectangle playerRect = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
+                    if (!blockRect.Intersects(playerRect))
+                    {
+                    world.SetTile(placeX, placeY, new Tile(TileType.Bed));
+                    currentSlot.Count--;
+                    if (currentSlot.Count <= 0)
+                    {
+                    currentSlot.ItemType = ItemType.None;
+                    currentSlot.Count = 0;
+                    }
+                    placementCooldown = PLACEMENT_DELAY;
+                    }
+                    }
                     else
                     {
-                        Tile placeTile = world.GetTile(placeX, placeY);
-                        if (placeTile != null && placeTile.IsActive && placeTile.Type == TileType.Lava)
-                        {
-                            placementCooldown = PLACEMENT_DELAY;
-                        }
-                        else if (placeTile != null && placeTile.IsActive && placeTile.Type != TileType.Water)
-                        {
-                            // Already solid
-                        }
-                        else
-                        {
-                            Rectangle blockRect = new Rectangle(placeX * StarshroudHollows.World.World.TILE_SIZE, placeY * StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE);
-                            Rectangle playerRect = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
-                            if (!blockRect.Intersects(playerRect))
-                            {
-                                if (selectedSlot != null && !selectedSlot.IsEmpty())
-                                {
-                                    ItemType itemType = selectedSlot.ItemType;
-                                    TileType blockType = ItemTypeExtensions.ToTileType(itemType);
+                    placementCooldown = PLACEMENT_DELAY;
+                    }
+                    }
+                    else
+                    {
+                    Tile placeTile = world.GetTile(placeX, placeY);
+                    if (placeTile != null && placeTile.IsActive && placeTile.Type == TileType.Lava)
+                    {
+                    placementCooldown = PLACEMENT_DELAY;
+                    }
+                    else if (placeTile != null && placeTile.IsActive && placeTile.Type != TileType.Water)
+                    {
+                    // Already solid
+                    }
+                    else
+                    {
+                    Rectangle blockRect = new Rectangle(placeX * StarshroudHollows.World.World.TILE_SIZE, placeY * StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE, StarshroudHollows.World.World.TILE_SIZE);
+                    Rectangle playerRect = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
+                    if (!blockRect.Intersects(playerRect))
+                    {
+                    if (currentSlot != null && !currentSlot.IsEmpty())
+                    {
+                    ItemType itemType = currentSlot.ItemType;
+                    TileType blockType = ItemTypeExtensions.ToTileType(itemType);
 
-                                    if (IsPlaceable(blockType))
-                                    {
-                                        if (blockType == TileType.Torch)
-                                        {
-                                            bool isUnderground = false;
-                                            for (int checkY = placeY - 1; checkY >= 0; checkY--)
-                                            {
-                                                Tile checkTile = world.GetTile(placeX, checkY);
-                                                if (checkTile != null && checkTile.IsActive && checkTile.Type != TileType.Leaves && checkTile.Type != TileType.Wood && checkTile.Type != TileType.Sapling)
-                                                {
-                                                    isUnderground = true;
-                                                    break;
-                                                }
-                                            }
-                                            if (!isUnderground && !HasAdjacentSolidBlock(placeX, placeY))
-                                            {
-                                                placementCooldown = PLACEMENT_DELAY;
-                                            }
-                                            else
-                                            {
-                                                world.SetTile(placeX, placeY, new Tile(blockType));
-                                                placeTorchSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
-                                                selectedSlot.Count--;
-                                                if (selectedSlot.Count <= 0)
-                                                {
-                                                    selectedSlot.ItemType = ItemType.None;
-                                                    selectedSlot.Count = 0;
-                                                }
-                                                placementCooldown = PLACEMENT_DELAY;
-                                            }
-                                        }
-                                        else
-                                        {
-                                            world.SetTile(placeX, placeY, new Tile(blockType));
-                                            if (itemType == ItemType.WoodChest || itemType == ItemType.SilverChest || itemType == ItemType.MagicChest)
-                                            {
-                                                OnChestPlaced?.Invoke(new Point(placeX, placeY), itemType);
-                                            }
-                                            selectedSlot.Count--;
-                                            if (selectedSlot.Count <= 0)
-                                            {
-                                                selectedSlot.ItemType = ItemType.None;
-                                                selectedSlot.Count = 0;
-                                            }
-                                            placementCooldown = PLACEMENT_DELAY;
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    // Walls can ONLY be placed by hammer (removed from normal placement)
+                    if (IsPlaceable(blockType))
+                    {
+                    if (blockType == TileType.Torch)
+                    {
+                    bool isUnderground = false;
+                    for (int checkY = placeY - 1; checkY >= 0; checkY--)
+                    {
+                    Tile checkTile = world.GetTile(placeX, checkY);
+                    if (checkTile != null && checkTile.IsActive && checkTile.Type != TileType.Leaves && checkTile.Type != TileType.Wood && checkTile.Type != TileType.Sapling)
+                    {
+                    isUnderground = true;
+                    break;
+                    }
+                    }
+                    if (!isUnderground && !HasAdjacentSolidBlock(placeX, placeY))
+                    {
+                    placementCooldown = PLACEMENT_DELAY;
+                    }
+                    else
+                    {
+                    world.SetTile(placeX, placeY, new Tile(blockType));
+                    placeTorchSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
+                    currentSlot.Count--;
+                    if (currentSlot.Count <= 0)
+                    {
+                    currentSlot.ItemType = ItemType.None;
+                    currentSlot.Count = 0;
+                    }
+                    placementCooldown = PLACEMENT_DELAY;
+                    }
+                    }
+                    else
+                    {
+                    world.SetTile(placeX, placeY, new Tile(blockType));
+                    if (itemType == ItemType.WoodChest || itemType == ItemType.SilverChest || itemType == ItemType.MagicChest)
+                    {
+                    OnChestPlaced?.Invoke(new Point(placeX, placeY), itemType);
+                    }
+                                    currentSlot.Count--;
+                    if (currentSlot.Count <= 0)
+                    {
+                    currentSlot.ItemType = ItemType.None;
+                    currentSlot.Count = 0;
+                    }
+                    placementCooldown = PLACEMENT_DELAY;
+                    }
+                    }
+                    }
+                    }
+                    }
                     }
                 }
             }
@@ -546,7 +631,7 @@ namespace StarshroudHollows.Systems
             }
         }
 
-        private void ProcessMining(int targetX, int targetY, float deltaTime)
+        private void ProcessMining(int targetX, int targetY, float deltaTime, bool miningWall = false)
         {
             Point targetPoint = new Point(targetX, targetY);
 
@@ -567,6 +652,32 @@ namespace StarshroudHollows.Systems
 
             if (tile != null)
             {
+                // Mining walls
+                if (miningWall && tile.HasWall)
+                {
+                    float wallMiningTime = 0.5f; // Walls mine faster
+                    miningProgress += deltaTime / wallMiningTime;
+                    CurrentAnimationFrame = (int)(miningProgress * 3) % 3;
+
+                    if (miningProgress >= 1f)
+                    {
+                        // Drop the wall item
+                        ItemType wallItem = ItemTypeExtensions.FromTileType(tile.WallType);
+                        DropItem(new Vector2(targetX * StarshroudHollows.World.World.TILE_SIZE + 8, 
+                                           targetY * StarshroudHollows.World.World.TILE_SIZE + 8), wallItem, 1);
+                        
+                        // Remove wall
+                        tile.WallType = TileType.Air;
+                        
+                        miningProgress = 0f;
+                        currentlyMiningTile = null;
+                        CurrentAnimationFrame = 0;
+                        mineDirtSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
+                    }
+                    return;
+                }
+
+                // Mining foreground blocks (normal mining)
                 InventorySlot selectedSlot = inventory.GetSlot(selectedHotbarSlot);
                 ItemType currentTool = selectedSlot != null && !selectedSlot.IsEmpty() ? selectedSlot.ItemType : ItemType.None;
 
@@ -645,7 +756,41 @@ namespace StarshroudHollows.Systems
 
         private bool IsPlaceable(TileType type)
         {
-            switch (type) { case TileType.Dirt: case TileType.Grass: case TileType.Stone: case TileType.Wood: case TileType.WoodCraftingBench: case TileType.CopperCraftingBench: case TileType.WoodChest: case TileType.SilverChest: case TileType.MagicChest: case TileType.Torch: case TileType.SummonAltar: return true; default: return false; }
+            switch (type) 
+            { 
+                case TileType.Dirt: 
+                case TileType.Grass: 
+                case TileType.Stone: 
+                case TileType.Wood: 
+                case TileType.WoodCraftingBench: 
+                case TileType.CopperCraftingBench: 
+                case TileType.WoodChest: 
+                case TileType.SilverChest: 
+                case TileType.MagicChest: 
+                case TileType.Torch: 
+                case TileType.SummonAltar: 
+                case TileType.Door:
+                // NEW: Walls can be placed as solid blocks
+                case TileType.DirtWall:
+                case TileType.StoneWall:
+                case TileType.WoodWall:
+                case TileType.CopperWall:
+                case TileType.IronWall:
+                case TileType.SilverWall:
+                case TileType.GoldWall:
+                case TileType.PlatinumWall:
+                case TileType.SnowWall:
+                    return true; 
+                default: 
+                    return false; 
+            }
+        }
+
+        private bool IsWall(TileType type)
+        {
+            return type == TileType.DirtWall || type == TileType.StoneWall || type == TileType.WoodWall || 
+                   type == TileType.CopperWall || type == TileType.IronWall || type == TileType.SilverWall || 
+                   type == TileType.GoldWall || type == TileType.PlatinumWall || type == TileType.SnowWall;
         }
 
         public void DrawItems(SpriteBatch spriteBatch, Texture2D pixelTexture)
