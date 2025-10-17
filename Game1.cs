@@ -1,9 +1,9 @@
-using Claude4_5Terraria.Entities;
-using Claude4_5Terraria.Player;
-using Claude4_5Terraria.Systems;
-using Claude4_5Terraria.UI;
-using Claude4_5Terraria.World;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Entities;
+using StarshroudHollows.Player;
+using StarshroudHollows.Systems;
+using StarshroudHollows.UI;
+using StarshroudHollows.World;
+using StarshroudHollows.Enums;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Claude4_5Terraria
+namespace StarshroudHollows
 {
     public class Game1 : Game
     {
@@ -23,12 +23,13 @@ namespace Claude4_5Terraria
 
         #region Fields
         private World.World world;
-        private Player.Player player;
+        private Player.Player player; // Field declaration: Correctly Player.Player
         private Camera camera;
         private Texture2D pixelTexture;
         private Texture2D oozeEnemyTexture;
         private Texture2D zombieEnemyTexture;
         private Texture2D echoWispTexture;
+        private Texture2D caveTrollBossTexture;
         private SpriteFont font;
         private Texture2D menuBackgroundTexture;
         private Inventory inventory;
@@ -71,6 +72,9 @@ namespace Claude4_5Terraria
         private SoundEffect placeTorchSound;
         private bool isGeneratingWorld = false;
         private Task worldGenerationTask = null;
+        private float healthPotionCooldown = 0f;
+        private const float HEALTH_POTION_COOLDOWN_TIME = 30f;
+        private const float HEALTH_POTION_HEAL_AMOUNT = 30f;
         #endregion
 
         public Game1()
@@ -105,6 +109,7 @@ namespace Claude4_5Terraria
             try { oozeEnemyTexture = Content.Load<Texture2D>("OozeEnemy"); } catch { }
             try { zombieEnemyTexture = Content.Load<Texture2D>("ZombieEnemy"); } catch { }
             try { echoWispTexture = Content.Load<Texture2D>("EchoWispSummon"); } catch { }
+            try { caveTrollBossTexture = Content.Load<Texture2D>("cavetrollbossv2"); } catch { }
 
             font = Content.Load<SpriteFont>("Font");
             menuBackgroundTexture = Content.Load<Texture2D>("MenuBackground");
@@ -158,6 +163,13 @@ namespace Claude4_5Terraria
 
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
+            // Update health potion cooldown
+            if (healthPotionCooldown > 0)
+            {
+                healthPotionCooldown -= deltaTime;
+                if (healthPotionCooldown < 0) healthPotionCooldown = 0;
+            }
+
             if (chestUI?.IsOpen == true) { chestUI.Update(); base.Update(gameTime); return; }
             if (saveMenu?.IsOpen == true) { saveMenu.Update(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height); base.Update(gameTime); return; }
 
@@ -199,12 +211,22 @@ namespace Claude4_5Terraria
                 if (keyboardState.IsKeyDown(Keys.D1 + i) && !previousKeyboardState.IsKeyDown(Keys.D1 + i))
                     miningSystem.SetSelectedHotbarSlot(i);
 
+            // Health Potion Hotkey (H key) - Use from anywhere in inventory
+            if (keyboardState.IsKeyDown(Keys.H) && !previousKeyboardState.IsKeyDown(Keys.H))
+            {
+                TryUseHealthPotion();
+            }
+
             if (mouseState.RightButton == ButtonState.Pressed && previousMouseState.RightButton == ButtonState.Released)
             {
                 var selectedSlot = inventory.GetSlot(miningSystem.GetSelectedHotbarSlot());
                 if (selectedSlot != null && !selectedSlot.IsEmpty())
                 {
-                    if (selectedSlot.ItemType == ItemType.RecallPotion)
+                    if (selectedSlot.ItemType == ItemType.HealthPotion)
+                    {
+                        TryUseHealthPotion();
+                    }
+                    else if (selectedSlot.ItemType == ItemType.RecallPotion)
                     {
                         player.TeleportToSpawn();
                         inventory.RemoveItem(ItemType.RecallPotion, 1);
@@ -212,10 +234,21 @@ namespace Claude4_5Terraria
                     else if (selectedSlot.ItemType == ItemType.TrollBait)
                     {
                         string errorMessage = bossSystem.TrySummonCaveTroll(player.Position);
-                        if (errorMessage == null) inventory.RemoveItem(ItemType.TrollBait, 1);
+                        if (errorMessage == null)
+                        {
+                            inventory.RemoveItem(ItemType.TrollBait, 1);
+                            Logger.Log("[BOSS] Cave Troll summoned! Troll Bait consumed.");
+                        }
                         else Logger.Log($"[BOSS] Cannot summon: {errorMessage}");
                     }
                 }
+            }
+
+            // L key to toggle automine
+            if (keyboardState.IsKeyDown(Keys.L) && !previousKeyboardState.IsKeyDown(Keys.L))
+            {
+                ToggleAutoMining(null);
+                Logger.Log($"[AUTOMINE] Automine {(isAutoMiningActive ? "ENABLED" : "DISABLED")}");
             }
 
             if (keyboardState.IsKeyDown(Keys.Q) && !previousKeyboardState.IsKeyDown(Keys.Q) && inventoryUI?.IsInventoryOpen == false)
@@ -230,6 +263,7 @@ namespace Claude4_5Terraria
                 bool allowManualMining = !isSword && !isWand;
                 if (isAutoMiningActive || allowManualMining)
                 {
+                    // Corrected constant access
                     miningSystem?.Update(gameTime, playerCenter, camera, player.Position, Player.Player.PLAYER_WIDTH, Player.Player.PLAYER_HEIGHT, isAutoMiningActive, lastPlayerDirection);
                 }
             }
@@ -244,15 +278,18 @@ namespace Claude4_5Terraria
             if (bossSystem != null && bossSystem.HasActiveBoss) summonTargets.Add(bossSystem.ActiveTroll);
             summonSystem?.Update(deltaTime, playerCenter, summonTargets);
 
+            // Corrected player type argument: Player.Player
             bossSystem?.Update(deltaTime, playerCenter, player, inventory, combatSystem, projectileSystem, heldItem);
 
             if (enemySpawner != null)
             {
                 Rectangle cameraView = camera.GetVisibleArea(World.World.TILE_SIZE);
                 enemySpawner.Update(deltaTime, playerCenter, timeSystem, cameraView);
+                // Corrected constant access
                 enemySpawner.CheckCombatCollisions(combatSystem, player.Position, Player.Player.PLAYER_WIDTH, Player.Player.PLAYER_HEIGHT, heldItem, inventory);
 
                 float healthBefore = player.Health;
+                // Corrected argument type (Player.Player) and constant access
                 enemySpawner.CheckPlayerCollisions(player.Position, Player.Player.PLAYER_WIDTH, Player.Player.PLAYER_HEIGHT, player);
 
                 if (healthBefore > 0 && player.Health == player.GetMaxHealth() && healthBefore < player.GetMaxHealth())
@@ -273,7 +310,7 @@ namespace Claude4_5Terraria
 
         private void InitializeGameSystems(Vector2 playerPosition, bool isNewGame)
         {
-            player = new Player.Player(world, playerPosition);
+            player = new Player.Player(world, playerPosition); // Corrected player instantiation
             world.SetPlayer(player);
             if (startMenu.IsDebugModeEnabled) player.SetDebugMode(true);
             world.SetLiquidSystem(liquidSystem);
@@ -325,13 +362,18 @@ namespace Claude4_5Terraria
             if (lightingSystem != null && summonSystem != null)
             {
                 lightingSystem.SetSummonLights(summonSystem.GetActiveSummons().Select(s => s.Position).ToList());
+                
+                // Enable player light when holding torch or lava bucket
+                var heldItem = inventory.GetSlot(miningSystem.GetSelectedHotbarSlot())?.ItemType ?? ItemType.None;
+                bool isHoldingLightSource = heldItem == ItemType.Torch || heldItem == ItemType.LavaBucket;
+                lightingSystem.SetPlayerLight(player.GetCenterPosition(), isHoldingLightSource);
             }
 
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, camera.GetTransformMatrix());
 
             world.Draw(spriteBatch, camera, pixelTexture, lightingSystem, miningSystem, player.IsDebugModeActive());
             enemySpawner?.DrawEnemies(spriteBatch, oozeEnemyTexture, zombieEnemyTexture, pixelTexture);
-            bossSystem?.Draw(spriteBatch, null, pixelTexture);
+            bossSystem?.Draw(spriteBatch, caveTrollBossTexture, pixelTexture);
             projectileSystem?.Draw(spriteBatch, pixelTexture);
             summonSystem?.Draw(spriteBatch, pixelTexture);
 
@@ -361,7 +403,7 @@ namespace Claude4_5Terraria
             hud?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height,
                 player.Position, world, isAutoMiningActive, timeSystem.IsRaining,
                 player.Health, player.MaxHealth, player.AirBubbles, player.MaxAirBubbles,
-                null, false, 0, 0, 0, 0, timeSystem, magicSystem);
+                null, false, 0, 0, 0, 0, timeSystem, magicSystem, healthPotionCooldown);
             inventoryUI?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
             chestUI?.Draw(spriteBatch, pixelTexture, font);
             pauseMenu?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
@@ -375,6 +417,35 @@ namespace Claude4_5Terraria
         }
 
         #region Helper Methods
+        private void TryUseHealthPotion()
+        {
+            // Check cooldown
+            if (healthPotionCooldown > 0)
+            {
+                Logger.Log($"[PLAYER] Health potion on cooldown! {healthPotionCooldown:F1}s remaining");
+                return;
+            }
+
+            // Check if player has health potion
+            if (!inventory.HasItem(ItemType.HealthPotion, 1))
+            {
+                Logger.Log("[PLAYER] No health potions in inventory!");
+                return;
+            }
+
+            // Check if health is already full
+            if (player.Health >= player.GetMaxHealth())
+            {
+                Logger.Log("[PLAYER] Health already full!");
+                return;
+            }
+
+            // Use the health potion
+            player.Heal(HEALTH_POTION_HEAL_AMOUNT);
+            inventory.RemoveItem(ItemType.HealthPotion, 1);
+            healthPotionCooldown = HEALTH_POTION_COOLDOWN_TIME;
+            Logger.Log($"[PLAYER] Used Health Potion! Healed {HEALTH_POTION_HEAL_AMOUNT} HP. Health: {player.Health}/{player.GetMaxHealth()}");
+        }
         public void SetGameSoundsVolume(float v) { gameSoundsVolume = v; miningSystem?.SetSoundVolume(v); }
         private void PlayTestSound() { mineDirtSound?.Play(volume: gameSoundsVolume, pitch: 0.0f, pan: 0.0f); }
         public void ToggleAutoMining(bool? n) { isAutoMiningActive = n ?? !isAutoMiningActive; }
@@ -456,10 +527,20 @@ namespace Claude4_5Terraria
         private void HandleChestMined(Point position, TileType chestType) => chestSystem.RemoveChest(position, inventory);
         private void HandleChestPlaced(Point position, ItemType itemType)
         {
-            TileType chestType = itemType.ToTileType();
+            TileType chestTileType = itemType.ToTileType();
             ChestTier tier = ChestTier.Wood;
-            if (chestType == TileType.SilverChest) tier = ChestTier.Silver;
-            else if (chestType == TileType.MagicChest) tier = ChestTier.Magic;
+
+            // FIX: Explicitly cast the TileType to ChestTier
+            if (chestTileType == TileType.SilverChest)
+            {
+                tier = (ChestTier)(int)TileType.SilverChest;
+            }
+            else if (chestTileType == TileType.MagicChest)
+            {
+                tier = (ChestTier)(int)TileType.MagicChest;
+            }
+            // Fallback for WoodChest is ChestTier.Wood, already set above
+
             chestSystem.PlaceChest(position, tier, false);
         }
         private void ToggleFullscreen()
@@ -516,7 +597,8 @@ namespace Claude4_5Terraria
             worldGenerator.Generate();
             world.EnableChunkUnloading();
             world.EnableTileChangeTracking();
-            InitializeGameSystems(worldGenerator.GetSpawnPosition(64), true);
+            // Use Player.Player.PLAYER_HEIGHT
+            InitializeGameSystems(worldGenerator.GetSpawnPosition(Player.Player.PLAYER_HEIGHT), true);
 
             inventory.AddItem(ItemType.RunicPickaxe, 1);
             inventory.AddItem(ItemType.Torch, 50);
@@ -543,7 +625,57 @@ namespace Claude4_5Terraria
 
         private void LoadItemSprites(InventoryUI iUI)
         {
-            var spriteMap = new Dictionary<string, ItemType> { { "woodpickaxe", ItemType.WoodPickaxe }, { "stonepickaxe", ItemType.StonePickaxe }, { "copperpickaxe", ItemType.CopperPickaxe }, { "silverpickaxe", ItemType.SilverPickaxe }, { "platinumpickaxe", ItemType.PlatinumPickaxe }, { "runicpickaxe", ItemType.RunicPickaxe }, { "woodsword", ItemType.WoodSword }, { "CopperSword", ItemType.CopperSword }, { "IronSword", ItemType.IronSword }, { "SilverSword", ItemType.SilverSword }, { "GoldSword", ItemType.GoldSword }, { "PlatinumSword", ItemType.PlatinumSword }, { "wand", ItemType.WoodWand }, { "FireWand", ItemType.FireWand }, { "LightningWand", ItemType.LightningWand }, { "NatureWand", ItemType.NatureWand }, { "WaterWand", ItemType.WaterWand }, { "HalfMoonWand", ItemType.HalfMoonWand }, { "WoodSummonStaff", ItemType.WoodSummonStaff }, { "stick", ItemType.Stick }, { "copperbar", ItemType.CopperBar }, { "silverbar", ItemType.SilverBar }, { "platinumbar", ItemType.PlatinumBar }, { "torch", ItemType.Torch }, { "acorn", ItemType.Acorn } };
+            var spriteMap = new Dictionary<string, ItemType> { 
+                // Pickaxes
+                { "woodpickaxe", ItemType.WoodPickaxe }, 
+                { "stonepickaxe", ItemType.StonePickaxe }, 
+                { "copperpickaxe", ItemType.CopperPickaxe }, 
+                { "ironpickaxe", ItemType.IronPickaxe }, 
+                { "silverpickaxe", ItemType.SilverPickaxe }, 
+                { "goldpickaxe", ItemType.GoldPickaxe }, 
+                { "platinumpickaxe", ItemType.PlatinumPickaxe }, 
+                { "runicpickaxe", ItemType.RunicPickaxe }, 
+                // Swords
+                { "woodsword", ItemType.WoodSword }, 
+                { "CopperSword", ItemType.CopperSword }, 
+                { "IronSword", ItemType.IronSword }, 
+                { "SilverSword", ItemType.SilverSword }, 
+                { "GoldSword", ItemType.GoldSword }, 
+                { "PlatinumSword", ItemType.PlatinumSword }, 
+                // Wands
+                { "wand", ItemType.WoodWand }, 
+                { "FireWand", ItemType.FireWand }, 
+                { "LightningWand", ItemType.LightningWand }, 
+                { "NatureWand", ItemType.NatureWand }, 
+                { "WaterWand", ItemType.WaterWand }, 
+                { "HalfMoonWand", ItemType.HalfMoonWand }, 
+                // Summon Staffs
+                { "WoodSummonStaff", ItemType.WoodSummonStaff }, 
+                // Resources
+                { "stick", ItemType.Stick }, 
+                { "copperbar", ItemType.CopperBar }, 
+                { "ironbar", ItemType.IronBar }, 
+                { "silverbar", ItemType.SilverBar }, 
+                { "goldbar", ItemType.GoldBar }, 
+                { "platinumbar", ItemType.PlatinumBar }, 
+                { "torch", ItemType.Torch }, 
+                { "acorn", ItemType.Acorn }, 
+                // Buckets
+                { "bucket", ItemType.EmptyBucket }, 
+                { "waterfilledbucket", ItemType.WaterBucket }, 
+                { "lavafilledbucket", ItemType.LavaBucket }, 
+                // Consumables
+                { "HealthPotion", ItemType.HealthPotion }, 
+                { "RecallPotion3UsesFrames", ItemType.RecallPotion }, 
+                // Placeable
+                { "bed", ItemType.Bed }, 
+                // Biome Wood Types
+                { "foresttreewood", ItemType.Wood }, 
+                { "snowtreewood", ItemType.Wood }, 
+                { "jungletreewood", ItemType.Wood }, 
+                { "swampwood", ItemType.Wood }, 
+                { "volcanicwood", ItemType.Wood } 
+            };
             foreach (var sprite in spriteMap) { try { Texture2D tex = Content.Load<Texture2D>(sprite.Key); iUI.LoadItemSprite(sprite.Value, tex); itemTextureMap[sprite.Value] = tex; } catch { } }
             try { Texture2D tex = Content.Load<Texture2D>("RunicSword Spritesheet"); iUI.LoadItemSprite(ItemType.RunicSword, tex); itemTextureMap[ItemType.RunicSword] = tex; } catch { }
             try { Texture2D tex = Content.Load<Texture2D>("RunicLaserWandSpriteSheet"); iUI.LoadItemSprite(ItemType.RunicLaserWand, tex); itemTextureMap[ItemType.RunicLaserWand] = tex; } catch { }
@@ -557,7 +689,35 @@ namespace Claude4_5Terraria
 
         private void LoadCraftingItemSprites(InventoryUI iUI)
         {
-            var spriteMap = new Dictionary<string, ItemType> { { "woodpickaxe", ItemType.WoodPickaxe }, { "stonepickaxe", ItemType.StonePickaxe }, { "copperpickaxe", ItemType.CopperPickaxe }, { "silverpickaxe", ItemType.SilverPickaxe }, { "platinumpickaxe", ItemType.PlatinumPickaxe }, { "woodsword", ItemType.WoodSword }, { "CopperSword", ItemType.CopperSword }, { "torch", ItemType.Torch }, { "stick", ItemType.Stick }, { "copperbar", ItemType.CopperBar }, { "silverbar", ItemType.SilverBar } };
+            var spriteMap = new Dictionary<string, ItemType> { 
+                // Pickaxes
+                { "woodpickaxe", ItemType.WoodPickaxe }, 
+                { "stonepickaxe", ItemType.StonePickaxe }, 
+                { "copperpickaxe", ItemType.CopperPickaxe }, 
+                { "ironpickaxe", ItemType.IronPickaxe }, 
+                { "silverpickaxe", ItemType.SilverPickaxe }, 
+                { "goldpickaxe", ItemType.GoldPickaxe }, 
+                { "platinumpickaxe", ItemType.PlatinumPickaxe }, 
+                // Swords
+                { "woodsword", ItemType.WoodSword }, 
+                { "CopperSword", ItemType.CopperSword }, 
+                { "IronSword", ItemType.IronSword }, 
+                { "SilverSword", ItemType.SilverSword }, 
+                { "GoldSword", ItemType.GoldSword }, 
+                { "PlatinumSword", ItemType.PlatinumSword }, 
+                // Resources
+                { "torch", ItemType.Torch }, 
+                { "stick", ItemType.Stick }, 
+                { "copperbar", ItemType.CopperBar }, 
+                { "ironbar", ItemType.IronBar }, 
+                { "silverbar", ItemType.SilverBar }, 
+                { "goldbar", ItemType.GoldBar }, 
+                { "platinumbar", ItemType.PlatinumBar }, 
+                // Buckets
+                { "bucket", ItemType.EmptyBucket }, 
+                // Placeable
+                { "bed", ItemType.Bed } 
+            };
             foreach (var sprite in spriteMap) { try { iUI.GetCraftingUI()?.LoadItemSprite(sprite.Value, Content.Load<Texture2D>(sprite.Key)); } catch { } }
         }
         #endregion

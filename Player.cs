@@ -1,11 +1,11 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Claude4_5Terraria.World;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Enums;
 using System;
 
-namespace Claude4_5Terraria.Player
+namespace StarshroudHollows.Player
+
 {
     public class Player
     {
@@ -42,7 +42,7 @@ namespace Claude4_5Terraria.Player
         private const float DEBUG_FLY_SPEED = 15f;
 
         private bool isOnGround;
-        private World.World world;
+        private StarshroudHollows.World.World world; // Fully qualified World reference
 
         private Texture2D spriteSheet;
         private bool facingRight = true;
@@ -71,8 +71,14 @@ namespace Claude4_5Terraria.Player
         private float heldItemAnimationTimer = 0f;
         private int heldItemCurrentFrame = 0;
 
+        // PHASE 2: Health Potion System
+        private float healthPotionCooldownTimer = 0f;
+        private const float HEALTH_POTION_COOLDOWN = 30f;  // 30 seconds
+        private const float HEALTH_POTION_HEAL_AMOUNT = 10f;
+        private KeyboardState previousKeyState;
 
-        public Player(World.World world, Vector2 startPosition)
+
+        public Player(StarshroudHollows.World.World world, Vector2 startPosition) // Fully qualified World parameter
         {
             this.world = world;
             Position = startPosition;
@@ -88,6 +94,10 @@ namespace Claude4_5Terraria.Player
 
             MaxAirBubbles = 100f;
             AirBubbles = MaxAirBubbles;
+
+            // Initialize potion cooldown
+            healthPotionCooldownTimer = 0f;
+            previousKeyState = Keyboard.GetState();
         }
 
         public Vector2 GetBedSpawnPosition() => BedSpawnPosition;
@@ -101,14 +111,14 @@ namespace Claude4_5Terraria.Player
             BedSpawnPosition = bedPosition;
             HasBedSpawn = true;
             lastSpawnSetTime = DateTime.Now;
-            Systems.Logger.Log($"[PLAYER] Bed spawn set at: {bedPosition}");
+            StarshroudHollows.Systems.Logger.Log($"[PLAYER] Bed spawn set at: {bedPosition}");
         }
 
         public void ClearBedSpawn()
         {
             HasBedSpawn = false;
             BedSpawnPosition = Vector2.Zero;
-            Systems.Logger.Log("[PLAYER] Bed spawn cleared");
+            StarshroudHollows.Systems.Logger.Log("[PLAYER] Bed spawn cleared");
         }
 
         public void TeleportToSpawn()
@@ -116,12 +126,12 @@ namespace Claude4_5Terraria.Player
             if (HasBedSpawn)
             {
                 Position = BedSpawnPosition;
-                Systems.Logger.Log($"[PLAYER] Teleported to bed spawn: {BedSpawnPosition}");
+                StarshroudHollows.Systems.Logger.Log($"[PLAYER] Teleported to bed spawn: {BedSpawnPosition}");
             }
             else
             {
                 Position = SpawnPosition;
-                Systems.Logger.Log($"[PLAYER] Teleported to world spawn: {SpawnPosition}");
+                StarshroudHollows.Systems.Logger.Log($"[PLAYER] Teleported to world spawn: {SpawnPosition}");
             }
             Velocity = Vector2.Zero;
             AirBubbles = MaxAirBubbles;
@@ -133,11 +143,11 @@ namespace Claude4_5Terraria.Player
             debugMode = enabled;
             if (debugMode)
             {
-                Systems.Logger.Log("[PLAYER] Debug mode ENABLED: Fly + Noclip active");
+                StarshroudHollows.Systems.Logger.Log("[PLAYER] Debug mode ENABLED: Fly + Noclip active");
             }
             else
             {
-                Systems.Logger.Log("[PLAYER] Debug mode DISABLED");
+                StarshroudHollows.Systems.Logger.Log("[PLAYER] Debug mode DISABLED");
             }
         }
 
@@ -145,30 +155,30 @@ namespace Claude4_5Terraria.Player
 
         public void LoadContent(Texture2D playerSpriteSheet)
         {
-            Systems.Logger.Log("===========================================");
-            Systems.Logger.Log("PLAYER LOADCONTENT CALLED");
+            StarshroudHollows.Systems.Logger.Log("===========================================");
+            StarshroudHollows.Systems.Logger.Log("PLAYER LOADCONTENT CALLED");
 
             spriteSheet = playerSpriteSheet;
 
             if (spriteSheet != null)
             {
-                Systems.Logger.Log($"Spritesheet loaded successfully!");
-                Systems.Logger.Log($"Full dimensions: {spriteSheet.Width} x {spriteSheet.Height} pixels");
-                Systems.Logger.Log($"Frame size we're using: {FRAME_WIDTH} x {FRAME_HEIGHT}");
+                StarshroudHollows.Systems.Logger.Log($"Spritesheet loaded successfully!");
+                StarshroudHollows.Systems.Logger.Log($"Full dimensions: {spriteSheet.Width} x {spriteSheet.Height} pixels");
+                StarshroudHollows.Systems.Logger.Log($"Frame size we're using: {FRAME_WIDTH} x {FRAME_HEIGHT}");
 
                 int framesWide = spriteSheet.Width / FRAME_WIDTH;
                 int framesTall = spriteSheet.Height / FRAME_HEIGHT;
-                Systems.Logger.Log($"Frames that fit: {framesWide} wide x {framesTall} tall = {framesWide * framesTall} total");
+                StarshroudHollows.Systems.Logger.Log($"Frames that fit: {framesWide} wide x {framesTall} tall = {framesWide * framesTall} total");
 
-                Systems.Logger.Log($"Frame [0,0] will grab: X={0} Y={0} Width={FRAME_WIDTH} Height={FRAME_HEIGHT}");
-                Systems.Logger.Log($"This is pixels from top-left corner: (0,0) to ({FRAME_WIDTH},{FRAME_HEIGHT})");
+                StarshroudHollows.Systems.Logger.Log($"Frame [0,0] will grab: X={0} Y={0} Width={FRAME_WIDTH} Height={FRAME_HEIGHT}");
+                StarshroudHollows.Systems.Logger.Log($"This is pixels from top-left corner: (0,0) to ({FRAME_WIDTH},{FRAME_HEIGHT})");
             }
             else
             {
-                Systems.Logger.Log("ERROR: Spritesheet is NULL!");
+                StarshroudHollows.Systems.Logger.Log("ERROR: Spritesheet is NULL!");
             }
 
-            Systems.Logger.Log("===========================================");
+            StarshroudHollows.Systems.Logger.Log("===========================================");
         }
 
         public void Update(GameTime gameTime)
@@ -177,6 +187,7 @@ namespace Claude4_5Terraria.Player
 
             HandleSwimming(deltaTime);
             CheckLavaDamage(deltaTime);
+            UpdatePotionCooldowns(deltaTime);
 
             KeyboardState keyState = Keyboard.GetState();
 
@@ -250,7 +261,7 @@ namespace Claude4_5Terraria.Player
 
             if (!isOnGround)
             {
-                Velocity = new Vector2(Velocity.X, Velocity.Y + (GRAVITY * gravityMultiplier));
+                Velocity = new Vector2(Velocity.X, Velocity.Y + GRAVITY * gravityMultiplier);
 
                 if (Velocity.Y > MAX_FALL_SPEED)
                 {
@@ -276,7 +287,7 @@ namespace Claude4_5Terraria.Player
                 {
                     TakeDamage(LAVA_DAMAGE_AMOUNT);
                     lavaDamageTimer -= LAVA_DAMAGE_INTERVAL;
-                    Systems.Logger.Log($"[PLAYER] Lava damage! Health: {Health}/{MaxHealth}");
+                    StarshroudHollows.Systems.Logger.Log($"[PLAYER] Lava damage! Health: {Health}/{MaxHealth}");
                 }
             }
             else
@@ -287,15 +298,16 @@ namespace Claude4_5Terraria.Player
 
         private bool IsInLava()
         {
-            int tileSize = World.World.TILE_SIZE;
+            // Use fully qualified World reference for TILE_SIZE
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
 
             Vector2[] checkPoints = new Vector2[]
             {
                 new Vector2(Position.X + 5, Position.Y + 5),
-                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + 5),
-                new Vector2(Position.X + 5, Position.Y + PLAYER_HEIGHT - 5),
-                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + PLAYER_HEIGHT - 5),
-                new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + PLAYER_HEIGHT / 2)
+                new Vector2(Position.X + Player.PLAYER_WIDTH - 5, Position.Y + 5),
+                new Vector2(Position.X + 5, Position.Y + Player.PLAYER_HEIGHT - 5),
+                new Vector2(Position.X + Player.PLAYER_WIDTH - 5, Position.Y + Player.PLAYER_HEIGHT - 5),
+                new Vector2(Position.X + Player.PLAYER_WIDTH / 2, Position.Y + Player.PLAYER_HEIGHT / 2)
             };
 
             foreach (Vector2 point in checkPoints)
@@ -320,7 +332,7 @@ namespace Claude4_5Terraria.Player
 
             if (Health <= 0)
             {
-                Systems.Logger.Log("[PLAYER] Player died! Respawning...");
+                StarshroudHollows.Systems.Logger.Log("[PLAYER] Player died! Respawning...");
                 TeleportToSpawn();
                 Health = MaxHealth;
             }
@@ -331,6 +343,50 @@ namespace Claude4_5Terraria.Player
             Health += amount;
             if (Health > MaxHealth) Health = MaxHealth;
         }
+
+        // PHASE 2: Potion System Methods
+        private void UpdatePotionCooldowns(float deltaTime)
+        {
+            if (healthPotionCooldownTimer > 0)
+            {
+                healthPotionCooldownTimer -= deltaTime;
+                if (healthPotionCooldownTimer < 0) healthPotionCooldownTimer = 0;
+            }
+        }
+
+        public bool TryUseHealthPotion(StarshroudHollows.Systems.Inventory inventory)
+        {
+            // Check cooldown
+            if (healthPotionCooldownTimer > 0)
+            {
+                StarshroudHollows.Systems.Logger.Log($"[POTION] Health potion on cooldown: {healthPotionCooldownTimer:F1}s remaining");
+                return false;
+            }
+
+            // Check if player has health potion
+            if (!inventory.HasItem(ItemType.HealthPotion, 1))
+            {
+                StarshroudHollows.Systems.Logger.Log("[POTION] No health potions in inventory");
+                return false;
+            }
+
+            // Check if already at max health
+            if (Health >= MaxHealth)
+            {
+                StarshroudHollows.Systems.Logger.Log("[POTION] Already at max health");
+                return false;
+            }
+
+            // Use the potion
+            Heal(HEALTH_POTION_HEAL_AMOUNT);
+            inventory.RemoveItem(ItemType.HealthPotion, 1);
+            healthPotionCooldownTimer = HEALTH_POTION_COOLDOWN;
+            StarshroudHollows.Systems.Logger.Log($"[POTION] Used health potion! Healed {HEALTH_POTION_HEAL_AMOUNT} HP. New health: {Health}/{MaxHealth}");
+            return true;
+        }
+
+        public float GetHealthPotionCooldown() => healthPotionCooldownTimer;
+        public float GetHealthPotionCooldownPercent() => healthPotionCooldownTimer / HEALTH_POTION_COOLDOWN;
 
         private void HandleSwimming(float deltaTime)
         {
@@ -372,14 +428,15 @@ namespace Claude4_5Terraria.Player
 
         private bool IsHeadUnderwater()
         {
-            int tileSize = World.World.TILE_SIZE;
-            int headHeight = PLAYER_HEIGHT / 3;
+            // Use fully qualified World reference for TILE_SIZE
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
+            int headHeight = Player.PLAYER_HEIGHT / 3;
 
             Vector2[] checkPoints = new Vector2[]
             {
                 new Vector2(Position.X + 5, Position.Y + 5),
-                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + 5),
-                new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + headHeight / 2)
+                new Vector2(Position.X + Player.PLAYER_WIDTH - 5, Position.Y + 5),
+                new Vector2(Position.X + Player.PLAYER_WIDTH / 2, Position.Y + headHeight / 2)
             };
 
             foreach (Vector2 point in checkPoints)
@@ -399,15 +456,16 @@ namespace Claude4_5Terraria.Player
 
         private bool IsInWater()
         {
-            int tileSize = World.World.TILE_SIZE;
+            // Use fully qualified World reference for TILE_SIZE
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
 
             Vector2[] checkPoints = new Vector2[]
             {
                 new Vector2(Position.X + 5, Position.Y + 5),
-                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + 5),
-                new Vector2(Position.X + 5, Position.Y + PLAYER_HEIGHT - 5),
-                new Vector2(Position.X + PLAYER_WIDTH - 5, Position.Y + PLAYER_HEIGHT - 5),
-                new Vector2(Position.X + PLAYER_WIDTH / 2, Position.Y + PLAYER_HEIGHT / 2)
+                new Vector2(Position.X + Player.PLAYER_WIDTH - 5, Position.Y + 5),
+                new Vector2(Position.X + 5, Position.Y + Player.PLAYER_HEIGHT - 5),
+                new Vector2(Position.X + Player.PLAYER_WIDTH - 5, Position.Y + Player.PLAYER_HEIGHT - 5),
+                new Vector2(Position.X + Player.PLAYER_WIDTH / 2, Position.Y + Player.PLAYER_HEIGHT / 2)
             };
 
             foreach (Vector2 point in checkPoints)
@@ -485,8 +543,9 @@ namespace Claude4_5Terraria.Player
             {
                 if (Velocity.Y > 0)
                 {
-                    int hitTileY = (int)((Position.Y + Velocity.Y + PLAYER_HEIGHT) / World.World.TILE_SIZE);
-                    Position = new Vector2(Position.X, hitTileY * World.World.TILE_SIZE - PLAYER_HEIGHT);
+                    // Use fully qualified World reference for TILE_SIZE
+                    int hitTileY = (int)((Position.Y + Velocity.Y + Player.PLAYER_HEIGHT) / StarshroudHollows.World.World.TILE_SIZE);
+                    Position = new Vector2(Position.X, hitTileY * StarshroudHollows.World.World.TILE_SIZE - Player.PLAYER_HEIGHT);
                     isOnGround = true;
                 }
                 Velocity = new Vector2(Velocity.X, 0);
@@ -501,18 +560,19 @@ namespace Claude4_5Terraria.Player
 
         private bool CheckCollision(Vector2 position)
         {
-            int tileSize = World.World.TILE_SIZE;
+            // Use fully qualified World reference for TILE_SIZE
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
 
             Vector2[] checkPoints = new Vector2[]
             {
                 new Vector2(position.X + 1, position.Y + 0),
-                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + 0),
-                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT - 1),
-                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT - 1),
-                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + 0),
-                new Vector2(position.X + PLAYER_WIDTH / 2, position.Y + PLAYER_HEIGHT - 1),
-                new Vector2(position.X + 1, position.Y + PLAYER_HEIGHT / 2),
-                new Vector2(position.X + PLAYER_WIDTH - 1, position.Y + PLAYER_HEIGHT / 2)
+                new Vector2(position.X + Player.PLAYER_WIDTH - 1, position.Y + 0),
+                new Vector2(position.X + 1, position.Y + Player.PLAYER_HEIGHT - 1),
+                new Vector2(position.X + Player.PLAYER_WIDTH - 1, position.Y + Player.PLAYER_HEIGHT - 1),
+                new Vector2(position.X + Player.PLAYER_WIDTH / 2, position.Y + 0),
+                new Vector2(position.X + Player.PLAYER_WIDTH / 2, position.Y + Player.PLAYER_HEIGHT - 1),
+                new Vector2(position.X + 1, position.Y + Player.PLAYER_HEIGHT / 2),
+                new Vector2(position.X + Player.PLAYER_WIDTH - 1, position.Y + Player.PLAYER_HEIGHT / 2)
             };
 
             foreach (Vector2 point in checkPoints)
@@ -544,16 +604,16 @@ namespace Claude4_5Terraria.Player
             if (spriteSheet != null)
             {
                 Rectangle playerSourceRect = new Rectangle(currentFrame * FRAME_WIDTH, currentAnimationRow * FRAME_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT);
-                Vector2 playerDrawPosition = new Vector2(Position.X + (PLAYER_WIDTH / 2), Position.Y + (PLAYER_HEIGHT / 2));
+                Vector2 playerDrawPosition = new Vector2(Position.X + Player.PLAYER_WIDTH / 2, Position.Y + Player.PLAYER_HEIGHT / 2);
                 Vector2 playerOrigin = new Vector2(FRAME_WIDTH / 2f, FRAME_HEIGHT / 2f);
                 SpriteEffects playerFlip = facingRight ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
-                float playerScale = (float)PLAYER_HEIGHT / (float)FRAME_HEIGHT;
+                float playerScale = Player.PLAYER_HEIGHT / (float)FRAME_HEIGHT;
 
                 spriteBatch.Draw(spriteSheet, playerDrawPosition, playerSourceRect, Color.White, 0f, playerOrigin, playerScale, playerFlip, 0f);
             }
             else // Fallback drawing
             {
-                Rectangle playerRect = new Rectangle((int)Position.X, (int)Position.Y, PLAYER_WIDTH, PLAYER_HEIGHT);
+                Rectangle playerRect = new Rectangle((int)Position.X, (int)Position.Y, Player.PLAYER_WIDTH, Player.PLAYER_HEIGHT);
                 spriteBatch.Draw(pixelTexture, playerRect, Color.Yellow);
             }
 
@@ -603,8 +663,8 @@ namespace Claude4_5Terraria.Player
                         itemFrameWidth = itemSpriteSheet.Width / 5;
                         itemFrameHeight = itemSpriteSheet.Height / 2;
                         int currentAnimFrame = heldItemCurrentFrame % totalFrames;
-                        sourceX = (currentAnimFrame % 5) * itemFrameWidth;
-                        sourceY = (currentAnimFrame / 5) * itemFrameHeight;
+                        sourceX = currentAnimFrame % 5 * itemFrameWidth;
+                        sourceY = currentAnimFrame / 5 * itemFrameHeight;
                     }
                 }
                 else if (heldItemType >= ItemType.WoodWand && heldItemType <= ItemType.RunicLaserWand)
@@ -617,8 +677,8 @@ namespace Claude4_5Terraria.Player
                         itemFrameWidth = itemSpriteSheet.Width / 4;
                         itemFrameHeight = itemSpriteSheet.Height / 3;
                         int currentAnimFrame = heldItemCurrentFrame % totalFrames;
-                        sourceX = (currentAnimFrame % 4) * itemFrameWidth;
-                        sourceY = (currentAnimFrame / 4) * itemFrameHeight;
+                        sourceX = currentAnimFrame % 4 * itemFrameWidth;
+                        sourceY = currentAnimFrame / 4 * itemFrameHeight;
                     }
                 }
                 else if (heldItemType == ItemType.Torch)
@@ -632,7 +692,7 @@ namespace Claude4_5Terraria.Player
                 // --- FINAL DRAW CALL FOR THE ITEM ---
                 Rectangle sourceRect = new Rectangle(sourceX, sourceY, itemFrameWidth, itemFrameHeight);
                 Vector2 origin = new Vector2(itemFrameWidth / 2f, itemFrameHeight / 2f);
-                Vector2 drawPosition = new Vector2(Position.X + (PLAYER_WIDTH * 0.75f), Position.Y + (PLAYER_HEIGHT * 0.35f));
+                Vector2 drawPosition = new Vector2(Position.X + Player.PLAYER_WIDTH * 0.75f, Position.Y + Player.PLAYER_HEIGHT * 0.35f);
 
                 if (heldItemType >= ItemType.WoodSword && heldItemType <= ItemType.RunicSword)
                 {
@@ -660,8 +720,8 @@ namespace Claude4_5Terraria.Player
         public Vector2 GetCenterPosition()
         {
             return new Vector2(
-                Position.X + PLAYER_WIDTH / 2,
-                Position.Y + PLAYER_HEIGHT / 2
+                Position.X + Player.PLAYER_WIDTH / 2,
+                Position.Y + Player.PLAYER_HEIGHT / 2
             );
         }
 
@@ -677,13 +737,12 @@ namespace Claude4_5Terraria.Player
 
         public Rectangle GetHitbox()
         {
-            return new Rectangle((int)Position.X, (int)Position.Y, PLAYER_WIDTH, PLAYER_HEIGHT);
+            return new Rectangle((int)Position.X, (int)Position.Y, Player.PLAYER_WIDTH, Player.PLAYER_HEIGHT);
         }
 
-        public Systems.Inventory GetInventory()
+        public StarshroudHollows.Systems.Inventory GetInventory()
         {
-            // This will need to be set from Game1.cs where the inventory is actually managed
-            // For now, return null and we'll fix it in Game1 integration
+            // This return type is now correctly fully qualified to resolve the ambiguity.
             return null;
         }
     }

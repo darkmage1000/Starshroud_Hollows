@@ -1,11 +1,11 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.World;
-using Claude4_5Terraria.Systems;
+using StarshroudHollows.World;
+using StarshroudHollows.Systems;
 using System;
 using System.Collections.Generic;
 
-namespace Claude4_5Terraria.UI
+namespace StarshroudHollows.UI
 {
     public class HUD
     {
@@ -39,7 +39,7 @@ namespace Claude4_5Terraria.UI
         // FIX: Initialize requires SpriteFont argument
         public void Initialize(GraphicsDevice graphicsDevice, SpriteFont spriteFont)
         {
-            this.font = spriteFont; // Store font locally
+            font = spriteFont; // Store font locally
             int worldW = World.World.WORLD_WIDTH;
             int worldH = World.World.WORLD_HEIGHT;
 
@@ -79,7 +79,7 @@ namespace Claude4_5Terraria.UI
             showMinimap = !isMapFullscreen;
         }
 
-        public void UpdateMinimapData(Claude4_5Terraria.World.World world)
+        public void UpdateMinimapData(StarshroudHollows.World.World world)
         {
             if (minimapTexture == null || !minimapNeedsUpdate) return;
 
@@ -115,7 +115,7 @@ namespace Claude4_5Terraria.UI
             minimapNeedsUpdate = false;
         }
 
-        public void DrawMinimap(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world)
+        public void DrawMinimap(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, StarshroudHollows.World.World world)
         {
             int playerTileX = (int)(playerPosition.X / World.World.TILE_SIZE);
             int playerTileY = (int)(playerPosition.Y / World.World.TILE_SIZE);
@@ -139,8 +139,8 @@ namespace Claude4_5Terraria.UI
                 spriteBatch.Draw(minimapTexture, fullScreenRect, sourceRect, Color.White * minimapOpacity);
 
                 int dotSize = 10;
-                playerScreenX = (screenWidth / 2);
-                playerScreenY = (screenHeight / 2);
+                playerScreenX = screenWidth / 2;
+                playerScreenY = screenHeight / 2;
 
                 playerDot = new Rectangle(playerScreenX - dotSize / 2, playerScreenY - dotSize / 2, dotSize, dotSize);
                 spriteBatch.Draw(pixelTexture, playerDot, Color.Red);
@@ -204,12 +204,12 @@ namespace Claude4_5Terraria.UI
 
             // FIX: Draw Mana Text over bar - 'font' is a private field
             string manaText = $"Mana: {(int)currentMana} / {(int)maxMana}";
-            Vector2 manaTextSize = this.font.MeasureString(manaText);
+            Vector2 manaTextSize = font.MeasureString(manaText);
             Vector2 manaTextPos = new Vector2(
                 BAR_START_X + (BAR_WIDTH - manaTextSize.X) / 2,
                 manaY + (BAR_HEIGHT - manaTextSize.Y) / 2
             );
-            spriteBatch.DrawString(this.font, manaText, manaTextPos, Color.White);
+            spriteBatch.DrawString(font, manaText, manaTextPos, Color.White);
 
 
             // --- Air Bubbles Bar (Cyan) - Only show when underwater ---
@@ -231,8 +231,8 @@ namespace Claude4_5Terraria.UI
             }
         }
 
-        // MODIFIED: Added MagicSystem magicSystem parameter (21 arguments total)
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, Claude4_5Terraria.World.World world, bool isAutoMiningActive, bool isRaining, float playerHealth, float playerMaxHealth, float playerAir, float playerMaxAir, Point? currentBedPosition, bool isSleeping, float sleepProgress, float sleepDuration, float bedHoldTime, float bedHoldRequired, TimeSystem timeSystem, MagicSystem magicSystem)
+        // MODIFIED: Added MagicSystem magicSystem and healthPotionCooldown parameters (22 arguments total)
+        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, StarshroudHollows.World.World world, bool isAutoMiningActive, bool isRaining, float playerHealth, float playerMaxHealth, float playerAir, float playerMaxAir, Point? currentBedPosition, bool isSleeping, float sleepProgress, float sleepDuration, float bedHoldTime, float bedHoldRequired, TimeSystem timeSystem, MagicSystem magicSystem, float healthPotionCooldown)
         {
             // FIX: Store the font locally for DrawBars and other helpers to access
             if (this.font == null) this.font = font;
@@ -313,6 +313,57 @@ namespace Claude4_5Terraria.UI
             // Text
             spriteBatch.DrawString(font, weatherText, weatherPosition, weatherColor);
 
+            // --- Draw Health Potion Cooldown (H key indicator) ---
+            if (healthPotionCooldown > 0)
+            {
+                string cooldownText = $"Health Potion (H): {healthPotionCooldown:F1}s";
+                Color cooldownColor = Color.Gray;
+                Vector2 cooldownSize = font.MeasureString(cooldownText);
+
+                // Position below weather
+                Vector2 cooldownPosition = new Vector2(
+                    weatherPosition.X,
+                    weatherPosition.Y + weatherSize.Y + 5
+                );
+
+                // Background
+                Rectangle cooldownBgRect = new Rectangle(
+                    (int)cooldownPosition.X - 5,
+                    (int)cooldownPosition.Y - 5,
+                    (int)cooldownSize.X + 10,
+                    (int)cooldownSize.Y + 10
+                );
+                spriteBatch.Draw(pixelTexture, cooldownBgRect, Color.Black * 0.7f);
+
+                // Text
+                spriteBatch.DrawString(font, cooldownText, cooldownPosition, cooldownColor);
+            }
+            else
+            {
+                // Show ready indicator
+                string readyText = "Health Potion (H): READY";
+                Color readyColor = Color.LimeGreen;
+                Vector2 readySize = font.MeasureString(readyText);
+
+                // Position below weather
+                Vector2 readyPosition = new Vector2(
+                    weatherPosition.X,
+                    weatherPosition.Y + weatherSize.Y + 5
+                );
+
+                // Background
+                Rectangle readyBgRect = new Rectangle(
+                    (int)readyPosition.X - 5,
+                    (int)readyPosition.Y - 5,
+                    (int)readySize.X + 10,
+                    (int)readySize.Y + 10
+                );
+                spriteBatch.Draw(pixelTexture, readyBgRect, Color.Black * 0.7f);
+
+                // Text
+                spriteBatch.DrawString(font, readyText, readyPosition, readyColor);
+            }
+
             // --- Draw block outline hint in top-right ---
             string outlineHint = showBlockOutlines ? "T: Hide Outlines" : "T: Show Outlines";
             Vector2 outlineSize = font.MeasureString(outlineHint);
@@ -353,7 +404,7 @@ namespace Claude4_5Terraria.UI
             {
                 string spawnMsg = "Spawn Point Set!";
                 Vector2 msgSize = font.MeasureString(spawnMsg);
-                Vector2 msgPosition = new Vector2((screenWidth - msgSize.X) / 2, (screenHeight / 2) - 100);
+                Vector2 msgPosition = new Vector2((screenWidth - msgSize.X) / 2, screenHeight / 2 - 100);
 
                 Rectangle msgBgRect = new Rectangle(
                     (int)msgPosition.X - 10, (int)msgPosition.Y - 5, (int)msgSize.X + 20, (int)msgSize.Y + 10

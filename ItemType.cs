@@ -1,4 +1,4 @@
-namespace Claude4_5Terraria.Enums
+namespace StarshroudHollows.Enums
 {
     public enum ItemType
     {
@@ -37,6 +37,7 @@ namespace Claude4_5Terraria.Enums
         Bed,
 
         // Consumables
+        HealthPotion,  // Restores player health
         RecallPotion,  // Teleports to spawn, 3 uses
 
         // Tools
