@@ -7,6 +7,7 @@ namespace StarshroudHollows.World
         public TileType Type { get; set; }
         public float Health { get; set; }
         public bool IsPartOfTree { get; set; }
+        public bool IsDoorOpen { get; set; } // NEW: Track door state
 
         // NEW: Background wall support
         public TileType WallType { get; set; }
@@ -26,6 +27,7 @@ namespace StarshroudHollows.World
             IsPartOfTree = false;
             LiquidVolume = 0.0f;
             WallType = TileType.Air; // NEW: No wall by default
+            IsDoorOpen = false; // Doors start closed
         }
 
         public Tile(TileType type, bool isPartOfTree = false)
@@ -34,6 +36,7 @@ namespace StarshroudHollows.World
             Health = 1.0f;
             IsPartOfTree = isPartOfTree;
             WallType = TileType.Air; // NEW: No wall by default
+            IsDoorOpen = false; // Doors start closed
 
             if (type == TileType.Water || type == TileType.Lava)
             {

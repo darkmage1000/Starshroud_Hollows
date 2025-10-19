@@ -1,7 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace Claude4_5Terraria
+namespace StarshroudHollows
 {
     public class Camera
     {

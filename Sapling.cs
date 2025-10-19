@@ -1,7 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using System;
 
-namespace Claude4_5Terraria.World
+namespace StarshroudHollows.World
 {
     public class Sapling
     {

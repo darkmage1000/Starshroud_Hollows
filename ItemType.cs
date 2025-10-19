@@ -92,7 +92,31 @@ namespace StarshroudHollows.Enums
         Hammer,
         
         // Boss Weapons
-        TrollClub      // 5% drop from Cave Troll boss
+        TrollClub,     // 5% drop from Cave Troll boss
+        
+        // Armor - Helmets
+        WoodHelmet,
+        CopperHelmet,
+        IronHelmet,
+        SilverHelmet,
+        GoldHelmet,
+        PlatinumHelmet,
+        
+        // Armor - Chestplates
+        WoodChestplate,
+        CopperChestplate,
+        IronChestplate,
+        SilverChestplate,
+        GoldChestplate,
+        PlatinumChestplate,
+        
+        // Armor - Leggings
+        WoodLeggings,
+        CopperLeggings,
+        IronLeggings,
+        SilverLeggings,
+        GoldLeggings,
+        PlatinumLeggings
     }
 
     public static class ItemTypeExtensions

@@ -1,17 +1,17 @@
 using Microsoft.Xna.Framework;
-using Claude4_5Terraria.Enums;
-using Claude4_5Terraria.Systems;
-using Claude4_5Terraria.Systems.Summons;
+using StarshroudHollows.Systems;
 using System;
-using Claude4_5Terraria.Player;
 using Microsoft.Xna.Framework.Input;
+using StarshroudHollows.Enums;
+using StarshroudHollows.Player;
+using StarshroudHollows.Systems.Summons;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class MagicSystem
     {
-        private Claude4_5Terraria.Player.Player player;
-        private World.World world;
+        private Player.Player player; // Corrected Player type
+        private StarshroudHollows.World.World world;
         private Camera camera;
 
         // Mana Stats
@@ -33,11 +33,11 @@ namespace Claude4_5Terraria.Systems
 
         // Projectile System Reference
         private ProjectileSystem projectileSystem;
-        
+
         // Summon System Reference
         private SummonSystem summonSystem;
 
-        public MagicSystem(Claude4_5Terraria.Player.Player player, ProjectileSystem projectileSystem, SummonSystem summonSystem, World.World world, Camera camera)
+        public MagicSystem(Player.Player player, ProjectileSystem projectileSystem, SummonSystem summonSystem, StarshroudHollows.World.World world, Camera camera) // Corrected Player type
         {
             this.player = player;
             this.projectileSystem = projectileSystem;
@@ -80,7 +80,7 @@ namespace Claude4_5Terraria.Systems
                    item == ItemType.WaterWand || item == ItemType.HalfMoonWand ||
                    item == ItemType.RunicLaserWand;
         }
-        
+
         private bool IsSummonStaff(ItemType item)
         {
             return item == ItemType.WoodSummonStaff;
@@ -167,6 +167,7 @@ namespace Claude4_5Terraria.Systems
                 direction.Normalize();
             }
 
+            // Corrected constant access
             Vector2 spawnPosition = playerCenter + direction * (Player.Player.PLAYER_WIDTH / 2 + 5);
 
             CurrentMana -= manaCost;
@@ -193,7 +194,7 @@ namespace Claude4_5Terraria.Systems
         private void TrySummon(ItemType staff, MouseState mouseState)
         {
             float manaCost;
-            
+
             switch (staff)
             {
                 case ItemType.WoodSummonStaff:
@@ -228,7 +229,7 @@ namespace Claude4_5Terraria.Systems
 
         public float GetCurrentMana() => CurrentMana;
         public float GetMaxMana() => MaxMana;
-        
+
         public void RestoreMana()
         {
             CurrentMana = MaxMana;

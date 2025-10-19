@@ -205,6 +205,86 @@ namespace StarshroudHollows.Systems
             platinumWall.AddIngredient(ItemType.PlatinumBar, 1);
             recipes.Add(platinumWall);
 
+            // ===== ARMOR RECIPES =====
+            
+            // WOOD ARMOR (Wood Bench Required)
+            Recipe woodHelmet = new Recipe(ItemType.WoodHelmet, 1, requiresWoodBench: true);
+            woodHelmet.AddIngredient(ItemType.Wood, 20);
+            recipes.Add(woodHelmet);
+            
+            Recipe woodChestplate = new Recipe(ItemType.WoodChestplate, 1, requiresWoodBench: true);
+            woodChestplate.AddIngredient(ItemType.Wood, 30);
+            recipes.Add(woodChestplate);
+            
+            Recipe woodLeggings = new Recipe(ItemType.WoodLeggings, 1, requiresWoodBench: true);
+            woodLeggings.AddIngredient(ItemType.Wood, 25);
+            recipes.Add(woodLeggings);
+            
+            // COPPER ARMOR (Copper Bench Required)
+            Recipe copperHelmet = new Recipe(ItemType.CopperHelmet, 1, requiresCopperBench: true);
+            copperHelmet.AddIngredient(ItemType.CopperBar, 15);
+            recipes.Add(copperHelmet);
+            
+            Recipe copperChestplate = new Recipe(ItemType.CopperChestplate, 1, requiresCopperBench: true);
+            copperChestplate.AddIngredient(ItemType.CopperBar, 25);
+            recipes.Add(copperChestplate);
+            
+            Recipe copperLeggings = new Recipe(ItemType.CopperLeggings, 1, requiresCopperBench: true);
+            copperLeggings.AddIngredient(ItemType.CopperBar, 20);
+            recipes.Add(copperLeggings);
+            
+            // IRON ARMOR (Copper Bench Required)
+            Recipe ironHelmet = new Recipe(ItemType.IronHelmet, 1, requiresCopperBench: true);
+            ironHelmet.AddIngredient(ItemType.IronBar, 15);
+            recipes.Add(ironHelmet);
+            
+            Recipe ironChestplate = new Recipe(ItemType.IronChestplate, 1, requiresCopperBench: true);
+            ironChestplate.AddIngredient(ItemType.IronBar, 25);
+            recipes.Add(ironChestplate);
+            
+            Recipe ironLeggings = new Recipe(ItemType.IronLeggings, 1, requiresCopperBench: true);
+            ironLeggings.AddIngredient(ItemType.IronBar, 20);
+            recipes.Add(ironLeggings);
+            
+            // SILVER ARMOR (Copper Bench Required)
+            Recipe silverHelmet = new Recipe(ItemType.SilverHelmet, 1, requiresCopperBench: true);
+            silverHelmet.AddIngredient(ItemType.SilverBar, 18);
+            recipes.Add(silverHelmet);
+            
+            Recipe silverChestplate = new Recipe(ItemType.SilverChestplate, 1, requiresCopperBench: true);
+            silverChestplate.AddIngredient(ItemType.SilverBar, 30);
+            recipes.Add(silverChestplate);
+            
+            Recipe silverLeggings = new Recipe(ItemType.SilverLeggings, 1, requiresCopperBench: true);
+            silverLeggings.AddIngredient(ItemType.SilverBar, 24);
+            recipes.Add(silverLeggings);
+            
+            // GOLD ARMOR (Copper Bench Required)
+            Recipe goldHelmet = new Recipe(ItemType.GoldHelmet, 1, requiresCopperBench: true);
+            goldHelmet.AddIngredient(ItemType.GoldBar, 18);
+            recipes.Add(goldHelmet);
+            
+            Recipe goldChestplate = new Recipe(ItemType.GoldChestplate, 1, requiresCopperBench: true);
+            goldChestplate.AddIngredient(ItemType.GoldBar, 30);
+            recipes.Add(goldChestplate);
+            
+            Recipe goldLeggings = new Recipe(ItemType.GoldLeggings, 1, requiresCopperBench: true);
+            goldLeggings.AddIngredient(ItemType.GoldBar, 24);
+            recipes.Add(goldLeggings);
+            
+            // PLATINUM ARMOR (Copper Bench Required) - Best Tier!
+            Recipe platinumHelmet = new Recipe(ItemType.PlatinumHelmet, 1, requiresCopperBench: true);
+            platinumHelmet.AddIngredient(ItemType.PlatinumBar, 20);
+            recipes.Add(platinumHelmet);
+            
+            Recipe platinumChestplate = new Recipe(ItemType.PlatinumChestplate, 1, requiresCopperBench: true);
+            platinumChestplate.AddIngredient(ItemType.PlatinumBar, 35);
+            recipes.Add(platinumChestplate);
+            
+            Recipe platinumLeggings = new Recipe(ItemType.PlatinumLeggings, 1, requiresCopperBench: true);
+            platinumLeggings.AddIngredient(ItemType.PlatinumBar, 28);
+            recipes.Add(platinumLeggings);
+
             // Note: Magic chests are NOT craftable - they can only be found
             // Note: Runic pickaxe is NOT craftable - only found in Magic chests
             // Note: Troll Bars and Troll Club are boss drops only

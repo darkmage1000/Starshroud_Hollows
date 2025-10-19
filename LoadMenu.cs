@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
 
-namespace Claude4_5Terraria.UI
+namespace StarshroudHollows.UI
 {
     public class LoadMenu
     {

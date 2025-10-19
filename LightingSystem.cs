@@ -1,13 +1,13 @@
 ﻿using Microsoft.Xna.Framework;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Enums;
 using System;
 using System.Collections.Generic;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class LightingSystem
     {
-        private World.World world;
+        private StarshroudHollows.World.World world;
         private TimeSystem timeSystem;
 
         private const float TORCH_RADIUS = 12f;  // Increased radius
@@ -30,7 +30,7 @@ namespace Claude4_5Terraria.Systems
         private const float SUMMON_BRIGHTNESS = 0.8f;
 
 
-        public LightingSystem(World.World world, TimeSystem timeSystem)
+        public LightingSystem(StarshroudHollows.World.World world, TimeSystem timeSystem)
         {
             this.world = world;
             this.timeSystem = timeSystem;
@@ -71,8 +71,8 @@ namespace Claude4_5Terraria.Systems
             torchPositions.Clear();
             lavaPositions.Clear();
 
-            int cameraTileX = (int)(cameraPosition.X / World.World.TILE_SIZE);
-            int cameraTileY = (int)(cameraPosition.Y / World.World.TILE_SIZE);
+            int cameraTileX = (int)(cameraPosition.X / StarshroudHollows.World.World.TILE_SIZE);
+            int cameraTileY = (int)(cameraPosition.Y / StarshroudHollows.World.World.TILE_SIZE);
 
             int checkRadius = 30;
 
@@ -209,8 +209,8 @@ namespace Claude4_5Terraria.Systems
             if (isPlayerLightActive)
             {
                 // Convert world position to tile position for light path calculation
-                int playerTileX = (int)(playerLightWorldPosition.X / World.World.TILE_SIZE);
-                int playerTileY = (int)(playerLightWorldPosition.Y / World.World.TILE_SIZE);
+                int playerTileX = (int)(playerLightWorldPosition.X / StarshroudHollows.World.World.TILE_SIZE);
+                int playerTileY = (int)(playerLightWorldPosition.Y / StarshroudHollows.World.World.TILE_SIZE);
 
                 float distance = (float)Math.Sqrt(
                     Math.Pow(tileX - playerTileX, 2) +
@@ -275,8 +275,8 @@ namespace Claude4_5Terraria.Systems
             foreach (Vector2 summonWorldPos in summonLightPositions)
             {
                 // Convert summon world position to tile position
-                int summonTileX = (int)(summonWorldPos.X / World.World.TILE_SIZE);
-                int summonTileY = (int)(summonWorldPos.Y / World.World.TILE_SIZE);
+                int summonTileX = (int)(summonWorldPos.X / StarshroudHollows.World.World.TILE_SIZE);
+                int summonTileY = (int)(summonWorldPos.Y / StarshroudHollows.World.World.TILE_SIZE);
                 
                 float distance = (float)Math.Sqrt(
                     Math.Pow(tileX - summonTileX, 2) +

@@ -74,6 +74,13 @@ namespace StarshroudHollows.Systems
         {
             timeOfDay = time;
         }
+        
+        // Set first night completed (added for save/load)
+        public void SetFirstNightCompleted()
+        {
+            hasCompletedFirstNight = true;
+            isFirstNight = false;
+        }
 
         // Get current time as 0.0 to 1.0
         public float GetTimeOfDay()
@@ -182,7 +189,18 @@ namespace StarshroudHollows.Systems
             timeOfDay = 0.25f;
             // Stop rain when sleeping
             isRaining = false;
-            Logger.Log("[TIME] Advanced to morning (6:00 AM)");
+            
+            // CRITICAL: Mark first night as complete when sleeping
+            if (isFirstNight)
+            {
+                hasCompletedFirstNight = true;
+                isFirstNight = false;
+                Logger.Log("[TIME] First night survived by sleeping! The Starling Guide may arrive if you build a suitable house.");
+            }
+            else
+            {
+                Logger.Log("[TIME] Advanced to morning (6:00 AM)");
+            }
         }
     }
 }

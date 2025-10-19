@@ -96,33 +96,56 @@ namespace StarshroudHollows.Systems.Summons
 
             Vector2 desiredPosition = Position + direction * speed * deltaTime;
 
-            // Try direct path first
+            // IMPROVED: Try direct path first
             if (CanMoveTo(desiredPosition, world))
             {
                 Position = desiredPosition;
                 return;
             }
 
-            // If blocked, try sliding along walls (perpendicular movement)
-            Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
-            Vector2 slideRight = Position + perpendicular * speed * deltaTime;
-            Vector2 slideLeft = Position - perpendicular * speed * deltaTime;
+            // IMPROVED: Smart obstacle avoidance - try multiple angles
+            // Try 8 directions around the obstacle
+            float[] angles = { 45f, -45f, 90f, -90f, 135f, -135f, 22.5f, -22.5f };
             
-            if (CanMoveTo(slideRight, world))
+            foreach (float angle in angles)
             {
-                Position = slideRight;
-            }
-            else if (CanMoveTo(slideLeft, world))
-            {
-                Position = slideLeft;
-            }
-            else
-            {
-                // Try moving up if both sides blocked
-                Vector2 moveUp = Position + new Vector2(0, -speed * deltaTime);
-                if (CanMoveTo(moveUp, world))
+                float radians = MathHelper.ToRadians(angle);
+                Vector2 rotatedDir = new Vector2(
+                    direction.X * (float)Math.Cos(radians) - direction.Y * (float)Math.Sin(radians),
+                    direction.X * (float)Math.Sin(radians) + direction.Y * (float)Math.Cos(radians)
+                );
+                
+                Vector2 newPos = Position + rotatedDir * speed * deltaTime;
+                if (CanMoveTo(newPos, world))
                 {
-                    Position = moveUp;
+                    Position = newPos;
+                    return;
+                }
+            }
+
+            // IMPROVED: If completely stuck, try moving straight up (phase through)
+            Vector2 moveUp = Position + new Vector2(0, -speed * deltaTime * 2f);
+            if (CanMoveTo(moveUp, world))
+            {
+                Position = moveUp;
+                return;
+            }
+            
+            // Last resort: Try moving in any cardinal direction
+            Vector2[] escapeDirections = {
+                new Vector2(1, 0),
+                new Vector2(-1, 0),
+                new Vector2(0, 1),
+                new Vector2(0, -1)
+            };
+            
+            foreach (Vector2 escapeDir in escapeDirections)
+            {
+                Vector2 escapePos = Position + escapeDir * speed * deltaTime;
+                if (CanMoveTo(escapePos, world))
+                {
+                    Position = escapePos;
+                    return;
                 }
             }
         }

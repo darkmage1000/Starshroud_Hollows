@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public static class Logger
     {

@@ -44,6 +44,7 @@ namespace StarshroudHollows.Entities
         private float stuckTimer = 0f;
         private const float STUCK_THRESHOLD = 2.0f; // If stuck for 2 seconds, try alternative
         private Vector2 lastPosition;
+        private bool facingRight = true; // NEW: Track facing direction for sprite flipping
 
         private StarshroudHollows.World.World world;
 
@@ -125,6 +126,8 @@ namespace StarshroudHollows.Entities
             if (distanceToPlayer > 5)
             {
                 velocity.X = directionToPlayer.X > 0 ? MOVE_SPEED : -MOVE_SPEED;
+                // NEW: Update facing direction based on movement
+                facingRight = directionToPlayer.X > 0;
             }
             else
             {
@@ -280,7 +283,18 @@ namespace StarshroudHollows.Entities
 
             if (zombieSprite != null)
             {
-                spriteBatch.Draw(zombieSprite, GetHitbox(), Color.White);
+                // NEW: Flip sprite based on facing direction
+                SpriteEffects spriteEffect = facingRight ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
+                spriteBatch.Draw(
+                    zombieSprite, 
+                    GetHitbox(), 
+                    null,
+                    Color.White, 
+                    0f, 
+                    Vector2.Zero, 
+                    spriteEffect, 
+                    0f
+                );
             }
             else
             {

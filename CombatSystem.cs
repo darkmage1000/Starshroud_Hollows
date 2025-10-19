@@ -1,11 +1,11 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Enums;
 using System;
 using System.Collections.Generic; // Add this for List
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class CombatSystem
     {

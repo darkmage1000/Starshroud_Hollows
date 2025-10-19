@@ -11,6 +11,7 @@ namespace StarshroudHollows.Systems
         private StarshroudHollows.World.World world;
         private int seed;
         private ChestSystem chestSystem;
+        private System.Collections.Generic.HashSet<Point> modifiedTilePositions; // NEW: Track player-modified tiles
 
         private const int SURFACE_LEVEL = 200;
         private const int DIRT_LAYER_THICKNESS = 10;
@@ -32,6 +33,14 @@ namespace StarshroudHollows.Systems
             this.seed = seed == 0 ? Environment.TickCount : seed;
             this.random = new Random(this.seed);
             this.chestSystem = chestSystem;
+            this.modifiedTilePositions = new System.Collections.Generic.HashSet<Point>();
+        }
+        
+        // NEW: Set modified tile positions before generation to prevent tree spawning
+        public void SetModifiedTilePositions(System.Collections.Generic.HashSet<Point> positions)
+        {
+            modifiedTilePositions = positions ?? new System.Collections.Generic.HashSet<Point>();
+            Logger.Log($"[WORLDGEN] Loaded {modifiedTilePositions.Count} modified tile positions to protect from tree spawning");
         }
 
         public void Generate()
@@ -1071,6 +1080,21 @@ namespace StarshroudHollows.Systems
 
         private void PlaceTree(int baseX, int baseY)
         {
+            // CRITICAL: Don't place trees in areas with modified tiles (player buildings)
+            int treeRadius = 5; // Check 5 tiles around tree base
+            for (int dx = -treeRadius; dx <= treeRadius; dx++)
+            {
+                for (int dy = -15; dy <= 2; dy++) // Check from trunk to canopy height
+                {
+                    Point checkPos = new Point(baseX + dx, baseY + dy);
+                    if (modifiedTilePositions.Contains(checkPos))
+                    {
+                        // This area has been modified by the player - don't place tree
+                        return;
+                    }
+                }
+            }
+            
             int trunkHeight = random.Next(8, 15);
             var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight);
             for (int y = 0; y < trunkHeight; y++)

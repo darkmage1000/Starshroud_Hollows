@@ -1,11 +1,11 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Claude4_5Terraria.Enums;
-using Claude4_5Terraria.Systems;
+using StarshroudHollows.Enums;
+using StarshroudHollows.Systems;
 using System;
 
-namespace Claude4_5Terraria.UI
+namespace StarshroudHollows.UI
 {
     public class ChestUI
     {
@@ -23,14 +23,14 @@ namespace Claude4_5Terraria.UI
         private MouseState previousMouseState;
 
         // NEW: Field to hold a reference to the World
-        private World.World worldRef;
+        private StarshroudHollows.World.World worldRef;
         
         // NEW: Chest name editing
         private bool isEditingName = false;
         private string editNameText = "";
         private KeyboardState previousKeyState;
 
-        public ChestUI(World.World world)
+        public ChestUI(StarshroudHollows.World.World world)
         {
             isOpen = false;
             previousMouseState = Mouse.GetState();

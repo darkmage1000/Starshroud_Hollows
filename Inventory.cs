@@ -81,6 +81,29 @@ namespace StarshroudHollows.Systems
             return totalCount >= amount;
         }
 
+        public bool CanAddItem(ItemType itemType, int amount)
+        {
+            // Check if we can stack with existing items
+            for (int i = 0; i < INVENTORY_SIZE; i++)
+            {
+                if (slots[i].ItemType == itemType && !slots[i].IsEmpty())
+                {
+                    return true; // Can always stack
+                }
+            }
+
+            // Check if we have empty slots
+            for (int i = 0; i < INVENTORY_SIZE; i++)
+            {
+                if (slots[i].IsEmpty())
+                {
+                    return true;
+                }
+            }
+
+            return false; // Inventory is full
+        }
+
         public bool RemoveItem(ItemType itemType, int amount)
         {
             if (!HasItem(itemType, amount))

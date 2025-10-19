@@ -1,33 +1,35 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.Entities;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Entities;
+using StarshroudHollows.Enums;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+// FIX: Fully qualify the Player class to avoid ambiguity with the Player namespace.
+using StarshroudHollows.Player;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public class EnemySpawner
     {
         private List<Enemy> activeOozes;
         private List<Zombie> activeZombies;
         private Random random;
-        private World.World world;
+        private StarshroudHollows.World.World world;
 
-        private const int MAX_OOZES = 3;
-        private const int MAX_ZOMBIES_ON_SCREEN = 5;
-        private const float SPAWN_INTERVAL_MIN = 15.0f;  // Increased from 5.0f
-        private const float SPAWN_INTERVAL_MAX = 30.0f;  // Increased from 10.0f
+        private const int MAX_OOZES = 2;  // Reduced from 3
+        private const int MAX_ZOMBIES_ON_SCREEN = 3;  // Reduced from 5
+        private const float SPAWN_INTERVAL_MIN = 30.0f;  // Increased from 15.0f - spawn every 30-60 seconds
+        private const float SPAWN_INTERVAL_MAX = 60.0f;  // Increased from 30.0f
         private float oozeSpawnTimer;
         private float nextOozeSpawnTime;
-        
+
         private float zombieSpawnTimer;
-        private const float ZOMBIE_SPAWN_INTERVAL = 20.0f; // Increased from 8.0f - Check for zombie spawns every 20 seconds
-        
+        private const float ZOMBIE_SPAWN_INTERVAL = 45.0f; // Increased from 20.0f - Check for zombie spawns every 45 seconds
+
         private const int SPAWN_DISTANCE = 200;
 
-        public EnemySpawner(World.World world)
+        public EnemySpawner(StarshroudHollows.World.World world)
         {
             this.world = world;
             activeOozes = new List<Enemy>();
@@ -89,7 +91,7 @@ namespace Claude4_5Terraria.Systems
             if (zombieSpawnTimer >= ZOMBIE_SPAWN_INTERVAL)
             {
                 zombieSpawnTimer = 0f;
-                
+
                 int currentZombiesOnScreen = CountZombiesOnScreen(cameraView);
                 if (currentZombiesOnScreen < MAX_ZOMBIES_ON_SCREEN)
                 {
@@ -98,7 +100,7 @@ namespace Claude4_5Terraria.Systems
                     {
                         TrySpawnSurfaceZombie(playerPosition, cameraView);
                     }
-                    
+
                     // Try underground spawn (anytime)
                     TrySpawnUndergroundZombie(playerPosition, cameraView);
                 }
@@ -120,16 +122,16 @@ namespace Claude4_5Terraria.Systems
         {
             bool spawnLeft = random.Next(0, 2) == 0;
             int spawnX = spawnLeft ? cameraView.Left - SPAWN_DISTANCE : cameraView.Right + SPAWN_DISTANCE;
-            
-            int spawnTileX = spawnX / World.World.TILE_SIZE;
+
+            int spawnTileX = spawnX / StarshroudHollows.World.World.TILE_SIZE;
             int surfaceY = world.GetSurfaceHeight(spawnTileX);
-            
+
             if (surfaceY < 5)
             {
-                surfaceY = (int)(playerPosition.Y / World.World.TILE_SIZE);
+                surfaceY = (int)(playerPosition.Y / StarshroudHollows.World.World.TILE_SIZE);
             }
 
-            Vector2 spawnPosition = new Vector2(spawnX, (surfaceY - 2) * World.World.TILE_SIZE);
+            Vector2 spawnPosition = new Vector2(spawnX, (surfaceY - 2) * StarshroudHollows.World.World.TILE_SIZE);
             Enemy newEnemy = new Enemy(spawnPosition, world);
             activeOozes.Add(newEnemy);
 
@@ -141,16 +143,16 @@ namespace Claude4_5Terraria.Systems
             // Spawn off-screen on surface at night
             bool spawnLeft = random.Next(0, 2) == 0;
             int spawnX = spawnLeft ? cameraView.Left - SPAWN_DISTANCE : cameraView.Right + SPAWN_DISTANCE;
-            
-            int spawnTileX = spawnX / World.World.TILE_SIZE;
+
+            int spawnTileX = spawnX / StarshroudHollows.World.World.TILE_SIZE;
             int surfaceY = world.GetSurfaceHeight(spawnTileX);
-            
+
             if (surfaceY < 5)
             {
                 return; // Invalid spawn location
             }
 
-            Vector2 spawnPosition = new Vector2(spawnX, (surfaceY - 2) * World.World.TILE_SIZE);
+            Vector2 spawnPosition = new Vector2(spawnX, (surfaceY - 2) * StarshroudHollows.World.World.TILE_SIZE);
             Zombie newZombie = new Zombie(spawnPosition, world, true);
             activeZombies.Add(newZombie);
 
@@ -160,7 +162,7 @@ namespace Claude4_5Terraria.Systems
         private void TrySpawnUndergroundZombie(Vector2 playerPosition, Rectangle cameraView)
         {
             // Try to find a dark underground cave within camera view
-            int tileSize = World.World.TILE_SIZE;
+            int tileSize = StarshroudHollows.World.World.TILE_SIZE;
             int attempts = 0;
             const int MAX_ATTEMPTS = 10;
 
@@ -171,7 +173,7 @@ namespace Claude4_5Terraria.Systems
                 // Random position within extended camera view
                 int spawnX = random.Next(cameraView.Left - SPAWN_DISTANCE, cameraView.Right + SPAWN_DISTANCE);
                 int spawnY = random.Next(cameraView.Top, cameraView.Bottom + SPAWN_DISTANCE);
-                
+
                 int tileX = spawnX / tileSize;
                 int tileY = spawnY / tileSize;
 
@@ -300,7 +302,7 @@ namespace Claude4_5Terraria.Systems
             }
         }
 
-        public void CheckPlayerCollisions(Vector2 playerPosition, int playerWidth, int playerHeight, Claude4_5Terraria.Player.Player player)
+        public void CheckPlayerCollisions(Vector2 playerPosition, int playerWidth, int playerHeight, StarshroudHollows.Player.Player player)
         {
             Rectangle playerHitbox = new Rectangle((int)playerPosition.X, (int)playerPosition.Y, playerWidth, playerHeight);
 

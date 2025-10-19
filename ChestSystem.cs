@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Claude4_5Terraria.Enums;
+using StarshroudHollows.Enums;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     // === NOTE: This file assumes ChestItemData and ChestData are correctly defined in SaveData.cs. ===
 

@@ -16,7 +16,7 @@ namespace StarshroudHollows.Player
         public bool HasBedSpawn { get; private set; }
         private DateTime lastSpawnSetTime;
         private const float SPAWN_MESSAGE_DURATION = 5.0f;
-
+        public float Scale { get; set; } = 1f;  // Uniform scale factor (or Vector2 for non-uniform)
         public float Health { get; private set; }
         public float MaxHealth { get; private set; }
         private float lavaDamageTimer = 0f;
@@ -52,17 +52,11 @@ namespace StarshroudHollows.Player
         private float animationTimer = 0f;
         private const float FRAME_TIME = 0.12f;
 
-        private const int FRAME_WIDTH = 128;
-        private const int FRAME_HEIGHT = 128;
-        private const int FRAMES_PER_ROW = 6;
-
-        private const int IDLE_DOWN_ROW = 0;
-        private const int IDLE_LEFT_ROW = 1;
-        private const int IDLE_RIGHT_ROW = 2;
-        private const int IDLE_UP_ROW = 3;
-
-        private int currentAnimationRow = IDLE_DOWN_ROW;
-        private const float SPRITE_SCALE = 2.0f;
+        // Single frame sprite - scaled to fit player hitbox properly
+        // Sprite is 250x450, we want 2 blocks tall (64 pixels)
+        // Scale: 64 / 450 = 0.142
+        private const float SPRITE_SCALE_X = 0.23f;  // Player width scale
+        private const float SPRITE_SCALE_Y = 0.142f; // Player height scale (2 blocks tall)
 
         private float itemAnimTimer = 0f;
         private const float ITEM_ANIM_SPEED = 0.15f;
@@ -164,14 +158,11 @@ namespace StarshroudHollows.Player
             {
                 StarshroudHollows.Systems.Logger.Log($"Spritesheet loaded successfully!");
                 StarshroudHollows.Systems.Logger.Log($"Full dimensions: {spriteSheet.Width} x {spriteSheet.Height} pixels");
-                StarshroudHollows.Systems.Logger.Log($"Frame size we're using: {FRAME_WIDTH} x {FRAME_HEIGHT}");
-
-                int framesWide = spriteSheet.Width / FRAME_WIDTH;
-                int framesTall = spriteSheet.Height / FRAME_HEIGHT;
-                StarshroudHollows.Systems.Logger.Log($"Frames that fit: {framesWide} wide x {framesTall} tall = {framesWide * framesTall} total");
-
-                StarshroudHollows.Systems.Logger.Log($"Frame [0,0] will grab: X={0} Y={0} Width={FRAME_WIDTH} Height={FRAME_HEIGHT}");
-                StarshroudHollows.Systems.Logger.Log($"This is pixels from top-left corner: (0,0) to ({FRAME_WIDTH},{FRAME_HEIGHT})");
+                
+                // Calculate scale for 2 blocks tall (64 pixels)
+                float calculatedScaleY = 64f / spriteSheet.Height;
+                StarshroudHollows.Systems.Logger.Log($"Calculated scale for 2 blocks: Y={calculatedScaleY:F3} (current: {SPRITE_SCALE_Y:F3})");
+                StarshroudHollows.Systems.Logger.Log($"Current visual height: {spriteSheet.Height * SPRITE_SCALE_Y:F1} pixels");
             }
             else
             {
@@ -485,20 +476,7 @@ namespace StarshroudHollows.Player
 
         private void UpdateAnimation(float deltaTime)
         {
-            animationTimer += deltaTime;
-
-            if (animationTimer >= FRAME_TIME)
-            {
-                animationTimer -= FRAME_TIME;
-                currentFrame++;
-
-                if (currentFrame >= 6)
-                {
-                    currentFrame = 0;
-                }
-            }
-
-            currentAnimationRow = IDLE_DOWN_ROW;
+            // No animation - single frame sprite
         }
 
         private void UpdateItemAnimation(float deltaTime)
@@ -603,13 +581,24 @@ namespace StarshroudHollows.Player
             // Draw the player sprite
             if (spriteSheet != null)
             {
-                Rectangle playerSourceRect = new Rectangle(currentFrame * FRAME_WIDTH, currentAnimationRow * FRAME_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT);
-                Vector2 playerDrawPosition = new Vector2(Position.X + Player.PLAYER_WIDTH / 2, Position.Y + Player.PLAYER_HEIGHT / 2);
-                Vector2 playerOrigin = new Vector2(FRAME_WIDTH / 2f, FRAME_HEIGHT / 2f);
+                // Use entire sprite as single frame (1028x1028)
+                Rectangle playerSourceRect = new Rectangle(0, 0, spriteSheet.Width, spriteSheet.Height);
+                
+                // Calculate the scaled sprite dimensions to fit player hitbox with non-uniform scaling
+                float scaledWidth = spriteSheet.Width * SPRITE_SCALE_X;
+                float scaledHeight = spriteSheet.Height * SPRITE_SCALE_Y;
+                
+                // Center the sprite on the player's hitbox position
+                Vector2 playerDrawPosition = new Vector2(
+                    Position.X + (Player.PLAYER_WIDTH / 2) - (scaledWidth / 2),
+                    Position.Y + Player.PLAYER_HEIGHT - scaledHeight
+                );
+                
                 SpriteEffects playerFlip = facingRight ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
-                float playerScale = Player.PLAYER_HEIGHT / (float)FRAME_HEIGHT;
-
-                spriteBatch.Draw(spriteSheet, playerDrawPosition, playerSourceRect, Color.White, 0f, playerOrigin, playerScale, playerFlip, 0f);
+                
+                // Use Vector2 for non-uniform scale
+                Vector2 scale = new Vector2(SPRITE_SCALE_X, SPRITE_SCALE_Y);
+                spriteBatch.Draw(spriteSheet, playerDrawPosition, playerSourceRect, Color.White, 0f, Vector2.Zero, scale, playerFlip, 0f);
             }
             else // Fallback drawing
             {
@@ -632,7 +621,7 @@ namespace StarshroudHollows.Player
                 // --- LOGIC FOR DIFFERENT ITEM TYPES ---
                 if (heldItemType >= ItemType.WoodPickaxe && heldItemType <= ItemType.RunicPickaxe)
                 {
-                    scale = 1.7f;
+                    scale = 0.5f; // Reduced from 1.7f to 0.5f
                     float idleAngle = facingRight ? MathHelper.ToRadians(-45) : MathHelper.ToRadians(45);
                     float backswingAngle = facingRight ? MathHelper.ToRadians(-120) : MathHelper.ToRadians(120);
                     float impactAngle = facingRight ? MathHelper.ToRadians(80) : MathHelper.ToRadians(-80);
@@ -652,7 +641,7 @@ namespace StarshroudHollows.Player
                 }
                 else if (heldItemType >= ItemType.WoodSword && heldItemType <= ItemType.RunicSword)
                 {
-                    scale = 0.6f;
+                    scale = 0.35f; // Reduced from 0.6f to 0.35f
                     if (animationFrame == 1) rotation = facingRight ? MathHelper.PiOver4 * 2.8f : -MathHelper.PiOver4 * 1.2f;
                     else if (animationFrame == 2) rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 2.5f;
                     else rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 0.5f;
@@ -669,7 +658,7 @@ namespace StarshroudHollows.Player
                 }
                 else if (heldItemType >= ItemType.WoodWand && heldItemType <= ItemType.RunicLaserWand)
                 {
-                    scale = 0.5f;
+                    scale = 0.3f; // Reduced from 0.5f to 0.3f
                     rotation = 0f;
                     if (heldItemType == ItemType.RunicLaserWand)
                     {
@@ -683,10 +672,11 @@ namespace StarshroudHollows.Player
                 }
                 else if (heldItemType == ItemType.Torch)
                 {
-                    scale = 0.6f;
+                    scale = 0.4f; // Reduced from 0.6f to 0.4f
                     rotation = 0f;
                     flip = SpriteEffects.None;
                 }
+                // Default case for other items is already set
                 // Default case for other items is already set
 
                 // --- FINAL DRAW CALL FOR THE ITEM ---

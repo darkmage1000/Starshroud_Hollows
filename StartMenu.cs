@@ -1,10 +1,10 @@
-﻿using Claude4_5Terraria.Systems;
+﻿using StarshroudHollows.Systems;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
 
-namespace Claude4_5Terraria.UI
+namespace StarshroudHollows.UI
 {
     public enum MenuState
     {

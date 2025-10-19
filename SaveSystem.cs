@@ -1,9 +1,10 @@
 ﻿using System;
 using System.IO;
+using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Xna.Framework;
 
-namespace Claude4_5Terraria.Systems
+namespace StarshroudHollows.Systems
 {
     public static class SaveSystem
     {
@@ -94,17 +95,32 @@ namespace Claude4_5Terraria.Systems
             try
             {
                 string savePath = GetSaveFilePath(slotIndex);
+                
+                Logger.Log($"[SAVE] Serializing data to JSON...");
+                Logger.Log($"[SAVE] Save Name: {data.SaveName}");
+                Logger.Log($"[SAVE] Player Position: ({data.PlayerPositionX}, {data.PlayerPositionY})");
+                Logger.Log($"[SAVE] Inventory Slots: {data.InventorySlots.Count}");
+                Logger.Log($"[SAVE] Chests: {data.Chests.Count}");
+                
                 string json = JsonSerializer.Serialize(data, new JsonSerializerOptions
                 {
-                    WriteIndented = true
+                    WriteIndented = true  // Make it readable for debugging
                 });
-
+                
+                Logger.Log($"[SAVE] JSON size: {json.Length} bytes");
+                Logger.Log($"[SAVE] Writing to file: {savePath}");
+                
+                // Write directly without compression for debugging
                 File.WriteAllText(savePath, json);
-                Logger.Log($"[SAVE] Game saved to slot {slotIndex + 1}: {savePath}");
+                
+                FileInfo fileInfo = new FileInfo(savePath);
+                Logger.Log($"[SAVE] File size: {fileInfo.Length} bytes");
+                Logger.Log($"[SAVE] ✅ Game saved successfully to slot {slotIndex + 1}");
             }
             catch (Exception ex)
             {
-                Logger.Log($"[SAVE] Error saving game: {ex.Message}");
+                Logger.Log($"[SAVE] ❌ ERROR saving game: {ex.Message}");
+                Logger.Log($"[SAVE] Stack trace: {ex.StackTrace}");
             }
         }
 
@@ -123,20 +139,27 @@ namespace Claude4_5Terraria.Systems
 
                 if (!File.Exists(savePath))
                 {
-                    // Only log when actually trying to load, not during UI checks
                     Logger.Log($"[SAVE] No save file found in slot {slotIndex + 1}");
                     return null;
                 }
 
+                Logger.Log($"[SAVE] Reading save file from: {savePath}");
+                
+                // Read directly without decompression
                 string json = File.ReadAllText(savePath);
+                
+                Logger.Log($"[SAVE] Deserializing JSON...");
                 SaveData data = JsonSerializer.Deserialize<SaveData>(json);
 
-                Logger.Log($"[SAVE] Game loaded from slot {slotIndex + 1}");
+                Logger.Log($"[SAVE] ✅ Game loaded from slot {slotIndex + 1}");
+                Logger.Log($"[SAVE] Save Name: {data.SaveName}");
+                Logger.Log($"[SAVE] Player Position: ({data.PlayerPositionX}, {data.PlayerPositionY})");
                 return data;
             }
             catch (Exception ex)
             {
-                Logger.Log($"[SAVE] Error loading game: {ex.Message}");
+                Logger.Log($"[SAVE] ❌ ERROR loading game: {ex.Message}");
+                Logger.Log($"[SAVE] Stack trace: {ex.StackTrace}");
                 return null;
             }
         }

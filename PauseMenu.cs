@@ -1,10 +1,11 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using StarshroudHollows.UI;
 using System;
 using System.Collections.Generic;
 
-namespace Claude4_5Terraria.UI
+namespace StarshroudHollows.UI
 {
     public class PauseMenu
     {

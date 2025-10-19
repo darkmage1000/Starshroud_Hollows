@@ -2,9 +2,9 @@
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
-using Claude4_5Terraria.Systems;
+using StarshroudHollows.Systems;
 
-namespace Claude4_5Terraria.UI
+namespace StarshroudHollows.UI
 {
     public class SaveMenu
     {

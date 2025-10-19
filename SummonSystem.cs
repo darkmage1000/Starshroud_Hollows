@@ -1,10 +1,10 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.Interfaces; // Using the interface
+using StarshroudHollows.Interfaces; // Using the interface
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Claude4_5Terraria.Systems.Summons
+namespace StarshroudHollows.Systems.Summons
 {
     public class SummonSystem
     {
@@ -21,7 +21,7 @@ namespace Claude4_5Terraria.Systems.Summons
 
         public void LoadTextures(Texture2D echoWisp)
         {
-            this.echoWispTexture = echoWisp;
+            echoWispTexture = echoWisp;
         }
 
         public bool SummonEchoWisp(Vector2 position)

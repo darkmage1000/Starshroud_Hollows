@@ -1,18 +1,19 @@
+using Microsoft.VisualBasic;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Audio;
+using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
+using Microsoft.Xna.Framework.Media;
 using StarshroudHollows.Entities;
+using StarshroudHollows.Enums;
 using StarshroudHollows.Player;
 using StarshroudHollows.Systems;
 using StarshroudHollows.UI;
 using StarshroudHollows.World;
-using StarshroudHollows.Enums;
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
-using Microsoft.Xna.Framework.Media;
-using Microsoft.Xna.Framework.Audio;
 using System;
-using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace StarshroudHollows
 {
@@ -30,6 +31,7 @@ namespace StarshroudHollows
         private Texture2D zombieEnemyTexture;
         private Texture2D echoWispTexture;
         private Texture2D caveTrollBossTexture;
+        private Texture2D playerSpriteSheet;
         private SpriteFont font;
         private Texture2D menuBackgroundTexture;
         private Inventory inventory;
@@ -47,6 +49,7 @@ namespace StarshroudHollows
         private ProjectileSystem projectileSystem;
         private Systems.Summons.SummonSystem summonSystem;
         private Systems.Housing.HousingSystem housingSystem;
+        private ArmorSystem armorSystem;
         private InventoryUI inventoryUI;
         private PauseMenu pauseMenu;
         private MiningOverlay miningOverlay;
@@ -54,6 +57,7 @@ namespace StarshroudHollows
         private SaveMenu saveMenu;
         private HUD hud;
         private ChestUI chestUI;
+        private DialogueUI dialogueUI;
         private KeyboardState previousKeyboardState;
         private MouseState previousMouseState;
         private Song backgroundMusic;
@@ -77,6 +81,10 @@ namespace StarshroudHollows
         private float healthPotionCooldown = 0f;
         private const float HEALTH_POTION_COOLDOWN_TIME = 30f;
         private const float HEALTH_POTION_HEAL_AMOUNT = 30f;
+        private float bedSleepTimer = 0f;
+        private const float BED_SLEEP_DURATION = 2f; // Hold E for 2 seconds
+        private float doorToggleCooldown = 0f;
+        private const float DOOR_TOGGLE_COOLDOWN = 0.3f; // Prevent spam-toggling
         #endregion
 
         public Game1()
@@ -108,11 +116,21 @@ namespace StarshroudHollows
             pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
             pixelTexture.SetData(new[] { Color.White });
 
+            try
+            {
+                playerSpriteSheet = Content.Load<Texture2D>("playersprite");  // Your 1028x1028 PNG
+                Logger.Log("[SUCCESS] Loaded player sprite sheet.");
+                               
+                
+               
+            }
+            catch { Logger.Log("[ERROR] Failed to load player sprite!"); }
+
+            // Rest of your code unchanged
             try { oozeEnemyTexture = Content.Load<Texture2D>("OozeEnemy"); } catch { }
-            try { zombieEnemyTexture = Content.Load<Texture2D>("ZombieEnemy"); } catch { }
+            try { zombieEnemyTexture = Content.Load<Texture2D>("ForestZombieSprite"); } catch { }
             try { echoWispTexture = Content.Load<Texture2D>("EchoWispSummon"); } catch { }
             try { caveTrollBossTexture = Content.Load<Texture2D>("cavetrollbossv2"); } catch { }
-
             font = Content.Load<SpriteFont>("Font");
             menuBackgroundTexture = Content.Load<Texture2D>("MenuBackground");
             itemTextureMap = new Dictionary<ItemType, Texture2D>();
@@ -130,7 +148,6 @@ namespace StarshroudHollows
             MediaPlayer.IsRepeating = true;
             MediaPlayer.Volume = musicVolume;
             MediaPlayer.Play(backgroundMusic);
-
             startMenu = new StartMenu(musicVolume, (v) => { musicVolume = v; MediaPlayer.Volume = v; }, gameSoundsVolume, SetGameSoundsVolume, ToggleFullscreen, menuBackgroundTexture, PlayTestSound);
         }
 
@@ -171,6 +188,13 @@ namespace StarshroudHollows
                 healthPotionCooldown -= deltaTime;
                 if (healthPotionCooldown < 0) healthPotionCooldown = 0;
             }
+            
+            // Update door toggle cooldown
+            if (doorToggleCooldown > 0)
+            {
+                doorToggleCooldown -= deltaTime;
+                if (doorToggleCooldown < 0) doorToggleCooldown = 0;
+            }
 
             if (chestUI?.IsOpen == true) { chestUI.Update(); base.Update(gameTime); return; }
             if (saveMenu?.IsOpen == true) { saveMenu.Update(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height); base.Update(gameTime); return; }
@@ -179,8 +203,43 @@ namespace StarshroudHollows
             {
                 pauseMenu.TogglePause();
             }
+            
+            // Check if we just quit to menu - stop update immediately
+            if (startMenu.GetState() != MenuState.Playing)
+            {
+                previousKeyboardState = keyboardState;
+                previousMouseState = mouseState;
+                base.Update(gameTime);
+                return;
+            }
+
+            // DEBUG: F7 key to check housing status
+            if (keyboardState.IsKeyDown(Keys.F7) && !previousKeyboardState.IsKeyDown(Keys.F7) && housingSystem != null)
+            {
+                Logger.Log("=== HOUSING DEBUG ===");
+                Logger.Log($"Valid Houses: {housingSystem.GetValidHouses().Count}");
+                Logger.Log($"Pending Houses: {housingSystem.GetPendingHouses().Count}");
+                Logger.Log($"Active NPCs: {housingSystem.GetActiveNPCs().Count}");
+                Logger.Log($"First Night Survived: {timeSystem.HasCompletedFirstNight}");
+                Logger.Log($"Player Set Flag: {housingSystem.PlayerSurvivedFirstNight}");
+            }
+            
+            // DEBUG: F8 key to force validate nearby house
+            if (keyboardState.IsKeyDown(Keys.F8) && !previousKeyboardState.IsKeyDown(Keys.F8) && housingSystem != null)
+            {
+                housingSystem.ForceValidateNearbyHouses(player.Position);
+            }
 
             if (pauseMenu != null) pauseMenu.Update();
+            
+            // ANOTHER check after pauseMenu.Update() in case QuitToMenu was called
+            if (startMenu.GetState() != MenuState.Playing)
+            {
+                previousKeyboardState = keyboardState;
+                previousMouseState = mouseState;
+                base.Update(gameTime);
+                return;
+            }
 
             if (pauseMenu?.IsPaused == true)
             {
@@ -191,10 +250,10 @@ namespace StarshroudHollows
             }
 
             totalPlayTime += deltaTime;
-            timeSystem.Update(deltaTime);
+            if (timeSystem != null) timeSystem.Update(deltaTime);
             UpdateRainParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
             UpdateSnowParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
-            liquidSystem?.UpdateFlow();  // FIXED: Added null check
+            liquidSystem?.UpdateFlow();
 
             Vector2 oldPlayerPos = player.Position;
             player.Update(gameTime);
@@ -218,54 +277,129 @@ namespace StarshroudHollows
             {
                 TryUseHealthPotion();
             }
+            
+            // BED INTERACTION: Hold E to sleep
+            if (keyboardState.IsKeyDown(Keys.E) && inventoryUI?.IsInventoryOpen == false)
+            {
+                // First check for door to toggle (instant)
+                Point? doorTile = FindNearbyDoor();
+                if (doorTile.HasValue && doorToggleCooldown <= 0)
+                {
+                    // E key was just pressed (not held)
+                    if (!previousKeyboardState.IsKeyDown(Keys.E))
+                    {
+                        ToggleDoor(doorTile.Value);
+                        doorToggleCooldown = DOOR_TOGGLE_COOLDOWN;
+                    }
+                }
+                // Then check for bed to sleep (hold E)
+                else
+                {
+                    TryUseBed(keyboardState, deltaTime);
+                }
+            }
+            else
+            {
+                // Reset sleep timer if not holding E
+                bedSleepTimer = 0f;
+            }
 
             if (mouseState.RightButton == ButtonState.Pressed && previousMouseState.RightButton == ButtonState.Released)
             {
-                var selectedSlot = inventory.GetSlot(miningSystem.GetSelectedHotbarSlot());
-                if (selectedSlot != null && !selectedSlot.IsEmpty())
+                // FIRST: Check for chest to open
+                Point? nearbyChest = FindNearbyChest();
+                if (nearbyChest.HasValue)
                 {
-                    if (selectedSlot.ItemType == ItemType.HealthPotion)
+                    var chest = chestSystem?.GetChest(nearbyChest.Value);
+                    if (chest != null)
                     {
-                        TryUseHealthPotion();
+                        chestUI.OpenChest(chest, inventory);
+                        Logger.Log($"[PLAYER] Opened chest at ({nearbyChest.Value.X}, {nearbyChest.Value.Y})");
                     }
-                    else if (selectedSlot.ItemType == ItemType.RecallPotion)
+                }
+                // SECOND: Check for door to toggle
+                else
+                {
+                    Point? doorTile = FindNearbyDoor();
+                    if (doorTile.HasValue && doorToggleCooldown <= 0)
                     {
-                        player.TeleportToSpawn();
-                        inventory.RemoveItem(ItemType.RecallPotion, 1);
+                        ToggleDoor(doorTile.Value);
+                        doorToggleCooldown = DOOR_TOGGLE_COOLDOWN;
                     }
-                    else if (selectedSlot.ItemType == ItemType.TrollBait)
+                    // THIRD: Check for bed to set spawn
+                    else
                     {
-                        // Check if clicking on an altar
-                        int tileX = (int)(player.GetCenterPosition().X / World.World.TILE_SIZE);
-                        int tileY = (int)(player.GetCenterPosition().Y / World.World.TILE_SIZE);
-                        
-                        // Check nearby tiles for altar
-                        bool activatedAltar = false;
-                        for (int dx = -2; dx <= 2; dx++)
+                        Point? bedTile = FindNearbyBed();
+                        if (bedTile.HasValue)
                         {
-                            for (int dy = -2; dy <= 2; dy++)
+                            Vector2 bedSpawnPos = new Vector2(bedTile.Value.X * World.World.TILE_SIZE, bedTile.Value.Y * World.World.TILE_SIZE);
+                            player.SetBedSpawn(bedSpawnPos);
+                            Logger.Log($"[PLAYER] Bed spawn point set!");
+                        }
+                        // FOURTH: Check for NPC interaction
+                        else
+                        {
+                            var nearbyNPC = housingSystem?.GetNearestNPC(playerCenter);
+                            if (nearbyNPC != null && nearbyNPC.IsPlayerNearby(playerCenter))
                             {
-                                Point altarPos = new Point(tileX + dx, tileY + dy);
-                                if (portalSystem.TryActivateAltar(altarPos, ItemType.TrollBait, inventory))
+                                // Talk to NPC
+                                string dialogue = nearbyNPC.GetCurrentDialogue();
+                                Logger.Log($"[NPC] {nearbyNPC.Name}: {dialogue}");
+                                dialogueUI.ShowDialogue(nearbyNPC.Name, dialogue); // Show on screen
+                                nearbyNPC.CycleDialogue();
+                            }
+                            else
+                            {
+                                // Normal item usage
+                                var selectedSlot = inventory.GetSlot(miningSystem.GetSelectedHotbarSlot());
+                                if (selectedSlot != null && !selectedSlot.IsEmpty())
                                 {
-                                    activatedAltar = true;
-                                    Logger.Log("[PORTAL] Altar activated! Portal spawned!");
-                                    break;
+                                    if (selectedSlot.ItemType == ItemType.HealthPotion)
+                                    {
+                                        TryUseHealthPotion();
+                                    }
+                                    else if (selectedSlot.ItemType == ItemType.RecallPotion)
+                                    {
+                                        player.TeleportToSpawn();
+                                        inventory.RemoveItem(ItemType.RecallPotion, 1);
+                                    }
+                                    else if (selectedSlot.ItemType == ItemType.TrollBait)
+                                    {
+                                        // Check if clicking on an altar
+                                        int tileX = (int)(player.GetCenterPosition().X / World.World.TILE_SIZE);
+                                        int tileY = (int)(player.GetCenterPosition().Y / World.World.TILE_SIZE);
+                                        
+                                        // Check nearby tiles for altar
+                                        bool activatedAltar = false;
+                                        for (int dx = -2; dx <= 2; dx++)
+                                        {
+                                            for (int dy = -2; dy <= 2; dy++)
+                                            {
+                                                Point altarPos = new Point(tileX + dx, tileY + dy);
+                                                if (portalSystem.TryActivateAltar(altarPos, ItemType.TrollBait, inventory))
+                                                {
+                                                    activatedAltar = true;
+                                                    Logger.Log("[PORTAL] Altar activated! Portal spawned!");
+                                                    break;
+                                                }
+                                            }
+                                            if (activatedAltar) break;
+                                        }
+                                        
+                                        // If no altar nearby, do direct summon (old way)
+                                        if (!activatedAltar)
+                                        {
+                                            string errorMessage = bossSystem.TrySummonCaveTroll(player.Position);
+                                            if (errorMessage == null)
+                                            {
+                                                inventory.RemoveItem(ItemType.TrollBait, 1);
+                                                Logger.Log("[BOSS] Cave Troll summoned! Troll Bait consumed.");
+                                            }
+                                            else Logger.Log($"[BOSS] Cannot summon: {errorMessage}");
+                                        }
+                                    }
                                 }
                             }
-                            if (activatedAltar) break;
-                        }
-                        
-                        // If no altar nearby, do direct summon (old way)
-                        if (!activatedAltar)
-                        {
-                            string errorMessage = bossSystem.TrySummonCaveTroll(player.Position);
-                            if (errorMessage == null)
-                            {
-                                inventory.RemoveItem(ItemType.TrollBait, 1);
-                                Logger.Log("[BOSS] Cave Troll summoned! Troll Bait consumed.");
-                            }
-                            else Logger.Log($"[BOSS] Cannot summon: {errorMessage}");
                         }
                     }
                 }
@@ -309,10 +443,31 @@ namespace StarshroudHollows
             // Update housing system
             housingSystem?.Update(deltaTime);
             
-            // Update housing system with first night status
-            if (housingSystem != null && timeSystem != null && timeSystem.HasCompletedFirstNight)
+            // NEW: Let NPCs fight nearby enemies!
+            if (housingSystem != null && projectileSystem != null)
             {
-                housingSystem.PlayerSurvivedFirstNight = true;
+                var activeEnemies = new List<Interfaces.IDamageable>();
+                if (enemySpawner != null) activeEnemies.AddRange(enemySpawner.GetActiveEnemies());
+                if (bossSystem != null && bossSystem.HasActiveBoss) activeEnemies.Add(bossSystem.ActiveTroll);
+                
+                foreach (var npc in housingSystem.GetActiveNPCs())
+                {
+                    if (npc != null && npc.CanCombat)
+                    {
+                        npc.TryAttack(activeEnemies, projectileSystem);
+                    }
+                }
+            }
+            
+            // Update housing system with first night status
+            if (housingSystem != null && timeSystem != null)
+            {
+                // CRITICAL: Always sync the flag from TimeSystem to HousingSystem
+                if (timeSystem.HasCompletedFirstNight && !housingSystem.PlayerSurvivedFirstNight)
+                {
+                    Logger.Log("[GAME] Syncing first night completion flag to housing system");
+                    housingSystem.PlayerSurvivedFirstNight = true;
+                }
             }
 
             // Corrected player type argument: Player.Player
@@ -379,6 +534,7 @@ namespace StarshroudHollows
 
             hud?.UpdateMinimapData(world);
             inventoryUI.Update(gameTime, player.Position, world, GraphicsDevice.Viewport.Height);
+            dialogueUI?.Update(deltaTime);
             #endregion
 
             previousKeyboardState = keyboardState;
@@ -390,6 +546,7 @@ namespace StarshroudHollows
         private void InitializeGameSystems(Vector2 playerPosition, bool isNewGame)
         {
             player = new Player.Player(world, playerPosition); // Corrected player instantiation
+            player.LoadContent(playerSpriteSheet); // Load player sprite!
             world.SetPlayer(player);
             if (startMenu.IsDebugModeEnabled) player.SetDebugMode(true);
             world.SetLiquidSystem(liquidSystem);
@@ -408,12 +565,14 @@ namespace StarshroudHollows
             summonSystem = new Systems.Summons.SummonSystem(world);
             summonSystem.LoadTextures(echoWispTexture);
             housingSystem = new Systems.Housing.HousingSystem(world);
+            armorSystem = new ArmorSystem(inventory);
             magicSystem = new MagicSystem(player, projectileSystem, summonSystem, world, camera);
-            inventoryUI = new InventoryUI(inventory, miningSystem);
+            inventoryUI = new InventoryUI(inventory, miningSystem, armorSystem);
             inventoryUI.Initialize(pixelTexture, font);
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
             chestUI = new ChestUI(world);
+            dialogueUI = new DialogueUI();
             pauseMenu = new PauseMenu(() => saveMenu?.Open(), QuitToMenu, (v) => { musicVolume = v; MediaPlayer.Volume = v; }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud, (n) => ToggleAutoMining(n), isAutoMiningActive, SetGameSoundsVolume, gameSoundsVolume);
             saveMenu = new SaveMenu(SaveGame);
             miningOverlay = new MiningOverlay(world, miningSystem, chestSystem);
@@ -423,7 +582,9 @@ namespace StarshroudHollows
 
         protected override void Draw(GameTime gameTime)
         {
-            GraphicsDevice.Clear(new Color(135, 206, 235));
+            // FIXED: Use time-based sky color for day/night cycle
+            Color skyColor = timeSystem != null ? timeSystem.GetSkyColor() : new Color(135, 206, 235);
+            GraphicsDevice.Clear(skyColor);
 
             if (startMenu.GetState() != MenuState.Playing)
             {
@@ -482,13 +643,58 @@ namespace StarshroudHollows
 
             spriteBatch.End();
 
+            // NEW: Draw rain/snow with camera transform for proper positioning
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, camera.GetTransformMatrix());
+            
+            // Draw rain particles if raining
+            if (timeSystem != null && timeSystem.IsRaining)
+            {
+                foreach (Vector2 raindrop in rainParticles)
+                {
+                    Rectangle rainRect = new Rectangle(
+                        (int)raindrop.X, 
+                        (int)raindrop.Y, 
+                        2, 
+                        12
+                    );
+                    spriteBatch.Draw(pixelTexture, rainRect, Color.LightBlue * 0.6f);
+                }
+            }
+            
+            // Draw snow particles if in snow biome
+            if (worldGenerator != null && player != null)
+            {
+                int playerTileX = (int)(player.Position.X / World.World.TILE_SIZE);
+                int snowStart = worldGenerator.GetSnowBiomeStartX();
+                int snowEnd = worldGenerator.GetSnowBiomeEndX();
+                bool inSnowBiome = playerTileX >= snowStart && playerTileX <= snowEnd;
+                
+                if (inSnowBiome)
+                {
+                    foreach (Vector2 snowflake in snowParticles)
+                    {
+                        Rectangle snowRect = new Rectangle(
+                            (int)snowflake.X, 
+                            (int)snowflake.Y, 
+                            4, 
+                            4
+                        );
+                        spriteBatch.Draw(pixelTexture, snowRect, Color.White * 0.8f);
+                    }
+                }
+            }
+            
+            spriteBatch.End();
+
             spriteBatch.Begin();
+            
             hud?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height,
                 player.Position, world, isAutoMiningActive, timeSystem.IsRaining,
                 player.Health, player.MaxHealth, player.AirBubbles, player.MaxAirBubbles,
                 null, false, 0, 0, 0, 0, timeSystem, magicSystem, healthPotionCooldown);
             inventoryUI?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
             chestUI?.Draw(spriteBatch, pixelTexture, font);
+            dialogueUI?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
             pauseMenu?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
             if (saveMenu != null && saveMenu.IsOpen)
             {
@@ -500,6 +706,156 @@ namespace StarshroudHollows
         }
 
         #region Helper Methods
+        private void TryUseBed(KeyboardState keyboardState, float deltaTime)
+        {
+            // Find nearby bed
+            Point? bedTile = FindNearbyBed();
+            
+            if (bedTile.HasValue)
+            {
+                // Holding E - charge sleep timer
+                if (keyboardState.IsKeyDown(Keys.E))
+                {
+                    bedSleepTimer += deltaTime;
+                    
+                    if (bedSleepTimer >= BED_SLEEP_DURATION)
+                    {
+                        // Sleep!
+                        timeSystem.AdvanceToMorning();
+                        player.Heal(player.GetMaxHealth()); // Full heal when sleeping
+                        Logger.Log("[PLAYER] Slept in bed. Time advanced to morning, fully healed!");
+                        bedSleepTimer = 0f;
+                    }
+                }
+                else
+                {
+                    bedSleepTimer = 0f;
+                }
+            }
+            else
+            {
+                bedSleepTimer = 0f;
+            }
+        }
+        
+        private Point? FindNearbyBed()
+        {
+            int playerTileX = (int)(player.Position.X / World.World.TILE_SIZE);
+            int playerTileY = (int)(player.Position.Y / World.World.TILE_SIZE);
+            
+            // Check 3x3 area around player
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    int checkX = playerTileX + dx;
+                    int checkY = playerTileY + dy;
+                    
+                    var tile = world?.GetTile(checkX, checkY);
+                    if (tile != null && tile.Type == TileType.Bed)
+                    {
+                        return new Point(checkX, checkY);
+                    }
+                }
+            }
+            
+            return null;
+        }
+        
+        private Point? FindNearbyChest()
+        {
+            int playerTileX = (int)(player.Position.X / World.World.TILE_SIZE);
+            int playerTileY = (int)(player.Position.Y / World.World.TILE_SIZE);
+            
+            // Check 3x3 area around player (better range)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    int checkX = playerTileX + dx;
+                    int checkY = playerTileY + dy;
+                    
+                    var tile = world?.GetTile(checkX, checkY);
+                    if (tile != null && (tile.Type == TileType.WoodChest || 
+                                        tile.Type == TileType.SilverChest || 
+                                        tile.Type == TileType.MagicChest))
+                    {
+                        return new Point(checkX, checkY);
+                    }
+                }
+            }
+            
+            // Check one more tile away in each direction for better range
+            for (int dx = -2; dx <= 2; dx++)
+            {
+                for (int dy = -2; dy <= 2; dy++)
+                {
+                    // Skip tiles we already checked
+                    if (dx >= -1 && dx <= 1 && dy >= -1 && dy <= 1) continue;
+                    
+                    int checkX = playerTileX + dx;
+                    int checkY = playerTileY + dy;
+                    
+                    var tile = world?.GetTile(checkX, checkY);
+                    if (tile != null && (tile.Type == TileType.WoodChest || 
+                                        tile.Type == TileType.SilverChest || 
+                                        tile.Type == TileType.MagicChest))
+                    {
+                        return new Point(checkX, checkY);
+                    }
+                }
+            }
+            
+            return null;
+        }
+        
+        private Point? FindNearbyDoor()
+        {
+            int playerTileX = (int)(player.Position.X / World.World.TILE_SIZE);
+            int playerTileY = (int)(player.Position.Y / World.World.TILE_SIZE);
+            
+            // Check 3x3 area around player
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    int checkX = playerTileX + dx;
+                    int checkY = playerTileY + dy;
+                    
+                    var tile = world?.GetTile(checkX, checkY);
+                    if (tile != null && tile.Type == TileType.Door)
+                    {
+                        return new Point(checkX, checkY);
+                    }
+                }
+            }
+            
+            return null;
+        }
+        
+        private void ToggleDoor(Point doorPos)
+        {
+            var door = world?.GetTile(doorPos.X, doorPos.Y);
+            if (door != null && door.Type == TileType.Door)
+            {
+                // Create a NEW tile with the OPPOSITE door state
+                bool newState = !door.IsDoorOpen;
+                
+                Tile updatedDoor = new Tile(TileType.Door);
+                updatedDoor.IsDoorOpen = newState;
+                updatedDoor.Health = door.Health;
+                updatedDoor.WallType = door.WallType;
+                
+                // Set the tile BEFORE logging so we can verify it worked
+                world.SetTile(doorPos.X, doorPos.Y, updatedDoor);
+                
+                // Verify the change stuck by reading it back
+                var verifyDoor = world.GetTile(doorPos.X, doorPos.Y);
+                string state = newState ? "OPENED" : "CLOSED";
+                Logger.Log($"[DOOR] Door {state} at ({doorPos.X}, {doorPos.Y}). Open={verifyDoor?.IsDoorOpen}, Walkable={newState}");
+            }
+        }
+        
         private void TryUseHealthPotion()
         {
             // Check cooldown
@@ -644,72 +1000,255 @@ namespace StarshroudHollows
         private void QuitToMenu()
         {
             worldGenerated = false;
+            
+            // Clear all systems
             world = null; player = null; camera = null; inventory = null; miningSystem = null; lightingSystem = null;
             timeSystem = null; worldGenerator = null; chestSystem = null; inventoryUI = null; pauseMenu = null;
-            saveMenu = null; miningOverlay = null; summonSystem = null; hud = null; chestUI = null; liquidSystem = null;
+            saveMenu = null; miningOverlay = null; summonSystem = null; hud = null; chestUI = null; liquidSystem = null; 
+            dialogueUI = null; housingSystem = null; armorSystem = null; bossSystem = null; portalSystem = null; combatSystem = null; 
+            enemySpawner = null; magicSystem = null; projectileSystem = null;
+            
+            // Clear particle lists
+            rainParticles?.Clear();
+            snowParticles?.Clear();
+            
+            // Go back to menu
             startMenu.SetState(MenuState.MainMenu);
         }
         private void SaveGame(int slotIndex)
         {
+            Logger.Log("[SAVE] ========== STARTING SAVE ==========");
+            Logger.Log($"[SAVE] Save slot: {slotIndex + 1}");
+            Logger.Log($"[SAVE] Player position: {player.Position}");
+            Logger.Log($"[SAVE] Game time: {timeSystem.GetCurrentTime()}");
+            Logger.Log($"[SAVE] Play time: {(int)totalPlayTime} seconds");
+            
+            // CRITICAL FIX: Get ONLY the modified tiles from the dictionary, not all loaded chunks!
+            Logger.Log($"[SAVE] Collecting modified tiles from change tracker...");
+            var modifiedTilesList = world.GetModifiedTiles();
+            Logger.Log($"[SAVE] Found {modifiedTilesList.Count} modified tiles");
+            
+            // Convert List<TileChangeData> to Dictionary<string, TileData>
+            var worldTiles = new Dictionary<string, Systems.TileData>();
+            foreach (var change in modifiedTilesList)
+            {
+                string key = $"{change.X},{change.Y}";
+                worldTiles[key] = new Systems.TileData
+                {
+                    TileType = change.TileType,
+                    WallType = change.WallType,
+                    LiquidVolume = change.LiquidVolume,
+                    IsDoorOpen = false, // TileChangeData doesn't have this, set default
+                    IsPartOfTree = false // TileChangeData doesn't have this, set default
+                };
+            }
+            
             SaveData data = new SaveData
             {
                 SaveName = $"Starshroud Save {slotIndex + 1}",
+                SaveDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
                 WorldSeed = currentWorldSeed,
                 PlayerPosition = player.Position,
                 GameTime = timeSystem.GetCurrentTime(),
                 WorldWidth = World.World.WORLD_WIDTH,
                 WorldHeight = World.World.WORLD_HEIGHT,
                 PlayTimeSeconds = (int)totalPlayTime,
-                TileChanges = world.GetModifiedTiles(),
-                Chests = chestSystem.GetSaveData()
+                HasCompletedFirstNight = timeSystem.HasCompletedFirstNight,
+                WorldTiles = worldTiles,
+                Chests = chestSystem.GetSaveData(),
+                NPCs = housingSystem.GetNPCSaveData(),
+                Houses = housingSystem.GetHouseSaveData(),
+                SnowBiomeStartX = worldGenerator.GetSnowBiomeStartX(),
+                SnowBiomeEndX = worldGenerator.GetSnowBiomeEndX()
             };
+            
+            Logger.Log($"[SAVE] Collecting inventory data ({inventory.GetSlotCount()} slots)...");
             for (int i = 0; i < inventory.GetSlotCount(); i++)
             {
                 var slot = inventory.GetSlot(i);
                 data.InventorySlots.Add(slot != null && !slot.IsEmpty() ? new InventorySlotData { ItemType = (int)slot.ItemType, Count = slot.Count } : new InventorySlotData());
             }
+            
+            Logger.Log($"[SAVE] Data collected. Calling SaveSystem.SaveGame...");
             SaveSystem.SaveGame(data, slotIndex);
+            
+            Logger.Log($"[SAVE] Complete!");
+            Logger.Log("[SAVE] ====================================");
         }
 
         private void GenerateWorld()
         {
+            // FIXED: Check if we're loading a save or generating new world
+            bool isLoadingSave = startMenu.IsLoadingSavedGame();
+            int loadSlotIndex = startMenu.GetLoadingSlotIndex();
+
             hud = new HUD();
             hud.Initialize(GraphicsDevice, font);
-            currentWorldSeed = Environment.TickCount;
-            world = new World.World(hud);
-            timeSystem = new TimeSystem();
-            lightingSystem = new LightingSystem(world, timeSystem);
-            chestSystem = new ChestSystem();
-            liquidSystem = new LiquidSystem(world);
-            world.SetLiquidSystem(liquidSystem);
-            LoadTileSprites(world);
-            worldGenerator = new WorldGenerator(world, currentWorldSeed, chestSystem);
-            worldGenerator.OnProgressUpdate = (p, m) => startMenu.SetLoadingProgress(p, m);
-            worldGenerator.Generate();
-            world.EnableChunkUnloading();
-            world.EnableTileChangeTracking();
-            // Use Player.Player.PLAYER_HEIGHT
-            InitializeGameSystems(worldGenerator.GetSpawnPosition(Player.Player.PLAYER_HEIGHT), true);
-
-            inventory.AddItem(ItemType.WoodPickaxe, 1);
-            inventory.AddItem(ItemType.Hammer, 1);
-            inventory.AddItem(ItemType.WoodSword, 1);
-            inventory.AddItem(ItemType.WoodWand, 1);
-            inventory.AddItem(ItemType.WoodSummonStaff, 1);
-            inventory.AddItem(ItemType.Torch, 50);
-            inventory.AddItem(ItemType.RecallPotion, 1);
-            inventory.AddItem(ItemType.Door, 2);
             
-            // Starting walls for testing
-            inventory.AddItem(ItemType.DirtWall, 100);
-            inventory.AddItem(ItemType.StoneWall, 100);
-            inventory.AddItem(ItemType.WoodWall, 100);
+            if (isLoadingSave && loadSlotIndex >= 0)
+            {
+                // LOAD SAVED GAME - NO WORLD GENERATION!
+                Logger.Log($"[GAME] ========== LOADING SAVE ==========" );
+                Logger.Log($"[GAME] Loading save from slot {loadSlotIndex + 1}");
+                SaveData saveData = SaveSystem.LoadGame(loadSlotIndex);
+                
+                if (saveData != null)
+                {
+                    Logger.Log($"[GAME] Save data loaded! Regenerating world from seed {saveData.WorldSeed}");
+                    
+                    // Use saved world seed and time
+                    currentWorldSeed = saveData.WorldSeed;
+                    totalPlayTime = saveData.PlayTimeSeconds;
+                    
+                    // REGENERATE the world from the seed - same as new game!
+                    world = new World.World(hud);
+                    timeSystem = new TimeSystem();
+                    timeSystem.SetCurrentTime(saveData.GameTime);
+                    
+                    if (saveData.HasCompletedFirstNight)
+                    {
+                        timeSystem.SetFirstNightCompleted();
+                        Logger.Log("[GAME] Restored first night completion status");
+                    }
+                    
+                    lightingSystem = new LightingSystem(world, timeSystem);
+                    chestSystem = new ChestSystem();
+                    liquidSystem = new LiquidSystem(world);
+                    world.SetLiquidSystem(liquidSystem);
+                    LoadTileSprites(world);
+                    
+                    // Regenerate world with same seed!
+                    worldGenerator = new WorldGenerator(world, currentWorldSeed, chestSystem);
+                    worldGenerator.OnProgressUpdate = (p, m) => startMenu.SetLoadingProgress(p * 0.8f, m);
+                    worldGenerator.Generate();
+                    
+                    // CRITICAL FIX: Load saved world tiles!
+                    Logger.Log($"[GAME] Loading {saveData.WorldTiles.Count} saved tiles...");
+                    world.LoadAllTiles(saveData.WorldTiles);
+                    Logger.Log("[GAME] World tiles loaded successfully!");
+                    
+                    world.EnableChunkUnloading();
+                    world.DisableWorldUpdates();
+                    // CRITICAL FIX: Enable tile change tracking so modifications are saved!
+                    world.EnableTileChangeTracking();
+                    Logger.Log("[GAME] Tile change tracking enabled - future changes will be saved");
+                    
+                    // Initialize game systems with saved player position
+                    startMenu.SetLoadingProgress(0.9f, "Initializing game systems...");
+                    InitializeGameSystems(saveData.PlayerPosition, false);
+                    
+                    // Load houses BEFORE NPCs (NPCs need houses to exist)
+                    housingSystem.LoadHouses(saveData.Houses);
+                    
+                    // CRITICAL FIX: Load chests from save data!
+                    Logger.Log($"[GAME] Loading {saveData.Chests.Count} chests...");
+                    chestSystem.LoadFromData(saveData.Chests);
+                    Logger.Log("[GAME] Chests loaded successfully!");
+                    
+                    // Load NPCs
+                    housingSystem.LoadNPCs(saveData.NPCs);
+                    
+                    // Restore inventory
+                    for (int i = 0; i < saveData.InventorySlots.Count && i < inventory.GetSlotCount(); i++)
+                    {
+                        var slotData = saveData.InventorySlots[i];
+                        if (slotData.ItemType != (int)ItemType.None)
+                        {
+                            var slot = inventory.GetSlot(i);
+                            if (slot != null)
+                            {
+                                slot.ItemType = (ItemType)slotData.ItemType;
+                                slot.Count = slotData.Count;
+                            }
+                        }
+                    }
+                    
+                    startMenu.SetLoadingProgress(1.0f, "Complete!");
+                    Logger.Log($"[GAME] Save loaded successfully! Total playtime: {totalPlayTime}s");
+                    Logger.Log("[GAME] ====================================");
+                }
+                else
+                {
+                    Logger.Log($"[GAME] Failed to load save or save is empty! Creating new world instead...");
+                    isLoadingSave = false;
+                }
+            }
+            
+            if (!isLoadingSave)
+            {
+                // GENERATE NEW WORLD
+                Logger.Log("[GAME] Generating new world...");
+                currentWorldSeed = Environment.TickCount;
+                world = new World.World(hud);
+                timeSystem = new TimeSystem();
+                lightingSystem = new LightingSystem(world, timeSystem);
+                chestSystem = new ChestSystem();
+                liquidSystem = new LiquidSystem(world);
+                world.SetLiquidSystem(liquidSystem);
+                LoadTileSprites(world);
+                worldGenerator = new WorldGenerator(world, currentWorldSeed, chestSystem);
+                worldGenerator.OnProgressUpdate = (p, m) => startMenu.SetLoadingProgress(p, m);
+                worldGenerator.Generate();
+                world.EnableChunkUnloading();
+                world.EnableTileChangeTracking();
+                // Use Player.Player.PLAYER_HEIGHT
+                InitializeGameSystems(worldGenerator.GetSpawnPosition(Player.Player.PLAYER_HEIGHT), true);
+
+                inventory.AddItem(ItemType.WoodPickaxe, 1);
+                inventory.AddItem(ItemType.Hammer, 1);
+                inventory.AddItem(ItemType.WoodSword, 1);
+                inventory.AddItem(ItemType.WoodWand, 1);
+                inventory.AddItem(ItemType.WoodSummonStaff, 1);
+                inventory.AddItem(ItemType.Torch, 50);
+                inventory.AddItem(ItemType.RecallPotion, 1);
+                inventory.AddItem(ItemType.Door, 2);
+                
+                // Starting walls for testing
+                inventory.AddItem(ItemType.DirtWall, 100);
+                inventory.AddItem(ItemType.StoneWall, 100);
+                inventory.AddItem(ItemType.WoodWall, 100);
+                
+                Logger.Log("[GAME] New world generated successfully!");
+            }
         }
 
         private void LoadTileSprites(World.World world)
         {
-            var spriteMap = new Dictionary<string, TileType> { { "dirt", TileType.Dirt }, { "grass", TileType.Grass }, { "stone", TileType.Stone }, { "coalblock", TileType.Coal }, { "copperblock", TileType.Copper }, { "ironblock", TileType.Iron }, { "silverblock", TileType.Silver }, { "goldblock", TileType.Gold }, { "platinumblock", TileType.Platinum }, { "torch", TileType.Torch }, { "saplingplanteddirt", TileType.Sapling }, { "woodcraftingtable", TileType.WoodCraftingBench }, { "coppercraftingtable", TileType.CopperCraftingBench }, { "woodchest", TileType.WoodChest }, { "silverchest", TileType.SilverChest }, { "magicchest", TileType.MagicChest } };
-            foreach (var sprite in spriteMap) { try { world.LoadTileSprite(sprite.Value, Content.Load<Texture2D>(sprite.Key)); } catch { } }
+            var spriteMap = new Dictionary<string, TileType> { 
+                // Base Blocks
+                { "dirt", TileType.Dirt }, 
+                { "grass", TileType.Grass }, 
+                { "stone", TileType.Stone }, 
+                // Ore Blocks
+                { "coalblock", TileType.Coal }, 
+                { "copperblock", TileType.Copper }, 
+                { "ironblock", TileType.Iron }, 
+                { "silverblock", TileType.Silver }, 
+                { "goldblock", TileType.Gold }, 
+                { "platinumblock", TileType.Platinum }, 
+                // Snow/Ice Biome
+                { "snowblock", TileType.Snow }, 
+                { "snowgrassblock", TileType.SnowGrass },
+                { "ice block", TileType.Ice },
+                { "icicle", TileType.Icicle },
+                // Placeable/Functional
+                { "torch", TileType.Torch }, 
+                { "saplingplanteddirt", TileType.Sapling }, 
+                { "woodcraftingtable", TileType.WoodCraftingBench }, 
+                { "coppercraftingtable", TileType.CopperCraftingBench }, 
+                { "woodchest", TileType.WoodChest }, 
+                { "silverchest", TileType.SilverChest }, 
+                { "magicchest", TileType.MagicChest },
+                { "bed", TileType.Bed },
+                // Walls - Note: Wall sprites use "wall" suffix
+                { "stonewall", TileType.StoneWall },
+                { "forestwoodwall", TileType.WoodWall },
+                { "snowtreewoodwall", TileType.WoodWall },
+                { "jungletreewoodwall", TileType.WoodWall },
+                { "swamptreewoodwall", TileType.WoodWall },
+                { "volcanictreewoodwall", TileType.WoodWall }
+            };
+            foreach (var sprite in spriteMap) { try { world.LoadTileSprite(sprite.Value, Content.Load<Texture2D>(sprite.Key)); } catch (Exception ex) { Logger.Log($"[ERROR] Failed to load tile sprite '{sprite.Key}': {ex.Message}"); } }
         }
 
         private void LoadItemSprites(InventoryUI iUI)
@@ -749,6 +1288,23 @@ namespace StarshroudHollows
                 { "platinumbar", ItemType.PlatinumBar }, 
                 { "torch", ItemType.Torch }, 
                 { "acorn", ItemType.Acorn }, 
+                // FIXED: Added missing block/ore sprites for inventory
+                { "dirt", ItemType.Dirt },
+                { "grass", ItemType.Grass },
+                { "stone", ItemType.Stone },
+                { "copperore", ItemType.Copper },
+                { "ironore", ItemType.Iron },
+                { "silverore", ItemType.Silver },
+                { "goldore", ItemType.Gold },
+                { "platinumore", ItemType.Platinum },
+                { "coal", ItemType.Coal },
+                // FIXED: Added crafting benches
+                { "woodcraftingtable", ItemType.WoodCraftingBench },
+                { "coppercraftingtable", ItemType.CopperCraftingBench },
+                // FIXED: Added chests
+                { "woodchest", ItemType.WoodChest },
+                { "silverchest", ItemType.SilverChest },
+                { "magicchest", ItemType.MagicChest },
                 // Buckets
                 { "bucket", ItemType.EmptyBucket }, 
                 { "waterfilledbucket", ItemType.WaterBucket }, 

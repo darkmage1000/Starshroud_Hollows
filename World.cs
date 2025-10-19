@@ -348,22 +348,115 @@ namespace StarshroudHollows.World
         public List<TileChangeData> GetModifiedTiles()
         {
             List<TileChangeData> changes = new List<TileChangeData>();
+            int wallCount = 0; // Track how many walls we're saving
 
             foreach (var kvp in modifiedTiles)
             {
+                Tile tile = kvp.Value;
+                
+                // CRITICAL FIX: Only save WallType if it's actually a wall
+                // This prevents foreground blocks from being saved as walls
+                int wallTypeToSave = IsWallType(tile.WallType) ? (int)tile.WallType : (int)TileType.Air;
+                
+                if (IsWallType(tile.WallType))
+                {
+                    wallCount++;
+                }
+                
                 changes.Add(new TileChangeData
                 {
                     X = kvp.Key.X,
                     Y = kvp.Key.Y,
-                    TileType = (int)kvp.Value.Type,
-                    IsActive = kvp.Value.IsActive,
-                    LiquidVolume = kvp.Value.LiquidVolume,
-                    WallType = (int)kvp.Value.WallType // NEW: Save wall data
+                    TileType = (int)tile.Type,
+                    IsActive = tile.IsActive,
+                    LiquidVolume = tile.LiquidVolume,
+                    WallType = wallTypeToSave // Save wall data (only if it's actually a wall)
                 });
             }
 
-            Logger.Log($"[WORLD] Saving {changes.Count} modified tiles");
+            Logger.Log($"[WORLD] Saving {changes.Count} modified tiles ({wallCount} tiles with walls)");
             return changes;
+        }
+        
+        public HashSet<Point> GetModifiedTilePositions()
+        {
+            return new HashSet<Point>(modifiedTiles.Keys);
+        }
+        
+        // SAVE EVERYTHING - FUCK THE SAVE TIME, WE NEED IT TO WORK
+        public Dictionary<string, Systems.TileData> GetAllTiles()
+        {
+            Logger.Log("[WORLD] ========================================");
+            Logger.Log("[WORLD] SAVING ENTIRE WORLD - EVERY TILE");
+            Logger.Log("[WORLD] ========================================");
+            
+            var allTiles = new Dictionary<string, Systems.TileData>();
+            int savedCount = 0;
+            int chunkCount = 0;
+            
+            // Save EVERY tile from EVERY loaded chunk - INCLUDING AIR
+            foreach (var chunk in loadedChunks.Values)
+            {
+                chunkCount++;
+                for (int localX = 0; localX < Chunk.CHUNK_SIZE; localX++)
+                {
+                    for (int localY = 0; localY < Chunk.CHUNK_SIZE; localY++)
+                    {
+                        var tile = chunk.GetTile(localX, localY);
+                        if (tile != null)
+                        {
+                            int worldX = chunk.ChunkX * Chunk.CHUNK_SIZE + localX;
+                            int worldY = chunk.ChunkY * Chunk.CHUNK_SIZE + localY;
+                            string key = $"{worldX},{worldY}";
+                            
+                            allTiles[key] = new Systems.TileData
+                            {
+                                TileType = (int)tile.Type,
+                                WallType = (int)tile.WallType,
+                                LiquidVolume = tile.LiquidVolume,
+                                IsDoorOpen = tile.IsDoorOpen,
+                                IsPartOfTree = tile.IsPartOfTree
+                            };
+                            savedCount++;
+                        }
+                    }
+                }
+                
+                if (chunkCount % 100 == 0)
+                {
+                    Logger.Log($"[WORLD] Progress: {chunkCount} chunks ({savedCount} tiles)");
+                }
+            }
+            
+            Logger.Log("[WORLD] ========================================");
+            Logger.Log($"[WORLD] DONE: {savedCount} tiles from {chunkCount} chunks");
+            Logger.Log("[WORLD] ========================================");
+            return allTiles;
+        }
+        
+        // NEW: Load entire world state
+        public void LoadAllTiles(Dictionary<string, Systems.TileData> worldTiles)
+        {
+            Logger.Log($"[WORLD] Loading {worldTiles.Count} tiles...");
+            int loadedCount = 0;
+            
+            foreach (var kvp in worldTiles)
+            {
+                string[] coords = kvp.Key.Split(',');
+                int x = int.Parse(coords[0]);
+                int y = int.Parse(coords[1]);
+                
+                var tileData = kvp.Value;
+                var tile = new Tile((TileType)tileData.TileType, tileData.IsPartOfTree);
+                tile.WallType = (TileType)tileData.WallType;
+                tile.LiquidVolume = tileData.LiquidVolume;
+                tile.IsDoorOpen = tileData.IsDoorOpen;
+                
+                SetTile(x, y, tile);
+                loadedCount++;
+            }
+            
+            Logger.Log($"[WORLD] Loaded {loadedCount} tiles successfully");
         }
 
         public void ApplyTileChanges(List<TileChangeData> changes)
@@ -379,17 +472,51 @@ namespace StarshroudHollows.World
             bool wasTracking = trackTileChanges;
             trackTileChanges = false;
 
+            int wallsLoaded = 0; // Track how many walls we're loading
+            
             foreach (var change in changes)
             {
-                Tile tile = new Tile((TileType)change.TileType, change.IsActive);
+                // CRITICAL FIX: Create the tile correctly
+                // The Tile constructor takes (TileType, bool isPartOfTree), NOT (TileType, bool isActive)
+                // IsActive is a computed property based on Type and LiquidVolume!
+                Tile tile = new Tile((TileType)change.TileType, false); // Don't set isPartOfTree here
+                
+                // Set liquid volume FIRST (this affects the IsActive computed property)
                 tile.LiquidVolume = change.LiquidVolume;
-                tile.WallType = (TileType)change.WallType; // NEW: Restore wall data
+                
+                // CRITICAL FIX: Only set WallType if the saved WallType is actually a wall
+                // This prevents foreground blocks from being loaded as walls
+                TileType savedWallType = (TileType)change.WallType;
+                if (IsWallType(savedWallType))
+                {
+                    tile.WallType = savedWallType;
+                    wallsLoaded++;
+                }
+                else
+                {
+                    tile.WallType = TileType.Air; // No wall
+                }
+                
                 SetTile(change.X, change.Y, tile);
             }
 
             trackTileChanges = wasTracking;
 
-            Logger.Log("[WORLD] Tile changes applied successfully");
+            Logger.Log($"[WORLD] Tile changes applied successfully ({wallsLoaded} tiles with walls restored)");
+        }
+        
+        // Helper method to check if a TileType is a wall type
+        private bool IsWallType(TileType type)
+        {
+            return type == TileType.DirtWall || 
+                   type == TileType.StoneWall || 
+                   type == TileType.WoodWall ||
+                   type == TileType.CopperWall || 
+                   type == TileType.IronWall || 
+                   type == TileType.SilverWall ||
+                   type == TileType.GoldWall || 
+                   type == TileType.PlatinumWall || 
+                   type == TileType.SnowWall;
         }
 
         public void MarkAreaAsExplored(Vector2 playerCenter)
@@ -586,8 +713,17 @@ namespace StarshroudHollows.World
                         // Draw solid tile - use sprite if available, otherwise use colored pixel
                         if (tileSprites.ContainsKey(tile.Type))
                         {
-                            // Draw the tile sprite with lighting applied
-                            spriteBatch.Draw(tileSprites[tile.Type], destRect, Color.White * lightLevel);
+                            // Special handling for doors - show different visual when open
+                            if (tile.Type == TileType.Door && tile.IsDoorOpen)
+                            {
+                                // Draw open door (semi-transparent)
+                                spriteBatch.Draw(tileSprites[tile.Type], destRect, Color.White * 0.3f * lightLevel);
+                            }
+                            else
+                            {
+                                // Draw the tile sprite with lighting applied
+                                spriteBatch.Draw(tileSprites[tile.Type], destRect, Color.White * lightLevel);
+                            }
                         }
                         else
                         {
@@ -806,8 +942,8 @@ namespace StarshroudHollows.World
             // Solid if IsActive is true (i.e., not liquid and not air)
             if (tile.IsActive)
             {
-                // Doors don't block movement
-                if (tile.Type == TileType.Door) return false;
+                // Doors are only solid when closed
+                if (tile.Type == TileType.Door) return !tile.IsDoorOpen;
                 if (tile.IsPartOfTree || tile.Type == TileType.Torch || tile.Type == TileType.Sapling) return false;
                 return true;
             }

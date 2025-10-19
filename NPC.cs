@@ -36,6 +36,12 @@ namespace StarshroudHollows.Systems.Housing
         protected List<string> dialogueLines;
         protected int currentDialogueIndex = 0;
         
+        // NEW: Combat System
+        protected float attackCooldown = 0f;
+        protected const float ATTACK_COOLDOWN_TIME = 2.0f;
+        protected const float ATTACK_RANGE = 300f;
+        public bool CanCombat { get; protected set; }
+        
         public NPC(string name, string type, Vector2 spawnPosition)
         {
             Name = name;
@@ -44,6 +50,7 @@ namespace StarshroudHollows.Systems.Housing
             IsAlive = true;
             velocity = Vector2.Zero;
             dialogueLines = new List<string>();
+            CanCombat = false; // Most NPCs don't fight by default
         }
         
         public virtual void Update(float deltaTime, StarshroudHollows.World.World world)
@@ -53,6 +60,13 @@ namespace StarshroudHollows.Systems.Housing
             // Update timers
             idleTimer += deltaTime;
             wanderTimer += deltaTime;
+            
+            // NEW: Update combat cooldown
+            if (attackCooldown > 0)
+            {
+                attackCooldown -= deltaTime;
+                if (attackCooldown < 0) attackCooldown = 0;
+            }
             
             // Simple wander AI
             if (wanderTimer >= 3f)
@@ -182,7 +196,61 @@ namespace StarshroudHollows.Systems.Housing
             currentDialogueIndex = (currentDialogueIndex + 1) % dialogueLines.Count;
         }
         
+        public int GetDialogueIndex()
+        {
+            return currentDialogueIndex;
+        }
+        
+        public void SetDialogueIndex(int index)
+        {
+            if (dialogueLines.Count > 0)
+            {
+                currentDialogueIndex = index % dialogueLines.Count;
+            }
+        }
+        
         public abstract void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture);
+        
+        // NEW: Combat methods for NPCs that fight
+        public virtual bool TryAttack(List<StarshroudHollows.Interfaces.IDamageable> nearbyEnemies, Systems.ProjectileSystem projectileSystem)
+        {
+            if (!CanCombat || attackCooldown > 0 || nearbyEnemies == null || nearbyEnemies.Count == 0)
+                return false;
+            
+            // Find closest enemy in range
+            Vector2 npcCenter = new Vector2(Position.X, Position.Y + NPC_HEIGHT / 2);
+            StarshroudHollows.Interfaces.IDamageable closestEnemy = null;
+            float closestDistance = ATTACK_RANGE;
+            
+            foreach (var enemy in nearbyEnemies)
+            {
+                if (!enemy.IsAlive) continue;
+                
+                Vector2 enemyPos = enemy.Position;
+                float distance = Vector2.Distance(npcCenter, enemyPos);
+                
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closestEnemy = enemy;
+                }
+            }
+            
+            if (closestEnemy != null)
+            {
+                // NPC attacks! (Override in subclass for specific attack behavior)
+                OnAttack(closestEnemy, projectileSystem);
+                attackCooldown = ATTACK_COOLDOWN_TIME;
+                return true;
+            }
+            
+            return false;
+        }
+        
+        protected virtual void OnAttack(StarshroudHollows.Interfaces.IDamageable target, Systems.ProjectileSystem projectileSystem)
+        {
+            // Override in subclasses - default does nothing
+        }
     }
     
     /// <summary>
@@ -198,6 +266,7 @@ namespace StarshroudHollows.Systems.Housing
         {
             random = new Random();
             InitializeDialogue();
+            CanCombat = true; // NEW: Starling Guide can defend himself with magic!
         }
         
         private void InitializeDialogue()
@@ -222,6 +291,26 @@ namespace StarshroudHollows.Systems.Housing
         {
             base.Update(deltaTime, world);
             cloakShimmerTimer += deltaTime;
+        }
+        
+        // NEW: Starling Guide shoots magic bolts at enemies!
+        protected override void OnAttack(StarshroudHollows.Interfaces.IDamageable target, Systems.ProjectileSystem projectileSystem)
+        {
+            if (projectileSystem == null) return;
+            
+            Vector2 npcCenter = new Vector2(Position.X, Position.Y + NPC_HEIGHT / 2);
+            Vector2 targetPos = target.Position;
+            Vector2 direction = Vector2.Normalize(targetPos - npcCenter);
+            
+            // Shoot a magic bolt (basic wand projectile)
+            projectileSystem.Launch(
+                Enums.ProjectileType.MagicBolt,
+                npcCenter,
+                direction,
+                5f   // Damage
+            );
+            
+            Logger.Log($"[NPC] {Name} shoots a magic bolt at enemy!");
         }
         
         public override void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)

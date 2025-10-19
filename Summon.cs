@@ -1,9 +1,9 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Claude4_5Terraria.Interfaces;
+using StarshroudHollows.Interfaces;
 using System.Collections.Generic;
 
-namespace Claude4_5Terraria.Systems.Summons
+namespace StarshroudHollows.Systems.Summons
 {
     public abstract class Summon
     {
@@ -33,7 +33,7 @@ namespace Claude4_5Terraria.Systems.Summons
             DetectionRange = detectionRange;
         }
 
-        public abstract void Update(float deltaTime, Vector2 playerPosition, List<IDamageable> targets, World.World world);
+        public abstract void Update(float deltaTime, Vector2 playerPosition, List<IDamageable> targets, StarshroudHollows.World.World world);
         public abstract void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture);
         public abstract Rectangle GetHitbox();
 
@@ -42,13 +42,13 @@ namespace Claude4_5Terraria.Systems.Summons
 
         protected bool IsInRangeOfPlayer(Vector2 playerPosition)
         {
-            return Vector2.Distance(Position, playerPosition) <= MaxRangeFromPlayer * World.World.TILE_SIZE;
+            return Vector2.Distance(Position, playerPosition) <= MaxRangeFromPlayer * StarshroudHollows.World.World.TILE_SIZE;
         }
 
         protected IDamageable FindNearestTarget(List<IDamageable> targets, Vector2 searchPosition)
         {
             IDamageable nearest = null;
-            float nearestDist = DetectionRange * World.World.TILE_SIZE;
+            float nearestDist = DetectionRange * StarshroudHollows.World.World.TILE_SIZE;
 
             foreach (var target in targets)
             {
