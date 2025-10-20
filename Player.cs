@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using StarshroudHollows.Enums;
+using StarshroudHollows.Systems;
 using System;
 
 namespace StarshroudHollows.Player
@@ -43,6 +44,7 @@ namespace StarshroudHollows.Player
 
         private bool isOnGround;
         private StarshroudHollows.World.World world; // Fully qualified World reference
+        private TrinketManager trinketManager;
 
         private Texture2D spriteSheet;
         private bool facingRight = true;
@@ -72,9 +74,10 @@ namespace StarshroudHollows.Player
         private KeyboardState previousKeyState;
 
 
-        public Player(StarshroudHollows.World.World world, Vector2 startPosition) // Fully qualified World parameter
+        public Player(StarshroudHollows.World.World world, Vector2 startPosition, TrinketManager trinketManager = null) // Fully qualified World parameter
         {
             this.world = world;
+            this.trinketManager = trinketManager;
             Position = startPosition;
             SpawnPosition = startPosition;
             BedSpawnPosition = Vector2.Zero;
@@ -238,10 +241,17 @@ namespace StarshroudHollows.Player
 
             Velocity = new Vector2(horizontalInput * MOVE_SPEED, Velocity.Y);
 
-            if (keyState.IsKeyDown(Keys.W) && isOnGround)
+            if (keyState.IsKeyDown(Keys.W) && previousKeyState.IsKeyUp(Keys.W))
             {
-                Velocity = new Vector2(Velocity.X, JUMP_FORCE);
-                isOnGround = false;
+                if (isOnGround)
+                {
+                    Velocity = new Vector2(Velocity.X, JUMP_FORCE);
+                    isOnGround = false;
+                }
+                else if (trinketManager != null && trinketManager.TryUseDoubleJump(isOnGround))
+                {
+                    Velocity = new Vector2(Velocity.X, JUMP_FORCE);
+                }
             }
 
             float gravityMultiplier = 1f;
@@ -260,14 +270,29 @@ namespace StarshroudHollows.Player
                 }
             }
 
+            // Update double jump tracker
+            if (trinketManager != null)
+            {
+                trinketManager.UpdateDoubleJump(isOnGround);
+            }
+            
             ApplyPhysics();
             UpdateAnimation(deltaTime);
             UpdateItemAnimation(deltaTime);
             UpdateHeldItemAnimation(deltaTime);
+            
+            previousKeyState = keyState;
         }
 
         private void CheckLavaDamage(float deltaTime)
         {
+            // Check for lava immunity trinket
+            if (trinketManager != null && trinketManager.HasLavaImmunity())
+            {
+                lavaDamageTimer = 0f;
+                return; // No lava damage with Lava Shoes
+            }
+            
             bool inLava = IsInLava();
 
             if (inLava)

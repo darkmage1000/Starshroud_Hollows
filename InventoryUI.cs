@@ -14,6 +14,7 @@ namespace StarshroudHollows.UI
         private MiningSystem miningSystem;
         private CraftingUI craftingUI;
         private ArmorSystem armorSystem;
+        private TrinketManager trinketManager;
 
         private const int SLOT_SIZE = 48;
         private const int SLOTS_PER_ROW = 10;
@@ -21,6 +22,7 @@ namespace StarshroudHollows.UI
         private const int PADDING = 4;
         private const int HOTBAR_BOTTOM_PADDING = 30;
         private const int ARMOR_SLOT_SIZE = 56;
+        private const int TRINKET_SLOT_SIZE = 52;
 
         private KeyboardState previousKeyState;
         private MouseState previousMouseState;
@@ -37,21 +39,26 @@ namespace StarshroudHollows.UI
         private InventorySlot draggedItem;
         private bool isDraggingFromArmor;
         private ArmorType? draggedArmorType;
+        private bool isDraggingFromTrinket;
+        private int? draggedTrinketIndex;
 
         // Tooltip
         private int? hoveredSlotIndex;
         private ArmorType? hoveredArmorSlot;
+        private int? hoveredTrinketSlot;
         private Rectangle[] slotRectangles;
         private Rectangle[] armorSlotRectangles;
+        private Rectangle[] trinketSlotRectangles;
 
         // Cached screen dimensions
         private int cachedScreenHeight;
 
-        public InventoryUI(Inventory inventory, MiningSystem miningSystem, ArmorSystem armorSystem)
+        public InventoryUI(Inventory inventory, MiningSystem miningSystem, ArmorSystem armorSystem, TrinketManager trinketManager)
         {
             this.inventory = inventory;
             this.miningSystem = miningSystem;
             this.armorSystem = armorSystem;
+            this.trinketManager = trinketManager;
             this.craftingUI = new CraftingUI(inventory);
             previousKeyState = Keyboard.GetState();
             previousMouseState = Mouse.GetState();
@@ -60,10 +67,14 @@ namespace StarshroudHollows.UI
             draggedItem = null;
             isDraggingFromArmor = false;
             draggedArmorType = null;
+            isDraggingFromTrinket = false;
+            draggedTrinketIndex = null;
             hoveredSlotIndex = null;
             hoveredArmorSlot = null;
+            hoveredTrinketSlot = null;
             slotRectangles = new Rectangle[40];
             armorSlotRectangles = new Rectangle[3];
+            trinketSlotRectangles = new Rectangle[3];
             cachedScreenHeight = 1080;
             itemSprites = new System.Collections.Generic.Dictionary<ItemType, Texture2D>();
         }
@@ -96,7 +107,7 @@ namespace StarshroudHollows.UI
                 isInventoryOpen = !isInventoryOpen;
 
                 // Cancel dragging when closing inventory
-                if (!isInventoryOpen && (draggedSlotIndex.HasValue || isDraggingFromArmor))
+                if (!isInventoryOpen && (draggedSlotIndex.HasValue || isDraggingFromArmor || isDraggingFromTrinket))
                 {
                     CancelDrag();
                 }
@@ -153,9 +164,24 @@ namespace StarshroudHollows.UI
             // Start dragging OR Shift+Click quick transfer
             if (currentMouseState.LeftButton == ButtonState.Pressed &&
                 previousMouseState.LeftButton == ButtonState.Released &&
-                !draggedSlotIndex.HasValue && !isDraggingFromArmor)
+                !draggedSlotIndex.HasValue && !isDraggingFromArmor && !isDraggingFromTrinket)
             {
-                // Check armor slots first
+                // Check trinket slots first
+                for (int i = 0; i < trinketSlotRectangles.Length; i++)
+                {
+                    if (trinketSlotRectangles[i].Contains(mousePoint))
+                    {
+                        TrinketSlot slot = trinketManager.GetSlot(i);
+                        if (slot != null && !slot.IsEmpty())
+                        {
+                            StartTrinketDrag(i);
+                            Logger.Log($"[TRINKET] Started dragging from slot {i}: {slot.TrinketType}");
+                        }
+                        return;
+                    }
+                }
+                
+                // Check armor slots
                 for (int i = 0; i < armorSlotRectangles.Length; i++)
                 {
                     if (armorSlotRectangles[i].Contains(mousePoint))
@@ -210,8 +236,18 @@ namespace StarshroudHollows.UI
 
             // Release drag
             if (currentMouseState.LeftButton == ButtonState.Released && 
-                (draggedSlotIndex.HasValue || isDraggingFromArmor))
+                (draggedSlotIndex.HasValue || isDraggingFromArmor || isDraggingFromTrinket))
             {
+                // Check if dropping onto trinket slot
+                for (int i = 0; i < trinketSlotRectangles.Length; i++)
+                {
+                    if (trinketSlotRectangles[i].Contains(mousePoint))
+                    {
+                        CompleteTrinketDrag(i);
+                        return;
+                    }
+                }
+                
                 // Check if dropping onto armor slot
                 for (int i = 0; i < armorSlotRectangles.Length; i++)
                 {
@@ -341,7 +377,13 @@ namespace StarshroudHollows.UI
 
         private void CancelDrag()
         {
-            if (isDraggingFromArmor && draggedArmorType.HasValue)
+            if (isDraggingFromTrinket && draggedTrinketIndex.HasValue)
+            {
+                TrinketSlot sourceSlot = trinketManager.GetSlot(draggedTrinketIndex.Value);
+                sourceSlot.TrinketType = TrinketManager.ItemTypeToTrinketType(draggedItem.ItemType);
+                Logger.Log($"[TRINKET] Cancelled drag - returned {draggedItem.ItemType} to slot {draggedTrinketIndex.Value}");
+            }
+            else if (isDraggingFromArmor && draggedArmorType.HasValue)
             {
                 ArmorSlot sourceSlot = armorSystem.GetSlotByType(draggedArmorType.Value);
                 sourceSlot.ItemType = draggedItem.ItemType;
@@ -357,6 +399,8 @@ namespace StarshroudHollows.UI
             
             isDraggingFromArmor = false;
             draggedArmorType = null;
+            isDraggingFromTrinket = false;
+            draggedTrinketIndex = null;
             draggedSlotIndex = null;
             draggedItem = null;
         }
@@ -446,6 +490,95 @@ namespace StarshroudHollows.UI
 
             isDraggingFromArmor = false;
             draggedArmorType = null;
+            draggedSlotIndex = null;
+            draggedItem = null;
+        }
+
+        private void StartTrinketDrag(int trinketIndex)
+        {
+            TrinketSlot slot = trinketManager.GetSlot(trinketIndex);
+            if (slot == null || slot.IsEmpty()) return;
+
+            isDraggingFromTrinket = true;
+            draggedTrinketIndex = trinketIndex;
+            ItemType itemType = TrinketManager.TrinketTypeToItemType(slot.TrinketType);
+            draggedItem = new InventorySlot
+            {
+                ItemType = itemType,
+                Count = 1
+            };
+
+            // Temporarily clear the trinket slot
+            slot.TrinketType = TrinketType.None;
+        }
+
+        private void CompleteTrinketDrag(int targetTrinketIndex)
+        {
+            if (isDraggingFromTrinket)
+            {
+                // Moving from one trinket slot to another
+                if (draggedTrinketIndex.HasValue && draggedItem != null)
+                {
+                    TrinketSlot targetSlot = trinketManager.GetSlot(targetTrinketIndex);
+                    
+                    if (targetSlot.IsEmpty())
+                    {
+                        // Empty target - just move
+                        targetSlot.TrinketType = TrinketManager.ItemTypeToTrinketType(draggedItem.ItemType);
+                        Logger.Log($"[TRINKET] Moved trinket from slot {draggedTrinketIndex.Value} to {targetTrinketIndex}");
+                    }
+                    else if (targetTrinketIndex == draggedTrinketIndex.Value)
+                    {
+                        // Same slot - put it back
+                        targetSlot.TrinketType = TrinketManager.ItemTypeToTrinketType(draggedItem.ItemType);
+                    }
+                    else
+                    {
+                        // Target occupied - swap
+                        TrinketType tempTrinket = targetSlot.TrinketType;
+                        targetSlot.TrinketType = TrinketManager.ItemTypeToTrinketType(draggedItem.ItemType);
+                        TrinketSlot sourceSlot = trinketManager.GetSlot(draggedTrinketIndex.Value);
+                        sourceSlot.TrinketType = tempTrinket;
+                        Logger.Log($"[TRINKET] Swapped trinkets between slots {draggedTrinketIndex.Value} and {targetTrinketIndex}");
+                    }
+                }
+            }
+            else if (draggedSlotIndex.HasValue && draggedItem != null)
+            {
+                // Equipping from inventory to trinket slot
+                if (TrinketManager.IsTrinketItem(draggedItem.ItemType))
+                {
+                    TrinketSlot targetSlot = trinketManager.GetSlot(targetTrinketIndex);
+                    
+                    // If slot already has trinket, swap
+                    if (!targetSlot.IsEmpty())
+                    {
+                        ItemType swappedTrinket = TrinketManager.TrinketTypeToItemType(targetSlot.TrinketType);
+                        targetSlot.TrinketType = TrinketManager.ItemTypeToTrinketType(draggedItem.ItemType);
+                        
+                        // Put swapped trinket back in inventory
+                        InventorySlot invSlot = inventory.GetSlot(draggedSlotIndex.Value);
+                        invSlot.ItemType = swappedTrinket;
+                        invSlot.Count = 1;
+                        Logger.Log($"[TRINKET] Swapped {draggedItem.ItemType} with {swappedTrinket}");
+                    }
+                    else
+                    {
+                        // Empty slot - just equip
+                        targetSlot.TrinketType = TrinketManager.ItemTypeToTrinketType(draggedItem.ItemType);
+                        Logger.Log($"[TRINKET] Equipped {draggedItem.ItemType} to slot {targetTrinketIndex}");
+                    }
+                }
+                else
+                {
+                    // Not a trinket item - cancel
+                    CancelDrag();
+                    return;
+                }
+            }
+
+            isDraggingFromTrinket = false;
+            draggedTrinketIndex = null;
             draggedSlotIndex = null;
             draggedItem = null;
         }
@@ -710,6 +843,7 @@ namespace StarshroudHollows.UI
             for (int i = 0; i < slotRectangles.Length; i++)
                 slotRectangles[i] = Rectangle.Empty;
 
+            // Draw 4 rows of 10 inventory slots
             for (int row = 0; row < 4; row++)
             {
                 for (int col = 0; col < SLOTS_PER_ROW; col++)
@@ -743,6 +877,9 @@ namespace StarshroudHollows.UI
                     }
                 }
             }
+            
+            // Draw trinket slots below inventory
+            DrawTrinketSlots(spriteBatch, startX, startY + 4 * (SLOT_SIZE + PADDING) + 20, panelWidth - 20);
         }
 
         private void DrawHotbar(SpriteBatch spriteBatch, int screenWidth, int screenHeight)
@@ -784,6 +921,70 @@ namespace StarshroudHollows.UI
             DrawBorder(spriteBatch, panelBg, 3, Color.White);
 
             craftingUI.Draw(spriteBatch, pixelTexture, font, panelX, panelY, panelWidth, panelHeight);
+        }
+        
+        private void DrawTrinketSlots(SpriteBatch spriteBatch, int startX, int startY, int panelWidth)
+        {
+            if (font != null)
+            {
+                string title = "Trinkets";
+                Vector2 titleSize = font.MeasureString(title);
+                Vector2 titlePos = new Vector2(startX + (panelWidth - titleSize.X) / 2, startY - 20);
+                spriteBatch.DrawString(font, title, titlePos, Color.LightBlue);
+            }
+            
+            // Center the 3 trinket slots
+            int totalWidth = 3 * TRINKET_SLOT_SIZE + 2 * 15; // 3 slots with 15px spacing
+            int centeredX = startX + (panelWidth - totalWidth) / 2;
+            
+            for (int i = 0; i < 3; i++)
+            {
+                int slotX = centeredX + i * (TRINKET_SLOT_SIZE + 15);
+                int slotY = startY;
+                
+                Rectangle slotRect = new Rectangle(slotX, slotY, TRINKET_SLOT_SIZE, TRINKET_SLOT_SIZE);
+                trinketSlotRectangles[i] = slotRect;
+                
+                // Draw slot background
+                spriteBatch.Draw(pixelTexture, slotRect, Color.DarkMagenta * 0.3f);
+                DrawBorder(spriteBatch, slotRect, 2, Color.MediumPurple);
+                
+                // Don't draw trinket if it's being dragged
+                if (isDraggingFromTrinket && draggedTrinketIndex.HasValue && draggedTrinketIndex.Value == i)
+                    continue;
+                
+                TrinketSlot slot = trinketManager.GetSlot(i);
+                if (slot != null && !slot.IsEmpty())
+                {
+                    DrawTrinketInSlot(spriteBatch, slotX, slotY, slot.TrinketType);
+                }
+            }
+        }
+        
+        private void DrawTrinketInSlot(SpriteBatch spriteBatch, int slotX, int slotY, TrinketType trinketType)
+        {
+            if (pixelTexture == null) return;
+            
+            int iconSize = 40;
+            int iconX = slotX + (TRINKET_SLOT_SIZE - iconSize) / 2;
+            int iconY = slotY + (TRINKET_SLOT_SIZE - iconSize) / 2;
+            Rectangle iconRect = new Rectangle(iconX, iconY, iconSize, iconSize);
+            
+            ItemType itemType = TrinketManager.TrinketTypeToItemType(trinketType);
+            
+            if (itemSprites.ContainsKey(itemType))
+            {
+                Texture2D itemTexture = itemSprites[itemType];
+                Rectangle sourceRect = new Rectangle(0, 0, itemTexture.Width, itemTexture.Height);
+                spriteBatch.Draw(itemTexture, iconRect, sourceRect, Color.White);
+            }
+            else
+            {
+                Color itemColor = GetItemColor(itemType);
+                spriteBatch.Draw(pixelTexture, iconRect, itemColor);
+            }
+            
+            DrawBorder(spriteBatch, iconRect, 1, Color.White * 0.5f);
         }
 
         private void DrawDraggedItem(SpriteBatch spriteBatch, MouseState mouseState)
@@ -937,8 +1138,19 @@ namespace StarshroudHollows.UI
             Point mousePoint = new Point(mouseState.X, mouseState.Y);
             hoveredSlotIndex = null;
             hoveredArmorSlot = null;
+            hoveredTrinketSlot = null;
 
-            // Check armor slots first
+            // Check trinket slots first
+            for (int i = 0; i < trinketSlotRectangles.Length; i++)
+            {
+                if (trinketSlotRectangles[i].Contains(mousePoint))
+                {
+                    hoveredTrinketSlot = i;
+                    return;
+                }
+            }
+            
+            // Check armor slots
             for (int i = 0; i < armorSlotRectangles.Length; i++)
             {
                 if (armorSlotRectangles[i].Contains(mousePoint))
@@ -1096,6 +1308,11 @@ namespace StarshroudHollows.UI
                 case ItemType.PlatinumHelmet: return "Platinum Helmet";
                 case ItemType.PlatinumChestplate: return "Platinum Chestplate";
                 case ItemType.PlatinumLeggings: return "Platinum Leggings";
+                // Trinkets
+                case ItemType.Armor_Trinket: return "Armor Trinket";
+                case ItemType.Double_Jump_Trinket: return "Double Jump Trinket";
+                case ItemType.Lava_Shoe_Trinket: return "Lava Shoes";
+                case ItemType.Pickaxe_Trinket: return "Pickaxe Trinket";
                 default: return type.ToString();
             }
         }
@@ -1150,6 +1367,11 @@ namespace StarshroudHollows.UI
                 case ItemType.PlatinumHelmet:
                 case ItemType.PlatinumChestplate:
                 case ItemType.PlatinumLeggings: return new Color(229, 228, 226);
+                // Trinkets
+                case ItemType.Armor_Trinket: return new Color(150, 150, 220);
+                case ItemType.Double_Jump_Trinket: return new Color(100, 200, 255);
+                case ItemType.Lava_Shoe_Trinket: return new Color(255, 100, 50);
+                case ItemType.Pickaxe_Trinket: return new Color(180, 140, 100);
                 default: return Color.White;
             }
         }

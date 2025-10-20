@@ -121,7 +121,13 @@ namespace StarshroudHollows.Enums
         IronLeggings,
         SilverLeggings,
         GoldLeggings,
-        PlatinumLeggings
+        PlatinumLeggings,
+        
+        // Trinkets
+        Armor_Trinket,        // 15% bonus armor
+        Double_Jump_Trinket,  // Allows double jump
+        Lava_Shoe_Trinket,    // Walk on lava, immune to lava damage
+        Pickaxe_Trinket       // 15% mining speed
     }
 
     public static class ItemTypeExtensions

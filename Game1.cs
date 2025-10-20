@@ -50,6 +50,7 @@ namespace StarshroudHollows
         private Systems.Summons.SummonSystem summonSystem;
         private Systems.Housing.HousingSystem housingSystem;
         private ArmorSystem armorSystem;
+        private TrinketManager trinketManager;
         private InventoryUI inventoryUI;
         private PauseMenu pauseMenu;
         private MiningOverlay miningOverlay;
@@ -618,7 +619,7 @@ namespace StarshroudHollows
 
         private void InitializeGameSystems(Vector2 playerPosition, bool isNewGame)
         {
-            player = new Player.Player(world, playerPosition); // Corrected player instantiation
+            player = new Player.Player(world, playerPosition, trinketManager); // Corrected player instantiation
             player.LoadContent(playerSpriteSheet); // Load player sprite!
             world.SetPlayer(player);
             if (startMenu.IsDebugModeEnabled) player.SetDebugMode(true);
@@ -629,7 +630,7 @@ namespace StarshroudHollows
             portalSystem = new PortalSystem(world);
             
             // CRITICAL FIX: Create miningSystem FIRST
-            miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume);
+            miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume, trinketManager);
             
             // Set item texture map (safe on background thread)
             if (miningSystem != null && itemTextureMap != null)
@@ -643,12 +644,14 @@ namespace StarshroudHollows
             summonSystem = new Systems.Summons.SummonSystem(world);
             summonSystem.LoadTextures(echoWispTexture);
             housingSystem = new Systems.Housing.HousingSystem(world);
-            armorSystem = new ArmorSystem(inventory);
+            trinketManager = new TrinketManager();
+            armorSystem = new ArmorSystem(inventory, trinketManager);
             magicSystem = new MagicSystem(player, projectileSystem, summonSystem, world, camera);
-            inventoryUI = new InventoryUI(inventory, miningSystem, armorSystem);
+            inventoryUI = new InventoryUI(inventory, miningSystem, armorSystem, trinketManager);
             inventoryUI.Initialize(pixelTexture, font);
             LoadItemSprites(inventoryUI);
             LoadCraftingItemSprites(inventoryUI);
+            LoadTrinketSprites(inventoryUI);
             chestUI = new ChestUI(world);
             dialogueUI = new DialogueUI();
             // NOTE: pauseMenu and saveMenu will be initialized on main thread after generation completes
@@ -1134,6 +1137,7 @@ namespace StarshroudHollows
                 HasCompletedFirstNight = timeSystem.HasCompletedFirstNight,
                 WorldTiles = worldTiles,
                 Chests = chestSystem.GetSaveData(),
+                TrinketSlots = trinketManager.GetSaveData(),
                 NPCs = housingSystem.GetNPCSaveData(),
                 Houses = housingSystem.GetHouseSaveData(),
                 SnowBiomeStartX = worldGenerator.GetSnowBiomeStartX(),
@@ -1239,6 +1243,13 @@ namespace StarshroudHollows
                                 slot.Count = slotData.Count;
                             }
                         }
+                    }
+                    
+                    // Load trinkets
+                    if (saveData.TrinketSlots != null)
+                    {
+                        trinketManager.LoadFromData(saveData.TrinketSlots);
+                        Logger.Log($"[GAME] Loaded {saveData.TrinketSlots.Count} trinkets");
                     }
                     
                     startMenu.SetLoadingProgress(1.0f, "Complete!");
@@ -1538,6 +1549,32 @@ namespace StarshroudHollows
         {
             var spriteMap = new Dictionary<string, ProjectileType> { { "MagicBolt", ProjectileType.MagicBolt }, { "FireBolt", ProjectileType.FireBolt }, { "LightningSpell", ProjectileType.LightningBlast }, { "NatureVineSpell", ProjectileType.NatureVine }, { "WaterBubbleSpell", ProjectileType.WaterBubble }, { "HalfMoonSpell", ProjectileType.HalfMoonSlash }, { "RunicLaserBeamSpell", ProjectileType.RunicLaser } };
             foreach (var sprite in spriteMap) { try { pS.LoadTexture(sprite.Value, Content.Load<Texture2D>(sprite.Key)); } catch { } }
+        }
+
+        private void LoadTrinketSprites(InventoryUI iUI)
+        {
+            var trinketSprites = new Dictionary<string, ItemType>
+            {
+                { "Armor_Trinket", ItemType.Armor_Trinket },
+                { "Double_Jump_Trinket", ItemType.Double_Jump_Trinket },
+                { "Lava_Shoe_Trinket", ItemType.Lava_Shoe_Trinket },
+                { "Pickaxe_Trinket", ItemType.Pickaxe_Trinket }
+            };
+            
+            foreach (var sprite in trinketSprites)
+            {
+                try
+                {
+                    Texture2D tex = Content.Load<Texture2D>(sprite.Key);
+                    iUI.LoadItemSprite(sprite.Value, tex);
+                    itemTextureMap[sprite.Value] = tex;
+                    Logger.Log($"[SUCCESS] Loaded {sprite.Key} trinket sprite");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[ERROR] Failed to load {sprite.Key} trinket sprite: {ex.Message}");
+                }
+            }
         }
 
         private void LoadCraftingItemSprites(InventoryUI iUI)

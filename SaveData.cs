@@ -25,6 +25,7 @@ namespace StarshroudHollows.Systems
         }
 
         public List<InventorySlotData> InventorySlots { get; set; }
+        public List<TrinketSlotData> TrinketSlots { get; set; }  // NEW: Save trinkets
         public List<ChestData> Chests { get; set; }
         public List<NPCData> NPCs { get; set; }
         public List<HouseData> Houses { get; set; }  // NEW: Save houses
@@ -44,6 +45,7 @@ namespace StarshroudHollows.Systems
         public SaveData()
         {
             InventorySlots = new List<InventorySlotData>();
+            TrinketSlots = new List<TrinketSlotData>();  // NEW: Initialize trinkets list
             Chests = new List<ChestData>();
             NPCs = new List<NPCData>();
             Houses = new List<HouseData>();  // NEW: Initialize houses list
