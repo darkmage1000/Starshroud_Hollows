@@ -621,7 +621,7 @@ namespace StarshroudHollows.Player
                 // --- LOGIC FOR DIFFERENT ITEM TYPES ---
                 if (heldItemType >= ItemType.WoodPickaxe && heldItemType <= ItemType.RunicPickaxe)
                 {
-                    scale = 0.5f; // Reduced from 1.7f to 0.5f
+                    scale = 1.2f; // FIXED: Proper pickaxe size
                     float idleAngle = facingRight ? MathHelper.ToRadians(-45) : MathHelper.ToRadians(45);
                     float backswingAngle = facingRight ? MathHelper.ToRadians(-120) : MathHelper.ToRadians(120);
                     float impactAngle = facingRight ? MathHelper.ToRadians(80) : MathHelper.ToRadians(-80);
@@ -641,7 +641,7 @@ namespace StarshroudHollows.Player
                 }
                 else if (heldItemType >= ItemType.WoodSword && heldItemType <= ItemType.RunicSword)
                 {
-                    scale = 0.35f; // Reduced from 0.6f to 0.35f
+                    scale = 0.8f; // FIXED: Proper sword size
                     if (animationFrame == 1) rotation = facingRight ? MathHelper.PiOver4 * 2.8f : -MathHelper.PiOver4 * 1.2f;
                     else if (animationFrame == 2) rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 2.5f;
                     else rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 0.5f;
@@ -658,7 +658,7 @@ namespace StarshroudHollows.Player
                 }
                 else if (heldItemType >= ItemType.WoodWand && heldItemType <= ItemType.RunicLaserWand)
                 {
-                    scale = 0.3f; // Reduced from 0.5f to 0.3f
+                    scale = 0.6f; // FIXED: Proper wand size
                     rotation = 0f;
                     if (heldItemType == ItemType.RunicLaserWand)
                     {
@@ -672,7 +672,7 @@ namespace StarshroudHollows.Player
                 }
                 else if (heldItemType == ItemType.Torch)
                 {
-                    scale = 0.4f; // Reduced from 0.6f to 0.4f
+                    scale = 0.7f; // FIXED: Proper torch size
                     rotation = 0f;
                     flip = SpriteEffects.None;
                 }

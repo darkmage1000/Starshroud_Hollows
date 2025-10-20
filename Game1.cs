@@ -92,6 +92,11 @@ namespace StarshroudHollows
             graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
+            
+            // WINDOW FIX: Ensure window stays focused
+            Window.AllowUserResizing = false;
+            Window.Title = "Starshroud Hollows";
+            
             graphics.PreferredBackBufferWidth = 1920;
             graphics.PreferredBackBufferHeight = 1080;
             graphics.ApplyChanges();
@@ -161,14 +166,82 @@ namespace StarshroudHollows
                 startMenu.Update(GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
                 if (startMenu.GetState() == MenuState.Loading && !worldGenerated && !isGeneratingWorld)
                 {
+                    Logger.Log("[GAME] Starting world generation task...");
                     isGeneratingWorld = true;
-                    worldGenerationTask = Task.Run(() => GenerateWorld());
+                    worldGenerationTask = Task.Run(() => 
+                    {
+                        try
+                        {
+                            GenerateWorld();
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log($"[FATAL ERROR] World generation crashed: {ex.Message}");
+                            Logger.Log($"[FATAL ERROR] Stack trace: {ex.StackTrace}");
+                            throw; // Re-throw to ensure we know something went wrong
+                        }
+                    });
                 }
                 if (isGeneratingWorld && worldGenerationTask != null && worldGenerationTask.IsCompleted)
                 {
-                    isGeneratingWorld = false;
-                    worldGenerationTask = null;
-                    startMenu.SetState(MenuState.Playing);
+                    if (worldGenerationTask.IsFaulted)
+                    {
+                        Logger.Log("[FATAL ERROR] World generation task faulted!");
+                        if (worldGenerationTask.Exception != null)
+                        {
+                            Logger.Log($"[FATAL ERROR] Exception: {worldGenerationTask.Exception.Message}");
+                            Logger.Log($"[FATAL ERROR] Stack trace: {worldGenerationTask.Exception.StackTrace}");
+                        }
+                        isGeneratingWorld = false;
+                        worldGenerationTask = null;
+                        // Return to menu on error
+                        startMenu.SetState(MenuState.MainMenu);
+                        Logger.Log("[GAME] Returned to menu due to generation error");
+                    }
+                    else
+                    {
+                        // CRITICAL FIX: Initialize HUD on main thread AFTER generation completes
+                        if (hud == null)
+                        {
+                            hud = new HUD();
+                            hud.Initialize(GraphicsDevice, font);
+                            Logger.Log("[GAME] HUD initialized on main thread");
+                        }
+                        
+                        // CRITICAL FIX: Initialize pauseMenu and saveMenu on MAIN thread (they need HUD)
+                        if (pauseMenu == null && saveMenu == null)
+                        {
+                            saveMenu = new SaveMenu(SaveGame);
+                            pauseMenu = new PauseMenu(
+                                () => saveMenu?.Open(), 
+                                QuitToMenu, 
+                                (v) => { musicVolume = v; MediaPlayer.Volume = v; }, 
+                                musicVolume, 
+                                ToggleFullscreen, 
+                                hud.ToggleFullscreenMap, 
+                                hud, 
+                                (n) => ToggleAutoMining(n), 
+                                isAutoMiningActive, 
+                                SetGameSoundsVolume, 
+                                gameSoundsVolume
+                            );
+                            Logger.Log("[GAME] PauseMenu and SaveMenu initialized on main thread");
+                        }
+                        
+                        // CRITICAL FIX: Subscribe to miningSystem events on MAIN thread (not background thread)
+                        if (miningSystem != null)
+                        {
+                            miningSystem.OnChestMined += HandleChestMined;
+                            miningSystem.OnChestPlaced += HandleChestPlaced;
+                            Logger.Log("[GAME] MiningSystem event handlers registered on main thread");
+                        }
+                        
+                        isGeneratingWorld = false;
+                        worldGenerationTask = null;
+                        worldGenerated = true; // CRITICAL FIX: Mark world as generated!
+                        startMenu.SetState(MenuState.Playing);
+                        Logger.Log("[GAME] World generation completed successfully!");
+                    }
                 }
                 base.Update(gameTime);
                 return;
@@ -554,10 +627,15 @@ namespace StarshroudHollows
             inventory = new Inventory();
             bossSystem = new BossSystem(world);
             portalSystem = new PortalSystem(world);
+            
+            // CRITICAL FIX: Create miningSystem FIRST
             miningSystem = new MiningSystem(world, inventory, mineDirtSound, mineStoneSound, mineTorchSound, placeTorchSound, gameSoundsVolume);
-            miningSystem.SetItemTextureMap(itemTextureMap);
-            miningSystem.OnChestMined += HandleChestMined;
-            miningSystem.OnChestPlaced += HandleChestPlaced;
+            
+            // Set item texture map (safe on background thread)
+            if (miningSystem != null && itemTextureMap != null)
+            {
+                miningSystem.SetItemTextureMap(itemTextureMap);
+            }
             combatSystem = new CombatSystem();
             enemySpawner = new EnemySpawner(world);
             projectileSystem = new ProjectileSystem(world);
@@ -573,8 +651,8 @@ namespace StarshroudHollows
             LoadCraftingItemSprites(inventoryUI);
             chestUI = new ChestUI(world);
             dialogueUI = new DialogueUI();
-            pauseMenu = new PauseMenu(() => saveMenu?.Open(), QuitToMenu, (v) => { musicVolume = v; MediaPlayer.Volume = v; }, musicVolume, ToggleFullscreen, hud.ToggleFullscreenMap, hud, (n) => ToggleAutoMining(n), isAutoMiningActive, SetGameSoundsVolume, gameSoundsVolume);
-            saveMenu = new SaveMenu(SaveGame);
+            // NOTE: pauseMenu and saveMenu will be initialized on main thread after generation completes
+            // They need HUD which requires GraphicsDevice
             miningOverlay = new MiningOverlay(world, miningSystem, chestSystem);
             if (liquidSystem != null) { for (int i = 0; i < 5000; i++) liquidSystem.UpdateFlow(); }
             worldGenerated = true;
@@ -1082,8 +1160,8 @@ namespace StarshroudHollows
             bool isLoadingSave = startMenu.IsLoadingSavedGame();
             int loadSlotIndex = startMenu.GetLoadingSlotIndex();
 
-            hud = new HUD();
-            hud.Initialize(GraphicsDevice, font);
+            // NOTE: HUD is now initialized on main thread after generation completes
+            // DO NOT initialize HUD here - it requires GraphicsDevice which can't be accessed from background thread
             
             if (isLoadingSave && loadSlotIndex >= 0)
             {
@@ -1194,6 +1272,9 @@ namespace StarshroudHollows
                 // Use Player.Player.PLAYER_HEIGHT
                 InitializeGameSystems(worldGenerator.GetSpawnPosition(Player.Player.PLAYER_HEIGHT), true);
 
+                // NEW: Set loading to 100% when complete!
+                startMenu.SetLoadingProgress(1.0f, "Complete!");
+
                 inventory.AddItem(ItemType.WoodPickaxe, 1);
                 inventory.AddItem(ItemType.Hammer, 1);
                 inventory.AddItem(ItemType.WoodSword, 1);
@@ -1210,6 +1291,8 @@ namespace StarshroudHollows
                 
                 Logger.Log("[GAME] New world generated successfully!");
             }
+            
+            // NOTE: Event handlers will be registered on main thread after generation completes
         }
 
         private void LoadTileSprites(World.World world)
@@ -1231,6 +1314,8 @@ namespace StarshroudHollows
                 { "snowgrassblock", TileType.SnowGrass },
                 { "ice block", TileType.Ice },
                 { "icicle", TileType.Icicle },
+                // Forest tree (main tree sprite)
+                { "tree", TileType.Wood },
                 // Placeable/Functional
                 { "torch", TileType.Torch }, 
                 { "saplingplanteddirt", TileType.Sapling }, 
@@ -1240,15 +1325,87 @@ namespace StarshroudHollows
                 { "silverchest", TileType.SilverChest }, 
                 { "magicchest", TileType.MagicChest },
                 { "bed", TileType.Bed },
-                // Walls - Note: Wall sprites use "wall" suffix
+                // Walls - Stone wall
                 { "stonewall", TileType.StoneWall },
+                // Walls - All tree types use WoodWall enum
                 { "forestwoodwall", TileType.WoodWall },
                 { "snowtreewoodwall", TileType.WoodWall },
                 { "jungletreewoodwall", TileType.WoodWall },
                 { "swamptreewoodwall", TileType.WoodWall },
                 { "volcanictreewoodwall", TileType.WoodWall }
             };
-            foreach (var sprite in spriteMap) { try { world.LoadTileSprite(sprite.Value, Content.Load<Texture2D>(sprite.Key)); } catch (Exception ex) { Logger.Log($"[ERROR] Failed to load tile sprite '{sprite.Key}': {ex.Message}"); } }
+            
+            foreach (var sprite in spriteMap) 
+            { 
+                try 
+                { 
+                    world.LoadTileSprite(sprite.Value, Content.Load<Texture2D>(sprite.Key)); 
+                } 
+                catch (Exception ex) 
+                { 
+                    Logger.Log($"[ERROR] Failed to load tile sprite '{sprite.Key}': {ex.Message}"); 
+                } 
+            }
+            
+            // ALL TREES - Use the "tree" sprite for all tree types in all biomes
+            try
+            {
+                Texture2D treeTexture = Content.Load<Texture2D>("tree");
+                world.LoadTileSprite(TileType.Wood, treeTexture);         // Forest tree
+                world.LoadTileSprite(TileType.SwampTree, treeTexture);    // Swamp tree
+                world.LoadTileSprite(TileType.JungleTree, treeTexture);   // Jungle tree
+                world.LoadTileSprite(TileType.VolcanicTree, treeTexture); // Volcanic tree
+                Logger.Log("[SUCCESS] Loaded tree sprite for all biome trees");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] Failed to load tree sprite: {ex.Message}");
+            }
+            
+            // ALL WOOD BLOCKS - Use "foresttreewood" sprite for all wood types
+            try
+            {
+                Texture2D woodTexture = Content.Load<Texture2D>("foresttreewood");
+                world.LoadTileSprite(TileType.Wood, woodTexture);         // Forest wood
+                world.LoadTileSprite(TileType.SwampWood, woodTexture);    // Swamp wood
+                world.LoadTileSprite(TileType.JungleWood, woodTexture);   // Jungle wood
+                world.LoadTileSprite(TileType.VolcanicWood, woodTexture); // Volcanic wood
+                world.LoadTileSprite(TileType.SnowWood, woodTexture);     // Snow wood
+                Logger.Log("[SUCCESS] Loaded wood sprite for all biome wood blocks");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] Failed to load wood sprite: {ex.Message}");
+            }
+            // Load swamp grass - use grass texture as placeholder if swampgrass doesn't exist
+            try
+            {
+                world.LoadTileSprite(TileType.SwampGrass, Content.Load<Texture2D>("grass"));
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] Failed to load swampgrass sprite: {ex.Message}");
+            }
+            
+            // Load jungle grass - use grass texture as placeholder
+            try
+            {
+                world.LoadTileSprite(TileType.JungleGrass, Content.Load<Texture2D>("grass"));
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] Failed to load junglegrass sprite: {ex.Message}");
+            }
+            
+            // Load volcanic grass - use grass texture as placeholder
+            try
+            {
+                world.LoadTileSprite(TileType.VolcanicGrass, Content.Load<Texture2D>("grass"));
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[ERROR] Failed to load volcanicgrass sprite: {ex.Message}");
+            }
         }
 
         private void LoadItemSprites(InventoryUI iUI)
@@ -1288,7 +1445,7 @@ namespace StarshroudHollows
                 { "platinumbar", ItemType.PlatinumBar }, 
                 { "torch", ItemType.Torch }, 
                 { "acorn", ItemType.Acorn }, 
-                // FIXED: Added missing block/ore sprites for inventory
+                // Base blocks
                 { "dirt", ItemType.Dirt },
                 { "grass", ItemType.Grass },
                 { "stone", ItemType.Stone },
@@ -1298,10 +1455,10 @@ namespace StarshroudHollows
                 { "goldore", ItemType.Gold },
                 { "platinumore", ItemType.Platinum },
                 { "coal", ItemType.Coal },
-                // FIXED: Added crafting benches
+                // Crafting benches
                 { "woodcraftingtable", ItemType.WoodCraftingBench },
                 { "coppercraftingtable", ItemType.CopperCraftingBench },
-                // FIXED: Added chests
+                // Chests
                 { "woodchest", ItemType.WoodChest },
                 { "silverchest", ItemType.SilverChest },
                 { "magicchest", ItemType.MagicChest },
@@ -1313,17 +1470,68 @@ namespace StarshroudHollows
                 { "HealthPotion", ItemType.HealthPotion }, 
                 { "RecallPotion3UsesFrames", ItemType.RecallPotion }, 
                 // Placeable
-                { "bed", ItemType.Bed }, 
-                // Biome Wood Types
-                { "foresttreewood", ItemType.Wood }, 
-                { "snowtreewood", ItemType.Wood }, 
-                { "jungletreewood", ItemType.Wood }, 
-                { "swampwood", ItemType.Wood }, 
-                { "volcanicwood", ItemType.Wood } 
+                { "bed", ItemType.Bed }
             };
+            
             foreach (var sprite in spriteMap) { try { Texture2D tex = Content.Load<Texture2D>(sprite.Key); iUI.LoadItemSprite(sprite.Value, tex); itemTextureMap[sprite.Value] = tex; } catch { } }
+            
+            // Special animated items
             try { Texture2D tex = Content.Load<Texture2D>("RunicSword Spritesheet"); iUI.LoadItemSprite(ItemType.RunicSword, tex); itemTextureMap[ItemType.RunicSword] = tex; } catch { }
             try { Texture2D tex = Content.Load<Texture2D>("RunicLaserWandSpriteSheet"); iUI.LoadItemSprite(ItemType.RunicLaserWand, tex); itemTextureMap[ItemType.RunicLaserWand] = tex; } catch { }
+            
+            // ALL WOOD TYPES - Each uses its own sprite
+            var woodSprites = new Dictionary<string, ItemType>
+            {
+                { "foresttreewood", ItemType.Wood },
+                { "snowtreewood", ItemType.SnowWood },
+                { "jungletreewood", ItemType.JungleWood },
+                { "swampwood", ItemType.SwampWood },
+                { "volcanicwood", ItemType.VolcanicWood }
+            };
+            
+            foreach (var woodSprite in woodSprites)
+            {
+                try
+                {
+                    Texture2D tex = Content.Load<Texture2D>(woodSprite.Key);
+                    iUI.LoadItemSprite(woodSprite.Value, tex);
+                    itemTextureMap[woodSprite.Value] = tex;
+                    Logger.Log($"[SUCCESS] Loaded {woodSprite.Key} sprite for inventory");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[ERROR] Failed to load {woodSprite.Key}: {ex.Message}");
+                }
+            }
+            
+            // ALL WALL TYPES - Each uses its own sprite
+            var wallSprites = new Dictionary<string, ItemType>
+            {
+                { "dirtwall", ItemType.DirtWall },
+                { "stonewall", ItemType.StoneWall },
+                { "forestwoodwall", ItemType.WoodWall },
+                { "copperwall", ItemType.CopperWall },
+                { "ironwall", ItemType.IronWall },
+                { "silverwall", ItemType.SilverWall },
+                { "goldwall", ItemType.GoldWall },
+                { "platinumwall", ItemType.PlatinumWall },
+                { "snowwall", ItemType.SnowWall }
+            };
+            
+            foreach (var wallSprite in wallSprites)
+            {
+                try
+                {
+                    Texture2D tex = Content.Load<Texture2D>(wallSprite.Key);
+                    iUI.LoadItemSprite(wallSprite.Value, tex);
+                    itemTextureMap[wallSprite.Value] = tex;
+                    Logger.Log($"[SUCCESS] Loaded {wallSprite.Key} sprite for inventory");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[ERROR] Failed to load {wallSprite.Key}: {ex.Message}");
+                }
+            }
         }
 
         private void LoadSpellTextures(ProjectileSystem pS)
@@ -1363,7 +1571,58 @@ namespace StarshroudHollows
                 // Placeable
                 { "bed", ItemType.Bed } 
             };
+            
             foreach (var sprite in spriteMap) { try { iUI.GetCraftingUI()?.LoadItemSprite(sprite.Value, Content.Load<Texture2D>(sprite.Key)); } catch { } }
+            
+            // ALL WOOD TYPES - Each uses its own sprite in crafting menu
+            var woodSprites = new Dictionary<string, ItemType>
+            {
+                { "foresttreewood", ItemType.Wood },
+                { "snowtreewood", ItemType.SnowWood },
+                { "jungletreewood", ItemType.JungleWood },
+                { "swampwood", ItemType.SwampWood },
+                { "volcanicwood", ItemType.VolcanicWood }
+            };
+            
+            foreach (var woodSprite in woodSprites)
+            {
+                try
+                {
+                    iUI.GetCraftingUI()?.LoadItemSprite(woodSprite.Value, Content.Load<Texture2D>(woodSprite.Key));
+                    Logger.Log($"[SUCCESS] Loaded {woodSprite.Key} sprite for crafting menu");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[ERROR] Failed to load {woodSprite.Key} for crafting: {ex.Message}");
+                }
+            }
+            
+            // ALL WALL TYPES - Each uses its own sprite in crafting menu
+            var wallSprites = new Dictionary<string, ItemType>
+            {
+                { "dirtwall", ItemType.DirtWall },
+                { "stonewall", ItemType.StoneWall },
+                { "forestwoodwall", ItemType.WoodWall },
+                { "copperwall", ItemType.CopperWall },
+                { "ironwall", ItemType.IronWall },
+                { "silverwall", ItemType.SilverWall },
+                { "goldwall", ItemType.GoldWall },
+                { "platinumwall", ItemType.PlatinumWall },
+                { "snowwall", ItemType.SnowWall }
+            };
+            
+            foreach (var wallSprite in wallSprites)
+            {
+                try
+                {
+                    iUI.GetCraftingUI()?.LoadItemSprite(wallSprite.Value, Content.Load<Texture2D>(wallSprite.Key));
+                    Logger.Log($"[SUCCESS] Loaded {wallSprite.Key} sprite for crafting menu");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[ERROR] Failed to load {wallSprite.Key} for crafting: {ex.Message}");
+                }
+            }
         }
         #endregion
     }

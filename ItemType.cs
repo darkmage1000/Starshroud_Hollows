@@ -13,7 +13,12 @@ namespace StarshroudHollows.Enums
         Platinum,
         Wood,
         Coal,
-
+        Obsidian,
+        SnowWood,
+        JungleWood,
+        SwampWood,
+        VolcanicWood,
+       
         // Resources
         Stick,
         CopperBar,
@@ -134,6 +139,7 @@ namespace StarshroudHollows.Enums
                 case ItemType.Gold: return TileType.Gold;
                 case ItemType.Platinum: return TileType.Platinum;
                 case ItemType.Wood: return TileType.Wood;
+               
                 case ItemType.Coal: return TileType.Coal;
                 case ItemType.Torch: return TileType.Torch;
                 case ItemType.WoodCraftingBench: return TileType.WoodCraftingBench;

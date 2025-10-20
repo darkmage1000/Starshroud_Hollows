@@ -71,6 +71,16 @@ namespace StarshroudHollows.Systems
                     stagnantSlivers.Remove(p);
                     continue; // Skip to next tile
                 }
+                
+                // NEW: Remove floating liquids (liquids with nothing below them and not falling)
+               // if (IsFloatingLiquid(p.X, p.Y))
+               // {
+                  //  currentTile.LiquidVolume = 0f;
+                //    currentTile.Type = TileType.Air;
+                //    stagnantSlivers.Remove(p);
+                //    Logger.Log($"[LIQUID] Removed floating liquid at ({p.X}, {p.Y})");
+                 //   continue;
+               // }
 
                 // Check for item movement only when liquid is stable at this spot
                 if (IsLiquid(p.X, p.Y))
@@ -224,6 +234,55 @@ namespace StarshroudHollows.Systems
             // Placeholder for DroppedItem logic
         }
 
+        // NEW: Check if this liquid tile is adjacent to an opposite liquid type and form obsidian
+        private bool CheckForObsidianFormation(int x, int y)
+        {
+            Tile sourceTile = world.GetTile(x, y);
+            if (sourceTile == null) return false;
+            
+            TileType liquidType = sourceTile.Type;
+            if (liquidType != TileType.Water && liquidType != TileType.Lava) return false;
+            
+            // Check all 4 adjacent tiles for opposite liquid type
+            Point[] neighbors = new Point[]
+            {
+                new Point(x - 1, y),  // Left
+                new Point(x + 1, y),  // Right
+                new Point(x, y - 1),  // Up
+                new Point(x, y + 1)   // Down
+            };
+            
+            foreach (Point neighbor in neighbors)
+            {
+                Tile neighborTile = world.GetTile(neighbor.X, neighbor.Y);
+                if (neighborTile != null && neighborTile.LiquidVolume > MIN_VOLUME_FOR_EXISTENCE)
+                {
+                    // CRITICAL FIX: Water touches lava OR lava touches water = obsidian
+                    // Check that BOTH tiles have significant liquid volume
+                    if ((liquidType == TileType.Water && neighborTile.Type == TileType.Lava && neighborTile.LiquidVolume > 0.3f) ||
+                        (liquidType == TileType.Lava && neighborTile.Type == TileType.Water && sourceTile.LiquidVolume > 0.3f))
+                    {
+                        // Convert the SOURCE tile to obsidian (the one calling this function)
+                        sourceTile.Type = TileType.Obsidian;
+                        sourceTile.LiquidVolume = 0f;
+                        
+                        // Consume some of the neighboring liquid too
+                        neighborTile.LiquidVolume -= 0.4f;
+                        if (neighborTile.LiquidVolume < MIN_VOLUME_FOR_EXISTENCE)
+                        {
+                            neighborTile.LiquidVolume = 0f;
+                            neighborTile.Type = TileType.Air;
+                        }
+                        
+                        Logger.Log($"[LIQUID] Obsidian formed at ({x}, {y})");
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+
         private bool IsLiquid(int x, int y)
         {
             Tile tile = world.GetTile(x, y);
@@ -294,12 +353,38 @@ namespace StarshroudHollows.Systems
 
             if (sourceVolume < MIN_VOLUME_FOR_FLOW) return false;
 
+            // --- CRITICAL: Check for Water + Lava Collision → Obsidian ---
+            if (CheckForObsidianFormation(x, y))
+            {
+                moved = true;
+                return true;
+            }
+
             // --- 1. Downward Flow (Highest Priority) ---
             Tile below = world.GetTile(x, y + 1);
             if (below != null && !IsSolid(x, y + 1))
             {
-                // CRITICAL FIX: Only allow flow into AIR or LIQUID tiles, never into solid blocks
-                if (below.Type == TileType.Air || below.Type == TileType.Water || below.Type == TileType.Lava)
+                // Check for water/lava collision when flowing down
+                if ((liquidType == TileType.Water && below.Type == TileType.Lava) ||
+                    (liquidType == TileType.Lava && below.Type == TileType.Water))
+                {
+                    // Convert to obsidian
+                    below.Type = TileType.Obsidian;
+                    below.LiquidVolume = 0f;
+                    sourceTile.LiquidVolume -= 0.5f; // Consume some of the source liquid
+                    
+                    if (sourceTile.LiquidVolume < MIN_VOLUME_FOR_EXISTENCE)
+                    {
+                        sourceTile.LiquidVolume = 0f;
+                        sourceTile.Type = TileType.Air;
+                    }
+                    
+                    moved = true;
+                    return true;
+                }
+                
+                // CRITICAL FIX: Only allow flow into AIR or SAME LIQUID TYPE
+                if (below.Type == TileType.Air || below.Type == liquidType)
                 {
                     float targetVolume = below.LiquidVolume;
                     float flowAmount = Math.Min(sourceVolume, MAX_FLOW_RATE);
@@ -316,7 +401,7 @@ namespace StarshroudHollows.Systems
                             below.LiquidVolume += transferAmount;
                             sourceTile.LiquidVolume -= transferAmount;
 
-                            // Set the new liquid type (important for converting air/water to lava)
+                            // Set the new liquid type (important for converting air to liquid)
                             if (below.LiquidVolume > 0) below.Type = liquidType;
 
                             // Clean up source if empty
@@ -350,8 +435,27 @@ namespace StarshroudHollows.Systems
                 // 2a. Check Left
                 if (left != null && !IsSolid(x - 1, y))
                 {
-                    // CRITICAL FIX: Only allow flow into AIR or LIQUID tiles
-                    if (left.Type == TileType.Air || left.Type == TileType.Water || left.Type == TileType.Lava)
+                    // Check for water/lava collision
+                    if ((liquidType == TileType.Water && left.Type == TileType.Lava) ||
+                        (liquidType == TileType.Lava && left.Type == TileType.Water))
+                    {
+                        // Convert to obsidian
+                        left.Type = TileType.Obsidian;
+                        left.LiquidVolume = 0f;
+                        sourceTile.LiquidVolume -= 0.5f;
+                        
+                        if (sourceTile.LiquidVolume < MIN_VOLUME_FOR_EXISTENCE)
+                        {
+                            sourceTile.LiquidVolume = 0f;
+                            sourceTile.Type = TileType.Air;
+                        }
+                        
+                        moved = true;
+                        return true;
+                    }
+                    
+                    // CRITICAL FIX: Only allow flow into AIR or SAME LIQUID TYPE
+                    if (left.Type == TileType.Air || left.Type == liquidType)
                     {
                         if (left.LiquidVolume < 1.0f)
                         {
@@ -372,8 +476,27 @@ namespace StarshroudHollows.Systems
                 // 2b. Check Right
                 if (right != null && !IsSolid(x + 1, y))
                 {
-                    // CRITICAL FIX: Only allow flow into AIR or LIQUID tiles
-                    if (right.Type == TileType.Air || right.Type == TileType.Water || right.Type == TileType.Lava)
+                    // Check for water/lava collision
+                    if ((liquidType == TileType.Water && right.Type == TileType.Lava) ||
+                        (liquidType == TileType.Lava && right.Type == TileType.Water))
+                    {
+                        // Convert to obsidian
+                        right.Type = TileType.Obsidian;
+                        right.LiquidVolume = 0f;
+                        sourceTile.LiquidVolume -= 0.5f;
+                        
+                        if (sourceTile.LiquidVolume < MIN_VOLUME_FOR_EXISTENCE)
+                        {
+                            sourceTile.LiquidVolume = 0f;
+                            sourceTile.Type = TileType.Air;
+                        }
+                        
+                        moved = true;
+                        return true;
+                    }
+                    
+                    // CRITICAL FIX: Only allow flow into AIR or SAME LIQUID TYPE
+                    if (right.Type == TileType.Air || right.Type == liquidType)
                     {
                         if (right.LiquidVolume < 1.0f)
                         {

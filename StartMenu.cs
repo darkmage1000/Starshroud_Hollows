@@ -41,6 +41,10 @@ namespace StarshroudHollows.UI
         private bool debugModeEnabled = false;
         public bool IsDebugModeEnabled => debugModeEnabled;
 
+        // NEW: Prevent accidental clicks on first frame
+        private int framesSinceMenuShown = 0;
+        private const int MIN_FRAMES_BEFORE_CLICK = 5;
+
 
         private const int MENU_OPTION_PLAY = 0;
         private const int MENU_OPTION_LOAD = 1;
@@ -131,6 +135,7 @@ namespace StarshroudHollows.UI
                 if (!optionsMenu.IsOpen)
                 {
                     currentState = MenuState.MainMenu;
+                    framesSinceMenuShown = 0; // Reset counter when returning to menu
                 }
                 return;
             }
@@ -142,11 +147,15 @@ namespace StarshroudHollows.UI
                 if (!loadMenu.IsOpen && currentState != MenuState.Loading)
                 {
                     currentState = MenuState.MainMenu;
+                    framesSinceMenuShown = 0; // Reset counter when returning to menu
                 }
                 return;
             }
 
             if (currentState != MenuState.MainMenu) return;
+
+            // NEW: Count frames since menu was shown
+            framesSinceMenuShown++;
 
             KeyboardState keyState = Keyboard.GetState();
             MouseState mouseState = Mouse.GetState();
@@ -164,8 +173,9 @@ namespace StarshroudHollows.UI
             else if (quitButton.Contains(mousePoint))
                 selectedOption = MENU_OPTION_QUIT;
 
-            // Mouse click handling
-            if (mouseState.LeftButton == ButtonState.Pressed && previousMouseState.LeftButton == ButtonState.Released)
+            // Mouse click handling - ONLY after a few frames have passed
+            if (framesSinceMenuShown >= MIN_FRAMES_BEFORE_CLICK && 
+                mouseState.LeftButton == ButtonState.Pressed && previousMouseState.LeftButton == ButtonState.Released)
             {
                 if (playButton.Contains(mousePoint))
                 {
