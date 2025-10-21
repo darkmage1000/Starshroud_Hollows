@@ -299,6 +299,33 @@ namespace StarshroudHollows.UI
 
         private void CompleteDrag(int targetSlotIndex)
         {
+            if (isDraggingFromTrinket)
+            {
+                // Unequipping trinket to inventory
+                if (draggedTrinketIndex.HasValue && draggedItem != null)
+                {
+                    InventorySlot trinketTargetSlot = inventory.GetSlot(targetSlotIndex);
+                    
+                    if (trinketTargetSlot.IsEmpty())
+                    {
+                        trinketTargetSlot.ItemType = draggedItem.ItemType;
+                        trinketTargetSlot.Count = 1;
+                        Logger.Log($"[TRINKET] Unequipped {draggedItem.ItemType} to slot {targetSlotIndex}");
+                    }
+                    else
+                    {
+                        // Inventory slot occupied - cancel
+                        TrinketSlot sourceSlot = trinketManager.GetSlot(draggedTrinketIndex.Value);
+                        sourceSlot.TrinketType = TrinketManager.ItemTypeToTrinketType(draggedItem.ItemType);
+                    }
+                }
+                
+                isDraggingFromTrinket = false;
+                draggedTrinketIndex = null;
+                draggedItem = null;
+                return;
+            }
+            
             if (isDraggingFromArmor)
             {
                 // Unequipping armor to inventory
@@ -937,6 +964,10 @@ namespace StarshroudHollows.UI
             int totalWidth = 3 * TRINKET_SLOT_SIZE + 2 * 15; // 3 slots with 15px spacing
             int centeredX = startX + (panelWidth - totalWidth) / 2;
             
+            // Get mouse position for hover effects
+            MouseState mouseState = Mouse.GetState();
+            Point mousePoint = new Point(mouseState.X, mouseState.Y);
+            
             for (int i = 0; i < 3; i++)
             {
                 int slotX = centeredX + i * (TRINKET_SLOT_SIZE + 15);
@@ -945,9 +976,31 @@ namespace StarshroudHollows.UI
                 Rectangle slotRect = new Rectangle(slotX, slotY, TRINKET_SLOT_SIZE, TRINKET_SLOT_SIZE);
                 trinketSlotRectangles[i] = slotRect;
                 
+                // Determine if this slot is hovered
+                bool isHovered = slotRect.Contains(mousePoint);
+                
+                // Highlight slot if hovering with a trinket or just hovering
+                Color slotBgColor = Color.DarkMagenta * 0.3f;
+                Color borderColor = Color.MediumPurple;
+                
+                if (isHovered)
+                {
+                    // If dragging a trinket item, show it can be dropped here
+                    if ((isDraggingFromTrinket || (draggedItem != null && TrinketManager.IsTrinketItem(draggedItem.ItemType))))
+                    {
+                        slotBgColor = Color.Purple * 0.5f;
+                        borderColor = Color.Cyan;
+                    }
+                    else
+                    {
+                        slotBgColor = Color.DarkMagenta * 0.5f;
+                        borderColor = Color.LightPink;
+                    }
+                }
+                
                 // Draw slot background
-                spriteBatch.Draw(pixelTexture, slotRect, Color.DarkMagenta * 0.3f);
-                DrawBorder(spriteBatch, slotRect, 2, Color.MediumPurple);
+                spriteBatch.Draw(pixelTexture, slotRect, slotBgColor);
+                DrawBorder(spriteBatch, slotRect, 2, borderColor);
                 
                 // Don't draw trinket if it's being dragged
                 if (isDraggingFromTrinket && draggedTrinketIndex.HasValue && draggedTrinketIndex.Value == i)
@@ -1061,6 +1114,45 @@ namespace StarshroudHollows.UI
             Rectangle tooltipBg;
             Color borderColor;
 
+            // Check if hovering over trinket slot
+            if (hoveredTrinketSlot.HasValue)
+            {
+                TrinketSlot trinketSlot = trinketManager.GetSlot(hoveredTrinketSlot.Value);
+                if (trinketSlot != null && !trinketSlot.IsEmpty())
+                {
+                    string trinketName = TrinketManager.GetTrinketName(trinketSlot.TrinketType);
+                    string trinketDesc = TrinketManager.GetTrinketDescription(trinketSlot.TrinketType);
+                    TrinketTier tier = TrinketManager.GetTrinketTier(trinketSlot.TrinketType);
+                    
+                    tooltipText = $"{trinketName}\n{trinketDesc}\nTier: {tier}";
+
+                    textSize = font.MeasureString(tooltipText);
+                    tooltipX = mouseState.X + 15;
+                    tooltipY = mouseState.Y + 15;
+
+                    tooltipBg = new Rectangle(
+                        tooltipX - 5,
+                        tooltipY - 5,
+                        (int)textSize.X + 10,
+                        (int)textSize.Y + 10
+                    );
+
+                    Color tierColor = tier switch
+                    {
+                        TrinketTier.Common => Color.Gray,
+                        TrinketTier.Uncommon => Color.LightGreen,
+                        TrinketTier.Rare => Color.LightBlue,
+                        TrinketTier.Legendary => Color.Gold,
+                        _ => Color.White
+                    };
+
+                    spriteBatch.Draw(pixelTexture, tooltipBg, Color.Black * 0.9f);
+                    DrawBorder(spriteBatch, tooltipBg, 2, tierColor);
+                    spriteBatch.DrawString(font, tooltipText, new Vector2(tooltipX, tooltipY), Color.White);
+                }
+                return;
+            }
+
             // Check if hovering over armor slot
             if (hoveredArmorSlot.HasValue)
             {
@@ -1100,9 +1192,28 @@ namespace StarshroudHollows.UI
 
             // Start tooltip with Name and Count
             tooltipText = $"{itemName} x{slot.Count}\n";
+            
+            // Initialize border color
+            borderColor = GetItemColor(slot.ItemType);
 
+            // Add trinket info if it's a trinket
+            if (TrinketManager.IsTrinketItem(slot.ItemType))
+            {
+                TrinketType trinketType = TrinketManager.ItemTypeToTrinketType(slot.ItemType);
+                string trinketDesc = TrinketManager.GetTrinketDescription(trinketType);
+                TrinketTier tier = TrinketManager.GetTrinketTier(trinketType);
+                tooltipText += $"{trinketDesc}\nTier: {tier}";
+                borderColor = tier switch
+                {
+                    TrinketTier.Common => Color.Gray,
+                    TrinketTier.Uncommon => Color.LightGreen,
+                    TrinketTier.Rare => Color.LightBlue,
+                    TrinketTier.Legendary => Color.Gold,
+                    _ => Color.White
+                };
+            }
             // Add armor stats if it's armor
-            if (ArmorSystem.IsArmorItem(slot.ItemType))
+            else if (ArmorSystem.IsArmorItem(slot.ItemType))
             {
                 string armorStats = ArmorSystem.GetArmorStatDescription(slot.ItemType);
                 tooltipText += armorStats;
@@ -1127,7 +1238,6 @@ namespace StarshroudHollows.UI
                 (int)textSize.Y + 10
             );
 
-            borderColor = GetItemColor(slot.ItemType);
             spriteBatch.Draw(pixelTexture, tooltipBg, Color.Black * 0.9f);
             DrawBorder(spriteBatch, tooltipBg, 2, borderColor);
             spriteBatch.DrawString(font, tooltipText, new Vector2(tooltipX, tooltipY), Color.White);

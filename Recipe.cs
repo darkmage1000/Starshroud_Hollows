@@ -184,6 +184,23 @@ namespace StarshroudHollows.Systems
             Recipe woodWall = new Recipe(ItemType.WoodWall, 4);
             woodWall.AddIngredient(ItemType.Wood, 1);
             recipes.Add(woodWall);
+            
+            // NEW: Biome-specific wood walls
+            Recipe snowWall = new Recipe(ItemType.SnowWall, 4);
+            snowWall.AddIngredient(ItemType.SnowWood, 1);
+            recipes.Add(snowWall);
+            
+            Recipe jungleWall = new Recipe(ItemType.JungleWall, 4);
+            jungleWall.AddIngredient(ItemType.JungleWood, 1);
+            recipes.Add(jungleWall);
+            
+            Recipe swampWall = new Recipe(ItemType.SwampWall, 4);
+            swampWall.AddIngredient(ItemType.SwampWood, 1);
+            recipes.Add(swampWall);
+            
+            Recipe volcanicWall = new Recipe(ItemType.VolcanicWall, 4);
+            volcanicWall.AddIngredient(ItemType.VolcanicWood, 1);
+            recipes.Add(volcanicWall);
 
             Recipe copperWall = new Recipe(ItemType.CopperWall, 4, requiresWoodBench: true);
             copperWall.AddIngredient(ItemType.CopperBar, 1);

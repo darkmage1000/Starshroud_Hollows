@@ -619,6 +619,9 @@ namespace StarshroudHollows
 
         private void InitializeGameSystems(Vector2 playerPosition, bool isNewGame)
         {
+            // CRITICAL FIX: Create trinketManager FIRST before player!
+            trinketManager = new TrinketManager();
+            
             player = new Player.Player(world, playerPosition, trinketManager); // Corrected player instantiation
             player.LoadContent(playerSpriteSheet); // Load player sprite!
             world.SetPlayer(player);
@@ -644,7 +647,7 @@ namespace StarshroudHollows
             summonSystem = new Systems.Summons.SummonSystem(world);
             summonSystem.LoadTextures(echoWispTexture);
             housingSystem = new Systems.Housing.HousingSystem(world);
-            trinketManager = new TrinketManager();
+            // trinketManager already created before player
             armorSystem = new ArmorSystem(inventory, trinketManager);
             magicSystem = new MagicSystem(player, projectileSystem, summonSystem, world, camera);
             inventoryUI = new InventoryUI(inventory, miningSystem, armorSystem, trinketManager);
@@ -1336,14 +1339,7 @@ namespace StarshroudHollows
                 { "silverchest", TileType.SilverChest }, 
                 { "magicchest", TileType.MagicChest },
                 { "bed", TileType.Bed },
-                // Walls - Stone wall
-                { "stonewall", TileType.StoneWall },
-                // Walls - All tree types use WoodWall enum
-                { "forestwoodwall", TileType.WoodWall },
-                { "snowtreewoodwall", TileType.WoodWall },
-                { "jungletreewoodwall", TileType.WoodWall },
-                { "swamptreewoodwall", TileType.WoodWall },
-                { "volcanictreewoodwall", TileType.WoodWall }
+                { "door", TileType.Door }
             };
             
             foreach (var sprite in spriteMap) 
@@ -1358,35 +1354,79 @@ namespace StarshroudHollows
                 } 
             }
             
-            // ALL TREES - Use the "tree" sprite for all tree types in all biomes
-            try
+            // TREE TRUNKS - Each biome has its own tree sprite
+            var treeSprites = new Dictionary<string, TileType>
             {
-                Texture2D treeTexture = Content.Load<Texture2D>("tree");
-                world.LoadTileSprite(TileType.Wood, treeTexture);         // Forest tree
-                world.LoadTileSprite(TileType.SwampTree, treeTexture);    // Swamp tree
-                world.LoadTileSprite(TileType.JungleTree, treeTexture);   // Jungle tree
-                world.LoadTileSprite(TileType.VolcanicTree, treeTexture); // Volcanic tree
-                Logger.Log("[SUCCESS] Loaded tree sprite for all biome trees");
-            }
-            catch (Exception ex)
+                { "forest tree", TileType.Wood },
+                { "snowtree", TileType.SnowTree },
+                { "jungletree", TileType.JungleTree },
+                { "swamptree", TileType.SwampTree },
+                { "volcanictree", TileType.VolcanicTree }
+            };
+            
+            foreach (var treeSprite in treeSprites)
             {
-                Logger.Log($"[ERROR] Failed to load tree sprite: {ex.Message}");
+                try
+                {
+                    Texture2D treeTexture = Content.Load<Texture2D>(treeSprite.Key);
+                    world.LoadTileSprite(treeSprite.Value, treeTexture);
+                    Logger.Log($"[SUCCESS] Loaded {treeSprite.Key} sprite");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[ERROR] Failed to load {treeSprite.Key}: {ex.Message}");
+                }
             }
             
-            // ALL WOOD BLOCKS - Use "foresttreewood" sprite for all wood types
-            try
+            // WOOD BLOCKS - Each biome's wood has its own sprite (for placement in world)
+            var woodBlockSprites = new Dictionary<string, TileType>
             {
-                Texture2D woodTexture = Content.Load<Texture2D>("foresttreewood");
-                world.LoadTileSprite(TileType.Wood, woodTexture);         // Forest wood
-                world.LoadTileSprite(TileType.SwampWood, woodTexture);    // Swamp wood
-                world.LoadTileSprite(TileType.JungleWood, woodTexture);   // Jungle wood
-                world.LoadTileSprite(TileType.VolcanicWood, woodTexture); // Volcanic wood
-                world.LoadTileSprite(TileType.SnowWood, woodTexture);     // Snow wood
-                Logger.Log("[SUCCESS] Loaded wood sprite for all biome wood blocks");
+                { "foresttreewood", TileType.Wood },
+                { "snowtreewood", TileType.SnowWood },
+                { "jungletreewood", TileType.JungleWood },
+                { "swampwood", TileType.SwampWood },
+                { "volcanicwood", TileType.VolcanicWood }
+            };
+            
+            foreach (var woodSprite in woodBlockSprites)
+            {
+                try
+                {
+                    Texture2D woodTexture = Content.Load<Texture2D>(woodSprite.Key);
+                    world.LoadTileSprite(woodSprite.Value, woodTexture);
+                    Logger.Log($"[SUCCESS] Loaded {woodSprite.Key} sprite for world placement");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[ERROR] Failed to load {woodSprite.Key}: {ex.Message}");
+                }
             }
-            catch (Exception ex)
+            
+            // WALL SPRITES - Each wall type needs its own TileType
+            var wallSprites = new Dictionary<string, TileType>
             {
-                Logger.Log($"[ERROR] Failed to load wood sprite: {ex.Message}");
+                { "stonewall", TileType.StoneWall },
+                { "forestwoodwall", TileType.WoodWall },       // Forest wood wall
+                { "snowtreewoodwall", TileType.SnowWall },
+                { "jungletreewoodwall", TileType.JungleWall },
+                { "swamptreewoodwall", TileType.SwampWall },
+                { "volcanictreewoodwall", TileType.VolcanicWall }
+                // Note: Missing dirtwall, copperwall, ironwall, silverwall, goldwall, platinumwall sprites
+                // These will use colored rectangles until sprites are created
+            };
+            
+            foreach (var wallSprite in wallSprites)
+            {
+                try
+                {
+                    Texture2D wallTexture = Content.Load<Texture2D>(wallSprite.Key);
+                    world.LoadTileSprite(wallSprite.Value, wallTexture);
+                    Logger.Log($"[SUCCESS] Loaded {wallSprite.Key} wall sprite");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[ERROR] Failed to load {wallSprite.Key}: {ex.Message}");
+                }
             }
             // Load swamp grass - use grass texture as placeholder if swampgrass doesn't exist
             try
@@ -1518,15 +1558,13 @@ namespace StarshroudHollows
             // ALL WALL TYPES - Each uses its own sprite
             var wallSprites = new Dictionary<string, ItemType>
             {
-                { "dirtwall", ItemType.DirtWall },
                 { "stonewall", ItemType.StoneWall },
                 { "forestwoodwall", ItemType.WoodWall },
-                { "copperwall", ItemType.CopperWall },
-                { "ironwall", ItemType.IronWall },
-                { "silverwall", ItemType.SilverWall },
-                { "goldwall", ItemType.GoldWall },
-                { "platinumwall", ItemType.PlatinumWall },
-                { "snowwall", ItemType.SnowWall }
+                { "snowtreewoodwall", ItemType.SnowWall },
+                { "jungletreewoodwall", ItemType.JungleWall },
+                { "swamptreewoodwall", ItemType.SwampWall },
+                { "volcanictreewoodwall", ItemType.VolcanicWall }
+                // Note: Missing dirtwall, copperwall, ironwall, silverwall, goldwall, platinumwall sprites
             };
             
             foreach (var wallSprite in wallSprites)
@@ -1637,15 +1675,13 @@ namespace StarshroudHollows
             // ALL WALL TYPES - Each uses its own sprite in crafting menu
             var wallSprites = new Dictionary<string, ItemType>
             {
-                { "dirtwall", ItemType.DirtWall },
                 { "stonewall", ItemType.StoneWall },
                 { "forestwoodwall", ItemType.WoodWall },
-                { "copperwall", ItemType.CopperWall },
-                { "ironwall", ItemType.IronWall },
-                { "silverwall", ItemType.SilverWall },
-                { "goldwall", ItemType.GoldWall },
-                { "platinumwall", ItemType.PlatinumWall },
-                { "snowwall", ItemType.SnowWall }
+                { "snowtreewoodwall", ItemType.SnowWall },
+                { "jungletreewoodwall", ItemType.JungleWall },
+                { "swamptreewoodwall", ItemType.SwampWall },
+                { "volcanictreewoodwall", ItemType.VolcanicWall }
+                // Note: Missing dirtwall, copperwall, ironwall, silverwall, goldwall, platinumwall sprites
             };
             
             foreach (var wallSprite in wallSprites)

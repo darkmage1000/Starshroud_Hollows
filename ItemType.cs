@@ -46,13 +46,16 @@ namespace StarshroudHollows.Enums
         // Background Walls (can also be placed as solid blocks)
         DirtWall,
         StoneWall,
-        WoodWall,
+        WoodWall,        // Forest wood wall
         CopperWall,
         IronWall,
         SilverWall,
         GoldWall,
         PlatinumWall,
         SnowWall,
+        JungleWall,      // NEW: Jungle wood wall
+        SwampWall,       // NEW: Swamp wood wall  
+        VolcanicWall,    // NEW: Volcanic wood wall
 
         // Consumables
         HealthPotion,  // Restores player health
@@ -167,6 +170,9 @@ namespace StarshroudHollows.Enums
                 case ItemType.GoldWall: return TileType.GoldWall;
                 case ItemType.PlatinumWall: return TileType.PlatinumWall;
                 case ItemType.SnowWall: return TileType.SnowWall;
+                case ItemType.JungleWall: return TileType.JungleWall;
+                case ItemType.SwampWall: return TileType.SwampWall;
+                case ItemType.VolcanicWall: return TileType.VolcanicWall;
                 
                 default: return TileType.Air;
             }
@@ -206,6 +212,9 @@ namespace StarshroudHollows.Enums
                 case TileType.GoldWall: return ItemType.GoldWall;
                 case TileType.PlatinumWall: return ItemType.PlatinumWall;
                 case TileType.SnowWall: return ItemType.SnowWall;
+                case TileType.JungleWall: return ItemType.JungleWall;
+                case TileType.SwampWall: return ItemType.SwampWall;
+                case TileType.VolcanicWall: return ItemType.VolcanicWall;
                 
                 default: return ItemType.Dirt;
             }
@@ -239,6 +248,9 @@ namespace StarshroudHollows.Enums
                 case ItemType.GoldWall:
                 case ItemType.PlatinumWall:
                 case ItemType.SnowWall:
+                case ItemType.JungleWall:
+                case ItemType.SwampWall:
+                case ItemType.VolcanicWall:
                     return true;
                 default:
                     return false; // WoodWand is not placeable and is caught here

@@ -47,12 +47,15 @@ namespace StarshroudHollows.Enums
         // Background Walls (can also be placed as solid blocks)
         DirtWall,
         StoneWall,
-        WoodWall,
+        WoodWall,        // Forest wood wall
         CopperWall,
         IronWall,
         SilverWall,
         GoldWall,
         PlatinumWall,
-        SnowWall
+        SnowWall,
+        JungleWall,      // NEW: Jungle wood wall
+        SwampWall,       // NEW: Swamp wood wall
+        VolcanicWall     // NEW: Volcanic wood wall
     }
 }

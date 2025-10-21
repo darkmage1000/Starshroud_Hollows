@@ -516,7 +516,10 @@ namespace StarshroudHollows.World
                    type == TileType.SilverWall ||
                    type == TileType.GoldWall || 
                    type == TileType.PlatinumWall || 
-                   type == TileType.SnowWall;
+                   type == TileType.SnowWall ||
+                   type == TileType.JungleWall ||
+                   type == TileType.SwampWall ||
+                   type == TileType.VolcanicWall;
         }
 
         public void MarkAreaAsExplored(Vector2 playerCenter)
@@ -906,13 +909,16 @@ namespace StarshroudHollows.World
             {
                 case TileType.DirtWall: return new Color(120, 60, 0);      // Darker brown
                 case TileType.StoneWall: return new Color(100, 100, 100);   // Darker gray
-                case TileType.WoodWall: return new Color(80, 53, 26);       // Darker wood
+                case TileType.WoodWall: return new Color(80, 53, 26);       // Darker wood (forest)
                 case TileType.CopperWall: return new Color(200, 110, 0);    // Darker orange
                 case TileType.IronWall: return new Color(130, 130, 130);    // Dark gray
                 case TileType.SilverWall: return new Color(150, 150, 150);  // Darker silver
                 case TileType.GoldWall: return new Color(200, 170, 0);      // Darker gold
                 case TileType.PlatinumWall: return new Color(110, 190, 110); // Darker green
                 case TileType.SnowWall: return new Color(200, 210, 220);    // Darker snow
+                case TileType.JungleWall: return new Color(70, 50, 20);     // Dark jungle wood
+                case TileType.SwampWall: return new Color(60, 45, 25);      // Dark swamp wood
+                case TileType.VolcanicWall: return new Color(50, 30, 10);   // Dark volcanic wood
                 default: return new Color(80, 80, 80);                       // Default gray
             }
         }
