@@ -14,6 +14,7 @@ namespace StarshroudHollows.Systems
     {
         private StarshroudHollows.World.World world;
         private Inventory inventory;
+        private TrinketManager trinketManager;
         private const int MINING_RANGE = 4;
         private const int PLACEMENT_RANGE = 4;
 
@@ -44,10 +45,11 @@ namespace StarshroudHollows.Systems
 
         private float gameSoundVolume = 1.0f;
 
-        public MiningSystem(StarshroudHollows.World.World world, Inventory inventory, SoundEffect mineDirt, SoundEffect mineStone, SoundEffect mineTorch, SoundEffect placeTorch, float initialSoundVolume)
+        public MiningSystem(StarshroudHollows.World.World world, Inventory inventory, SoundEffect mineDirt, SoundEffect mineStone, SoundEffect mineTorch, SoundEffect placeTorch, float initialSoundVolume, TrinketManager trinketManager = null)
         {
             this.world = world;
             this.inventory = inventory;
+            this.trinketManager = trinketManager;
             targetedTile = null;
             miningProgress = 0f;
             currentlyMiningTile = null;
@@ -175,28 +177,39 @@ namespace StarshroudHollows.Systems
                            targetY * StarshroudHollows.World.World.TILE_SIZE + StarshroudHollows.World.World.TILE_SIZE / 2)
             );
 
-            Tile targetTile = world.GetTile(targetX, targetY);
-            // FIXED: Prioritize wall targeting when hammer is equipped
-            if (targetTile != null && distanceToTile <= maxDistance)
+            // CRITICAL FIX: Check if clicking on a tree sprite FIRST
+            Tree clickedTree = world.GetTreeAtPosition(targetX, targetY);
+            Tile targetTile = world.GetTile(targetX, targetY); // Declare here so it's available below
+            
+            if (clickedTree != null && distanceToTile <= maxDistance)
             {
-                // When hammer is equipped, prioritize walls over furniture
-                if (isHammerEquipped && targetTile.HasWall)
-                {
-                    targetedTile = new Point(targetX, targetY);
-                }
-                else if (targetTile.IsActive)
-                {
-                    targetedTile = new Point(targetX, targetY);
-                }
-                else
-                {
-                    // Allow targeting empty tiles for placement
-                    targetedTile = new Point(targetX, targetY);
-                }
+                // Found a tree! Target its base position
+                targetedTile = new Point(clickedTree.BaseX, clickedTree.BaseY);
             }
             else
             {
-                targetedTile = null;
+                // FIXED: Prioritize wall targeting when hammer is equipped
+                if (targetTile != null && distanceToTile <= maxDistance)
+                {
+                    // When hammer is equipped, prioritize walls over furniture
+                    if (isHammerEquipped && targetTile.HasWall)
+                    {
+                        targetedTile = new Point(targetX, targetY);
+                    }
+                    else if (targetTile.IsActive)
+                    {
+                        targetedTile = new Point(targetX, targetY);
+                    }
+                    else
+                    {
+                        // Allow targeting empty tiles for placement
+                        targetedTile = new Point(targetX, targetY);
+                    }
+                }
+                else
+                {
+                    targetedTile = null;
+                }
             }
 
             if (isMining && distanceToTile <= maxDistance)
@@ -590,6 +603,26 @@ namespace StarshroudHollows.Systems
                 CurrentAnimationFrame = 0;
                 return;
             }
+            
+            // CRITICAL FIX: If we're targeting a tree, mine the entire tree
+            Tree targetTree = world.GetTreeAtPosition(targetPoint.X, targetPoint.Y);
+            if (targetTree != null)
+            {
+                // Mining a tree - use wood mining time
+                float treeMiningTime = 0.8f;
+                miningProgress += deltaTime / treeMiningTime;
+                CurrentAnimationFrame = (int)(miningProgress * 3) % 3;
+
+                if (miningProgress >= 1f)
+                {
+                    // Mine the entire tree at once
+                    BreakBlock(targetTree.BaseX, targetTree.BaseY);
+                    miningProgress = 0f;
+                    currentlyMiningTile = null;
+                    CurrentAnimationFrame = 0;
+                }
+                return;
+            }
 
             if (tile != null)
             {
@@ -642,6 +675,13 @@ namespace StarshroudHollows.Systems
                 {
                     float baseMiningTime = GetMiningTime(tile.Type);
                     float miningSpeed = ToolProperties.GetMiningSpeed(currentTool);
+                    
+                    // Apply trinket mining speed bonus
+                    if (trinketManager != null)
+                    {
+                        miningSpeed *= (1f + trinketManager.GetMiningSpeedBonus());
+                    }
+                    
                     float adjustedMiningTime = baseMiningTime / miningSpeed;
                     miningProgress += deltaTime / adjustedMiningTime;
                     CurrentAnimationFrame = (int)(miningProgress * 3) % 3;
@@ -671,6 +711,54 @@ namespace StarshroudHollows.Systems
             else if (tileType == TileType.Stone || tileType == TileType.Copper || tileType == TileType.Silver || tileType == TileType.Platinum || tileType == TileType.Coal) { breakSound = mineStoneSound; }
             else if (tileType == TileType.Torch) { breakSound = mineTorchSound; }
 
+            // CRITICAL FIX: Check if this position is part of a tree (not just if the tile is a tree tile)
+            // This handles the case where we're targeting the tree base (which is ground)
+            Tree treeAtPosition = world.GetTreeAtPosition(x, y);
+            if (treeAtPosition != null)
+            {
+                // This is a tree! Break the entire tree
+                int woodBlockCount = CountTreeWoodBlocks(treeAtPosition.BaseX, treeAtPosition.BaseY - 1);
+                world.RemoveTree(treeAtPosition.BaseX, treeAtPosition.BaseY);
+                
+                // FIXED: Drop the correct wood type based on tree's TreeType
+                switch (treeAtPosition.TreeType)
+                {
+                    case TileType.ForestTree:
+                        droppedItemType = ItemType.ForestWood;
+                        break;
+                    case TileType.SnowTree:
+                        droppedItemType = ItemType.SnowWood;
+                        break;
+                    case TileType.JungleTree:
+                        droppedItemType = ItemType.JungleWood;
+                        break;
+                    case TileType.SwampTree:
+                        droppedItemType = ItemType.SwampWood;
+                        break;
+                    case TileType.VolcanicTree:
+                        droppedItemType = ItemType.VolcanicWood;
+                        break;
+                    default:
+                        droppedItemType = ItemType.ForestWood; // Fallback to forest wood
+                        break;
+                }
+                
+                // Give more wood: multiply by 2
+                if (woodBlockCount <= 10) dropCount = woodBlockCount * 2;
+                else if (woodBlockCount <= 13) dropCount = woodBlockCount * 2;
+                else dropCount = woodBlockCount * 2;
+                breakSound = mineTorchSound;
+                Vector2 acornPosition = new Vector2(treeAtPosition.BaseX * StarshroudHollows.World.World.TILE_SIZE + 8, (treeAtPosition.BaseY - 1) * StarshroudHollows.World.World.TILE_SIZE + 8);
+                int acornCount = random.Next(1, 3);
+                for (int i = 0; i < acornCount; i++) droppedItems.Add(new DroppedItem(acornPosition + new Vector2((float)(random.NextDouble() - 0.5) * 20, (float)(random.NextDouble() - 0.5) * 20), ItemType.Acorn));
+                
+                breakSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
+                Vector2 basePosition = new Vector2(treeAtPosition.BaseX * StarshroudHollows.World.World.TILE_SIZE + 8, (treeAtPosition.BaseY - 1) * StarshroudHollows.World.World.TILE_SIZE + 8);
+                for (int i = 0; i < dropCount; i++) droppedItems.Add(new DroppedItem(basePosition + new Vector2((float)(random.NextDouble() - 0.5) * 16, (float)(random.NextDouble() - 0.5) * 16), droppedItemType));
+                return; // Exit early - tree is handled
+            }
+            
+            // Legacy check for individual tree tiles (in case old trees exist)
             if ((tile.Type == TileType.Wood || tile.Type == TileType.Leaves) && tile.IsPartOfTree)
             {
                 int woodBlockCount = CountTreeWoodBlocks(x, y);
@@ -699,8 +787,8 @@ namespace StarshroudHollows.Systems
                 droppedItemType = (tileType == TileType.Grass) ? ItemType.Dirt : ItemTypeExtensions.FromTileType(tileType);
             }
             breakSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
-            Vector2 basePosition = new Vector2(x * StarshroudHollows.World.World.TILE_SIZE + 8, y * StarshroudHollows.World.World.TILE_SIZE + 8);
-            for (int i = 0; i < dropCount; i++) droppedItems.Add(new DroppedItem(basePosition + new Vector2((float)(random.NextDouble() - 0.5) * 16, (float)(random.NextDouble() - 0.5) * 16), droppedItemType));
+            Vector2 dropPosition = new Vector2(x * StarshroudHollows.World.World.TILE_SIZE + 8, y * StarshroudHollows.World.World.TILE_SIZE + 8);
+            for (int i = 0; i < dropCount; i++) droppedItems.Add(new DroppedItem(dropPosition + new Vector2((float)(random.NextDouble() - 0.5) * 16, (float)(random.NextDouble() - 0.5) * 16), droppedItemType));
         }
 
         private bool HasAdjacentSolidBlock(int x, int y)

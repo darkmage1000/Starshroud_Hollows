@@ -1,4 +1,5 @@
-﻿using StarshroudHollows.Enums;
+﻿using Microsoft.Xna.Framework;
+using StarshroudHollows.Enums;
 
 namespace StarshroudHollows.World
 {
@@ -15,6 +16,9 @@ namespace StarshroudHollows.World
 
         // NEW: Liquid Volume property (0.0 to 1.0)
         public float LiquidVolume { get; set; }
+        
+        // NEW: Water color for biome-specific water (null = default blue)
+        public Color? WaterColor { get; set; }
 
         // NEW: Read-only property to replace IsActive for non-liquid tiles
         public bool IsActive => Type != TileType.Air && LiquidVolume < 0.1f;

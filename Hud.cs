@@ -231,8 +231,8 @@ namespace StarshroudHollows.UI
             }
         }
 
-        // MODIFIED: Added MagicSystem magicSystem and healthPotionCooldown parameters (22 arguments total)
-        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, StarshroudHollows.World.World world, bool isAutoMiningActive, bool isRaining, float playerHealth, float playerMaxHealth, float playerAir, float playerMaxAir, Point? currentBedPosition, bool isSleeping, float sleepProgress, float sleepDuration, float bedHoldTime, float bedHoldRequired, TimeSystem timeSystem, MagicSystem magicSystem, float healthPotionCooldown)
+        // MODIFIED: Added MagicSystem magicSystem, healthPotionCooldown, and currentBiome parameters (23 arguments total)
+        public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, int screenWidth, int screenHeight, Vector2 playerPosition, StarshroudHollows.World.World world, bool isAutoMiningActive, bool isRaining, float playerHealth, float playerMaxHealth, float playerAir, float playerMaxAir, Point? currentBedPosition, bool isSleeping, float sleepProgress, float sleepDuration, float bedHoldTime, float bedHoldRequired, TimeSystem timeSystem, MagicSystem magicSystem, float healthPotionCooldown, string currentBiome)
         {
             // FIX: Store the font locally for DrawBars and other helpers to access
             if (this.font == null) this.font = font;
@@ -313,6 +313,29 @@ namespace StarshroudHollows.UI
             // Text
             spriteBatch.DrawString(font, weatherText, weatherPosition, weatherColor);
 
+            // --- Draw Biome Status (Below Weather) ---
+            string biomeText = $"Biome: {currentBiome}";
+            Color biomeColor = GetBiomeColor(currentBiome);
+            Vector2 biomeSize = font.MeasureString(biomeText);
+
+            // Positioned right below weather
+            Vector2 biomePosition = new Vector2(
+                weatherPosition.X,
+                weatherPosition.Y + weatherSize.Y + 5
+            );
+
+            // Background
+            Rectangle biomeBgRect = new Rectangle(
+                (int)biomePosition.X - 5,
+                (int)biomePosition.Y - 5,
+                (int)biomeSize.X + 10,
+                (int)biomeSize.Y + 10
+            );
+            spriteBatch.Draw(pixelTexture, biomeBgRect, Color.Black * 0.7f);
+
+            // Text
+            spriteBatch.DrawString(font, biomeText, biomePosition, biomeColor);
+
             // --- Draw Health Potion Cooldown (H key indicator) ---
             if (healthPotionCooldown > 0)
             {
@@ -320,10 +343,10 @@ namespace StarshroudHollows.UI
                 Color cooldownColor = Color.Gray;
                 Vector2 cooldownSize = font.MeasureString(cooldownText);
 
-                // Position below weather
+                // Position below biome
                 Vector2 cooldownPosition = new Vector2(
-                    weatherPosition.X,
-                    weatherPosition.Y + weatherSize.Y + 5
+                    biomePosition.X,
+                    biomePosition.Y + biomeSize.Y + 5
                 );
 
                 // Background
@@ -345,10 +368,10 @@ namespace StarshroudHollows.UI
                 Color readyColor = Color.LimeGreen;
                 Vector2 readySize = font.MeasureString(readyText);
 
-                // Position below weather
+                // Position below biome
                 Vector2 readyPosition = new Vector2(
-                    weatherPosition.X,
-                    weatherPosition.Y + weatherSize.Y + 5
+                    biomePosition.X,
+                    biomePosition.Y + biomeSize.Y + 5
                 );
 
                 // Background
@@ -483,6 +506,22 @@ namespace StarshroudHollows.UI
             spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
             spriteBatch.Draw(pixelTexture, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
             spriteBatch.Draw(pixelTexture, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
+        }
+
+        private Color GetBiomeColor(string biomeName)
+        {
+            switch (biomeName)
+            {
+                case "Forest": return new Color(34, 139, 34);      // Forest Green
+                case "Snow": return new Color(135, 206, 250);        // Light Sky Blue
+                case "Jungle": return new Color(0, 128, 0);          // Dark Green
+                case "Swamp": return new Color(107, 142, 35);        // Olive Drab
+                case "Volcanic": return new Color(255, 69, 0);       // Orange Red
+                case "Underground": return new Color(139, 69, 19);   // Saddle Brown
+                case "Deep Underground": return new Color(75, 0, 130); // Indigo
+                case "Hell": return new Color(220, 20, 60);          // Crimson
+                default: return Color.White;
+            }
         }
     }
 }

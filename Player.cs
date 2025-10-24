@@ -666,7 +666,7 @@ namespace StarshroudHollows.Player
                 }
                 else if (heldItemType >= ItemType.WoodSword && heldItemType <= ItemType.RunicSword)
                 {
-                    scale = 0.8f; // FIXED: Proper sword size
+                    scale = 0.5f; // FIXED: Smaller sword size (was too big at 0.8f)
                     if (animationFrame == 1) rotation = facingRight ? MathHelper.PiOver4 * 2.8f : -MathHelper.PiOver4 * 1.2f;
                     else if (animationFrame == 2) rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 2.5f;
                     else rotation = facingRight ? MathHelper.PiOver4 * 0.5f : -MathHelper.PiOver4 * 0.5f;
@@ -707,7 +707,8 @@ namespace StarshroudHollows.Player
                 // --- FINAL DRAW CALL FOR THE ITEM ---
                 Rectangle sourceRect = new Rectangle(sourceX, sourceY, itemFrameWidth, itemFrameHeight);
                 Vector2 origin = new Vector2(itemFrameWidth / 2f, itemFrameHeight / 2f);
-                Vector2 drawPosition = new Vector2(Position.X + Player.PLAYER_WIDTH * 0.75f, Position.Y + Player.PLAYER_HEIGHT * 0.35f);
+                // FIXED: Move items further from player face (was 0.75f, now 1.0f on X axis)
+                Vector2 drawPosition = new Vector2(Position.X + Player.PLAYER_WIDTH * 1.0f, Position.Y + Player.PLAYER_HEIGHT * 0.35f);
 
                 if (heldItemType >= ItemType.WoodSword && heldItemType <= ItemType.RunicSword)
                 {

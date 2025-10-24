@@ -11,7 +11,8 @@ namespace StarshroudHollows.Enums
         Silver,
         Gold,          // NEW: Gold ore
         Platinum,
-        Wood,
+        ForestWood,
+        Wood, // Legacy - same as ForestWood
         Coal,
         Obsidian,
         SnowWood,
@@ -148,7 +149,7 @@ namespace StarshroudHollows.Enums
                 case ItemType.Gold: return TileType.Gold;
                 case ItemType.Platinum: return TileType.Platinum;
                 case ItemType.Wood: return TileType.Wood;
-               
+                case ItemType.Obsidian: return TileType.Obsidian;
                 case ItemType.Coal: return TileType.Coal;
                 case ItemType.Torch: return TileType.Torch;
                 case ItemType.WoodCraftingBench: return TileType.WoodCraftingBench;
@@ -191,6 +192,7 @@ namespace StarshroudHollows.Enums
                 case TileType.Gold: return ItemType.Gold;
                 case TileType.Platinum: return ItemType.Platinum;
                 case TileType.Wood: return ItemType.Wood;
+                case TileType.Obsidian: return ItemType.Obsidian;
                 case TileType.Coal: return ItemType.Coal;
                 case TileType.Torch: return ItemType.Torch;
                 case TileType.WoodCraftingBench: return ItemType.WoodCraftingBench;

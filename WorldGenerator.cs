@@ -41,6 +41,12 @@ namespace StarshroudHollows.Systems
         public int GetSeed() => seed;
         public int GetSnowBiomeStartX() => snowBiomeStartX;
         public int GetSnowBiomeEndX() => snowBiomeEndX;
+        public int GetSwampBiomeStartX() => swampBiomeStartX;
+        public int GetSwampBiomeEndX() => swampBiomeEndX;
+        public int GetJungleBiomeStartX() => jungleBiomeStartX;
+        public int GetJungleBiomeEndX() => jungleBiomeEndX;
+        public int GetVolcanicBiomeStartX() => volcanicBiomeStartX;
+        public int GetVolcanicBiomeEndX() => volcanicBiomeEndX;
 
         public WorldGenerator(StarshroudHollows.World.World world, int seed = 0, ChestSystem chestSystem = null)
         {
@@ -127,23 +133,35 @@ namespace StarshroudHollows.Systems
                 world.StabilizeLiquids(stabilizeStart, stabilizeEnd, OnProgressUpdate);
 
                 // Final steps
-                OnProgressUpdate?.Invoke(0.95f, "Planting trees...");
-                GenerateTrees();
-
-                OnProgressUpdate?.Invoke(0.97f, "Growing grass...");
+                // CRITICAL FIX: Generate biomes BEFORE trees so tree placement knows what biome it's in
+                OnProgressUpdate?.Invoke(0.93f, "Growing grass...");
                 GenerateGrass();
 
-                OnProgressUpdate?.Invoke(0.973f, "Generating snow biome...");
+                OnProgressUpdate?.Invoke(0.94f, "Generating snow biome...");
                 GenerateSnowBiome();
 
-                OnProgressUpdate?.Invoke(0.980f, "Generating swamp biome...");
+                OnProgressUpdate?.Invoke(0.95f, "Generating swamp biome...");
                 GenerateSwampBiome();
 
-                OnProgressUpdate?.Invoke(0.987f, "Generating jungle biome...");
+                OnProgressUpdate?.Invoke(0.96f, "Generating jungle biome...");
                 GenerateJungleBiome();
 
-                OnProgressUpdate?.Invoke(0.994f, "Generating volcanic biome...");
+                OnProgressUpdate?.Invoke(0.97f, "Generating volcanic biome...");
                 GenerateVolcanicBiome();
+
+                // NOW plant trees - they will detect biome and place correct type
+                OnProgressUpdate?.Invoke(0.98f, "Planting trees...");
+                GenerateTrees();
+
+                OnProgressUpdate?.Invoke(0.99f, "Cleaning water around trees...");
+                RemoveWaterAroundTrees();
+
+                // NEW: Underground mini-biomes
+                OnProgressUpdate?.Invoke(0.996f, "Generating spider nests...");
+                GenerateSpiderBiomes();
+
+                OnProgressUpdate?.Invoke(0.998f, "Generating worm colonies...");
+                GenerateWormBiomes();
 
                 // CRITICAL FIX: Remove floating liquids after biome generation
                 OnProgressUpdate?.Invoke(0.997f, "Cleaning up floating liquids...");
@@ -663,152 +681,153 @@ namespace StarshroudHollows.Systems
 
         private void GenerateLava()
         {
-            int lavaCavesPlaced = 0;
             int lavaPoolsPlaced = 0;
 
-            // 1. Generate large lava caves at deep depths (1800-2500)
-            for (int i = 0; i < 30; i++)
-            {
-                int startX = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
-                int startY = random.Next(1800, Math.Min(2500, StarshroudHollows.World.World.WORLD_HEIGHT - 200));
-                int caveLength = random.Next(60, 120);
-
-                if (CarveLavaCave(startX, startY, caveLength))
-                {
-                    lavaCavesPlaced++;
-                }
-            }
-
-            // 2. Generate lava pools in existing caves (1500+)
-            for (int attempt = 0; attempt < 200; attempt++)
+            // Generate CONTAINED lava pools at deep depths (1500-2500)
+            for (int attempt = 0; attempt < 100; attempt++)
             {
                 int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
-                int y = random.Next(1500, StarshroudHollows.World.World.WORLD_HEIGHT - 200);
+                int y = random.Next(1500, Math.Min(2500, StarshroudHollows.World.World.WORLD_HEIGHT - 200));
 
-                // Check if this is an open cave area
-                var tile = world.GetTile(x, y);
-                if (tile == null || !tile.IsActive)
+                // Create contained lava pool
+                if (CreateContainedLavaPool(x, y))
                 {
-                    // Try to create a lava pool here
-                    if (CreateLavaPool(x, y))
-                    {
-                        lavaPoolsPlaced++;
-                    }
+                    lavaPoolsPlaced++;
                 }
             }
 
-            Logger.Log($"[WORLDGEN] Generated {lavaCavesPlaced} lava caves and {lavaPoolsPlaced} lava pools");
+            Logger.Log($"[WORLDGEN] Generated {lavaPoolsPlaced} CONTAINED lava pools");
         }
 
-        private bool CarveLavaCave(int startX, int startY, int length)
+        // CONTAINED lava pool - carved with stone container AT FLOOR LEVEL
+        private bool CreateContainedLavaPool(int centerX, int centerY)
         {
-            double direction = random.NextDouble() * Math.PI * 2;
-            int currentX = startX;
-            int currentY = startY;
-            bool lavaPlaced = false;
-
-            for (int step = 0; step < length; step++)
-            {
-                int radius = random.Next(3, 6);
-
-                // Carve out the cave
-                for (int dx = -radius; dx <= radius; dx++)
-                {
-                    for (int dy = -radius; dy <= radius; dy++)
-                    {
-                        if (dx * dx + dy * dy <= radius * radius)
-                        {
-                            int tileX = currentX + dx;
-                            int tileY = currentY + dy;
-
-                            var tile = world.GetTile(tileX, tileY);
-                            if (tile != null && tile.IsActive && tile.Type != TileType.Grass)
-                            {
-                                world.SetTile(tileX, tileY, new StarshroudHollows.World.Tile(TileType.Air));
-                            }
-                        }
-                    }
-                }
-
-                // Fill bottom portion with lava
-                int lavaRadius = radius - 1;
-                for (int dx = -lavaRadius; dx <= lavaRadius; dx++)
-                {
-                    // Only fill the bottom 1/3 of the cave with lava
-                    for (int dy = 0; dy <= lavaRadius / 2; dy++)
-                    {
-                        int tileX = currentX + dx;
-                        int tileY = currentY + dy;
-
-                        var tile = world.GetTile(tileX, tileY);
-                        if (tile == null || !tile.IsActive)
-                        {
-                            world.SetTile(tileX, tileY, new StarshroudHollows.World.Tile(TileType.Lava));
-                            lavaPlaced = true;
-                        }
-                    }
-                }
-
-                // Random direction change
-                direction += (random.NextDouble() - 0.5) * 0.4;
-                // Slight tendency to go down
-                direction += 0.03;
-
-                int moveSpeed = random.Next(2, 4);
-                currentX += (int)(Math.Cos(direction) * moveSpeed);
-                currentY += (int)(Math.Sin(direction) * moveSpeed);
-
-                // Stop if out of bounds
-                if (currentX < 100 || currentX >= StarshroudHollows.World.World.WORLD_WIDTH - 100 ||
-                    currentY < 1800 || currentY >= StarshroudHollows.World.World.WORLD_HEIGHT - 200)
-                    break;
-            }
-
-            return lavaPlaced;
-        }
-
-        private bool CreateLavaPool(int centerX, int centerY)
-        {
-            // Find the floor below this position
-            int floorY = centerY;
+            // CRITICAL FIX: Find the cave FLOOR first, not the ceiling
+            int floorY = -1;
             bool foundFloor = false;
 
-            for (int checkY = centerY; checkY < Math.Min(centerY + 30, StarshroudHollows.World.World.WORLD_HEIGHT - 1); checkY++)
+            // Search downward from centerY to find cave floor (air above, solid below)
+            for (int checkY = centerY; checkY < Math.Min(centerY + 50, StarshroudHollows.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
-                if (tile != null && tile.IsActive)
+                var tileBelow = world.GetTile(centerX, checkY + 1);
+
+                if ((tile == null || !tile.IsActive) && tileBelow != null && tileBelow.IsActive)
                 {
-                    floorY = checkY;
+                    floorY = checkY; // This is the floor (air space above solid)
                     foundFloor = true;
                     break;
                 }
             }
 
-            if (!foundFloor) return false;
+            if (!foundFloor) return false; // No cave floor found
 
-            // Create a pool of lava on the floor
-            int poolWidth = random.Next(4, 10);
-            int poolDepth = random.Next(2, 4);
+            // Pick pool size based on random
+            int poolWidth = random.Next(6, 14);
+            int poolDepth = random.Next(3, 8);
             bool lavaPlaced = false;
 
+            // FIXED: Build pool from floor UPWARD (negative dy values)
+            // Build stone container around pool
+            for (int dx = -poolWidth / 2 - 1; dx <= poolWidth / 2 + 1; dx++)
+            {
+                for (int dy = -poolDepth - 1; dy <= 0; dy++) // FIXED: Build upward from floor
+                {
+                    int poolX = centerX + dx;
+                    int poolY = floorY + dy; // FIXED: Use floorY instead of centerY
+
+                    // Build walls on all sides and top (ceiling of pool)
+                    if (dx == -poolWidth / 2 - 1 || dx == poolWidth / 2 + 1 || dy == -poolDepth - 1 || dy == 0)
+                    {
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Stone));
+                    }
+                }
+            }
+
+            // Clear interior (the pool cavity)
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
-                for (int dy = -poolDepth; dy < 0; dy++)
+                for (int dy = -poolDepth; dy < 0; dy++) // FIXED: Clear upward from floor
                 {
-                    int lavaX = centerX + dx;
-                    int lavaY = floorY + dy;
+                    int poolX = centerX + dx;
+                    int poolY = floorY + dy; // FIXED: Use floorY
 
-                    var tile = world.GetTile(lavaX, lavaY);
-                    if (tile == null || !tile.IsActive)
-                    {
-                        world.SetTile(lavaX, lavaY, new StarshroudHollows.World.Tile(TileType.Lava));
-                        lavaPlaced = true;
-                    }
+                    world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
+                }
+            }
+
+            // Fill with lava FROM BOTTOM UP
+            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            {
+                for (int dy = -poolDepth; dy < 0; dy++) // FIXED: Fill upward from floor
+                {
+                    int poolX = centerX + dx;
+                    int poolY = floorY + dy; // FIXED: Use floorY
+
+                    var lavaTile = new StarshroudHollows.World.Tile(TileType.Lava);
+                    lavaTile.LiquidVolume = 1.0f; // Full volume
+                    world.SetTile(poolX, poolY, lavaTile);
+                    lavaPlaced = true;
                 }
             }
 
             return lavaPlaced;
         }
+        
+        // NEW: Create CONTAINED swamp water pools 
+        private bool CreateSurfaceSwampPool(int centerX, int surfaceY)
+        {
+            int poolWidth = random.Next(6, 12);
+            int poolDepth = random.Next(2, 4);
+            bool waterPlaced = false;
+
+            // Build stone walls
+            for (int dx = -poolWidth / 2 - 1; dx <= poolWidth / 2 + 1; dx++)
+            {
+                for (int dy = 0; dy <= poolDepth + 1; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = surfaceY + dy;
+
+                    if (dx == -poolWidth / 2 - 1 || dx == poolWidth / 2 + 1 || dy == poolDepth + 1)
+                    {
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Dirt));
+                    }
+                }
+            }
+
+            // Clear interior
+            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            {
+                for (int dy = 1; dy <= poolDepth; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = surfaceY + dy;
+
+                    world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
+                }
+            }
+
+            // Fill with water
+            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            {
+                for (int dy = 1; dy <= poolDepth; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = surfaceY + dy;
+
+                    var waterTile = new StarshroudHollows.World.Tile(TileType.Water);
+                    waterTile.WaterColor = new Color(80, 100, 60);
+                    waterTile.LiquidVolume = 1.0f;
+                    world.SetTile(poolX, poolY, waterTile);
+                    waterPlaced = true;
+                }
+            }
+
+            return waterPlaced;
+        }
+
+
 
         private void GenerateWater()
         {
@@ -817,7 +836,7 @@ namespace StarshroudHollows.Systems
             int mediumUndergroundPoolsPlaced = 0;
             int largeUndergroundPoolsPlaced = 0;
 
-            // 1. Generate surface water pools (small ponds)
+            // 1. Generate surface water pools (small ponds) - CONTAINED
             for (int attempt = 0; attempt < 50; attempt++)
             {
                 int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
@@ -835,81 +854,81 @@ namespace StarshroudHollows.Systems
                     }
                 }
 
-                if (isFlat && CreateSurfaceWaterPool(x, surfaceY))
+                if (isFlat && CreateContainedSurfaceWaterPool(x, surfaceY))
                 {
                     surfacePoolsPlaced++;
                 }
             }
 
-            // 2. Generate small underground pools (depth 300-1000)
+            // 2. Generate small underground pools (depth 300-1000) - CONTAINED
             for (int attempt = 0; attempt < 150; attempt++)
             {
                 int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(300, 1000);
 
-                if (CreateSmallUndergroundPool(x, y))
+                if (CreateContainedSmallUndergroundPool(x, y))
                 {
                     smallUndergroundPoolsPlaced++;
                 }
             }
 
-            // 3. Generate medium underground pools (depth 800-1800)
+            // 3. Generate medium underground pools (depth 800-1800) - CONTAINED
             for (int attempt = 0; attempt < 80; attempt++)
             {
                 int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(800, 1800);
 
-                if (CreateMediumUndergroundPool(x, y))
+                if (CreateContainedMediumUndergroundPool(x, y))
                 {
                     mediumUndergroundPoolsPlaced++;
                 }
             }
 
-            // 4. Generate large underground pools/lakes (depth 1200-2200)
+            // 4. Generate large underground pools/lakes (depth 1200-2200) - CONTAINED
             for (int attempt = 0; attempt < 30; attempt++)
             {
                 int x = random.Next(150, StarshroudHollows.World.World.WORLD_WIDTH - 150);
                 int y = random.Next(1200, 2200);
 
-                if (CreateLargeUndergroundPool(x, y))
+                if (CreateContainedLargeUndergroundPool(x, y))
                 {
                     largeUndergroundPoolsPlaced++;
                 }
             }
 
-            Logger.Log($"[WORLDGEN] Generated {surfacePoolsPlaced} surface pools, {smallUndergroundPoolsPlaced} small underground pools, {mediumUndergroundPoolsPlaced} medium pools, {largeUndergroundPoolsPlaced} large pools");
+            Logger.Log($"[WORLDGEN] Generated {surfacePoolsPlaced} surface pools, {smallUndergroundPoolsPlaced} small underground pools, {mediumUndergroundPoolsPlaced} medium pools, {largeUndergroundPoolsPlaced} large pools (ALL CONTAINED)");
         }
 
-        private bool CreateSurfaceWaterPool(int centerX, int surfaceY)
+        // CONTAINED surface water pool - carved into ground with walls - NO FLOW NEEDED
+        private bool CreateContainedSurfaceWaterPool(int centerX, int surfaceY)
         {
             int poolWidth = random.Next(8, 16);
             int poolDepth = random.Next(3, 6);
             bool waterPlaced = false;
 
-            // Dig out the pool area
-            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            // Build container walls and bottom BELOW surface
+            for (int dx = -poolWidth / 2 - 1; dx <= poolWidth / 2 + 1; dx++)
             {
-                // Create rounded edges
                 int edgeDepth = poolDepth;
                 if (Math.Abs(dx) > poolWidth / 3)
                 {
                     edgeDepth = poolDepth / 2;
                 }
 
-                for (int dy = 1; dy <= edgeDepth; dy++)
+                for (int dy = 1; dy <= edgeDepth + 1; dy++) // Start at dy=1 (below surface)
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
 
-                    var tile = world.GetTile(poolX, poolY);
-                    if (tile != null && tile.IsActive)
+                    // Build walls on sides and bottom
+                    if (dx == -poolWidth / 2 - 1 || dx == poolWidth / 2 + 1 || dy == edgeDepth + 1)
                     {
-                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Stone));
                     }
                 }
             }
 
-            // Fill with water
+            // Clear interior space BELOW surface
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
                 int edgeDepth = poolDepth;
@@ -918,24 +937,41 @@ namespace StarshroudHollows.Systems
                     edgeDepth = poolDepth / 2;
                 }
 
-                for (int dy = 1; dy <= edgeDepth; dy++)
+                for (int dy = 1; dy <= edgeDepth; dy++) // Start at dy=1 (below surface)
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
 
-                    var tile = world.GetTile(poolX, poolY);
-                    if (tile == null || !tile.IsActive)
-                    {
-                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Water));
-                        waterPlaced = true;
-                    }
+                    world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
+                }
+            }
+
+            // Fill with water DIRECTLY into carved space (no flow needed)
+            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            {
+                int edgeDepth = poolDepth;
+                if (Math.Abs(dx) > poolWidth / 3)
+                {
+                    edgeDepth = poolDepth / 2;
+                }
+
+                for (int dy = 1; dy <= edgeDepth; dy++) // Start at dy=1 (below surface)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = surfaceY + dy;
+
+                    var waterTile = new StarshroudHollows.World.Tile(TileType.Water);
+                    waterTile.LiquidVolume = 1.0f; // Full volume
+                    world.SetTile(poolX, poolY, waterTile);
+                    waterPlaced = true;
                 }
             }
 
             return waterPlaced;
         }
 
-        private bool CreateSmallUndergroundPool(int centerX, int centerY)
+        // CONTAINED small underground pool - fills floor of cave directly
+        private bool CreateContainedSmallUndergroundPool(int centerX, int centerY)
         {
             int floorY = -1;
             bool foundCave = false;
@@ -959,6 +995,7 @@ namespace StarshroudHollows.Systems
             int poolDepth = random.Next(2, 3);
             bool waterPlaced = false;
 
+            // Fill DIRECTLY into floor space (upward from floor)
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
                 for (int dy = -poolDepth; dy < 0; dy++)
@@ -966,19 +1003,18 @@ namespace StarshroudHollows.Systems
                     int poolX = centerX + dx;
                     int poolY = floorY + dy;
 
-                    var tile = world.GetTile(poolX, poolY);
-                    if (tile == null || !tile.IsActive)
-                    {
-                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Water));
-                        waterPlaced = true;
-                    }
+                    var waterTile = new StarshroudHollows.World.Tile(TileType.Water);
+                    waterTile.LiquidVolume = 1.0f;
+                    world.SetTile(poolX, poolY, waterTile);
+                    waterPlaced = true;
                 }
             }
 
             return waterPlaced;
         }
 
-        private bool CreateMediumUndergroundPool(int centerX, int centerY)
+        // CONTAINED medium underground pool - fills floor of cave directly
+        private bool CreateContainedMediumUndergroundPool(int centerX, int centerY)
         {
             int floorY = -1;
             bool foundCave = false;
@@ -1002,6 +1038,7 @@ namespace StarshroudHollows.Systems
             int poolDepth = random.Next(4, 6);
             bool waterPlaced = false;
 
+            // Fill DIRECTLY into floor space (upward from floor)
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
                 for (int dy = -poolDepth; dy < 0; dy++)
@@ -1009,19 +1046,18 @@ namespace StarshroudHollows.Systems
                     int poolX = centerX + dx;
                     int poolY = floorY + dy;
 
-                    var tile = world.GetTile(poolX, poolY);
-                    if (tile == null || !tile.IsActive)
-                    {
-                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Water));
-                        waterPlaced = true;
-                    }
+                    var waterTile = new StarshroudHollows.World.Tile(TileType.Water);
+                    waterTile.LiquidVolume = 1.0f;
+                    world.SetTile(poolX, poolY, waterTile);
+                    waterPlaced = true;
                 }
             }
 
             return waterPlaced;
         }
 
-        private bool CreateLargeUndergroundPool(int centerX, int centerY)
+        // CONTAINED large underground pool - fills floor of cave directly
+        private bool CreateContainedLargeUndergroundPool(int centerX, int centerY)
         {
             int floorY = -1;
             bool foundCave = false;
@@ -1045,6 +1081,7 @@ namespace StarshroudHollows.Systems
             int poolDepth = random.Next(8, 12);
             bool waterPlaced = false;
 
+            // Fill DIRECTLY into floor space (upward from floor) with depth variation for edges
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
                 float edgeFactor = 1.0f - (Math.Abs(dx) / (float)(poolWidth / 2));
@@ -1055,12 +1092,10 @@ namespace StarshroudHollows.Systems
                     int poolX = centerX + dx;
                     int poolY = floorY + dy;
 
-                    var tile = world.GetTile(poolX, poolY);
-                    if (tile == null || !tile.IsActive)
-                    {
-                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Water));
-                        waterPlaced = true;
-                    }
+                    var waterTile = new StarshroudHollows.World.Tile(TileType.Water);
+                    waterTile.LiquidVolume = 1.0f;
+                    world.SetTile(poolX, poolY, waterTile);
+                    waterPlaced = true;
                 }
             }
 
@@ -1106,6 +1141,35 @@ namespace StarshroudHollows.Systems
             Logger.Log($"[WORLDGEN] Created {obsidianCreated} obsidian blocks from lava+water interactions");
         }
 
+        private void RemoveWaterAroundTrees()
+        {
+            int waterRemoved = 0;
+            
+            // Go through all trees and remove water in/around them
+            foreach (var tree in world.trees)
+            {
+                // Remove water in a radius around the tree base
+                int clearRadius = 6;
+                for (int dx = -clearRadius; dx <= clearRadius; dx++)
+                {
+                    for (int dy = -20; dy <= 2; dy++) // From canopy to below base
+                    {
+                        int checkX = tree.BaseX + dx;
+                        int checkY = tree.BaseY + dy;
+                        
+                        var tile = world.GetTile(checkX, checkY);
+                        if (tile != null && tile.Type == TileType.Water)
+                        {
+                            world.SetTile(checkX, checkY, new StarshroudHollows.World.Tile(TileType.Air));
+                            waterRemoved++;
+                        }
+                    }
+                }
+            }
+            
+            Logger.Log($"[WORLDGEN] Removed {waterRemoved} water tiles around trees");
+        }
+
         private void PlaceTree(int baseX, int baseY)
         {
             // CRITICAL: Don't place trees in areas with modified tiles (player buildings)
@@ -1123,12 +1187,38 @@ namespace StarshroudHollows.Systems
                 }
             }
             
+            // CRITICAL FIX: Detect what biome we're in and set the correct tree type
+            TileType treeType = TileType.ForestTree; // Default to forest
+            var groundTile = world.GetTile(baseX, baseY);
+            
+            if (groundTile != null && groundTile.IsActive)
+            {
+                switch (groundTile.Type)
+                {
+                    case TileType.SnowGrass:
+                        treeType = TileType.SnowTree;
+                        break;
+                    case TileType.SwampGrass:
+                        treeType = TileType.SwampTree;
+                        break;
+                    case TileType.JungleGrass:
+                        treeType = TileType.JungleTree;
+                        break;
+                    case TileType.VolcanicGrass:
+                        treeType = TileType.VolcanicTree;
+                        break;
+                    default:
+                        treeType = TileType.ForestTree; // Default for grass/dirt
+                        break;
+                }
+            }
+            
             int trunkHeight = random.Next(8, 15);
-            var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight);
+            var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight, treeType); // Use detected tree type!
             for (int y = 0; y < trunkHeight; y++)
             {
                 int treeY = baseY - 1 - y;
-                // CRITICAL FIX: Don't set background tiles for tree parts
+                // Trees use full sprites now, but we still place tiles for collision
                 var newTile = new StarshroudHollows.World.Tile(TileType.Wood, true);
                 newTile.IsPartOfTree = true; // Mark as tree so lighting system doesn't add background
                 world.SetTile(baseX, treeY, newTile);
@@ -1147,7 +1237,7 @@ namespace StarshroudHollows.Systems
                         var existingTile = world.GetTile(leafX, leafY);
                         if (existingTile == null || !existingTile.IsActive || existingTile.Type != TileType.Wood)
                         {
-                            // CRITICAL FIX: Don't set background tiles for leaves
+                            // Trees use full sprites now, but we still place tiles for collision
                             var newTile = new StarshroudHollows.World.Tile(TileType.Leaves, true);
                             newTile.IsPartOfTree = true; // Mark as tree so lighting system doesn't add background
                             world.SetTile(leafX, leafY, newTile);
@@ -1211,6 +1301,20 @@ namespace StarshroudHollows.Systems
 
             int snowTilesConverted = 0;
             int iciclesPlaced = 0;
+            int treesConverted = 0;
+
+            // FIRST: Convert existing trees to snow trees - this changes which sprite is used
+            var treesList = new System.Collections.Generic.List<StarshroudHollows.World.Tree>(world.trees);
+            foreach (var tree in treesList)
+            {
+                // Check if tree is in snow biome
+                if (tree.BaseX >= snowBiomeStartX && tree.BaseX <= snowBiomeEndX)
+                {
+                    // Change tree type to snow tree - this will use the snowtree.png sprite
+                    tree.TreeType = TileType.SnowTree;
+                    treesConverted++;
+                }
+            }
 
             // Apply snow transformation
             for (int x = snowBiomeStartX; x <= snowBiomeEndX; x++)
@@ -1231,10 +1335,11 @@ namespace StarshroudHollows.Systems
                                 world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.Snow));
                                 snowTilesConverted++;
                                 break;
-                            case TileType.Leaves:
-                                world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.SnowyLeaves));
-                                snowTilesConverted++;
-                                break;
+                            // DON'T convert leaves/wood - trees now use full sprites and the tree tiles are marked with IsPartOfTree
+                            // case TileType.Leaves:
+                            //     world.SetTile(x, y, new StarshroudHollows.World.Tile(TileType.SnowyLeaves));
+                            //     snowTilesConverted++;
+                            //     break;
                             case TileType.Water:
                                 // Freeze top layer of water to ice
                                 var tileAbove = world.GetTile(x, y - 1);
@@ -1279,7 +1384,7 @@ namespace StarshroudHollows.Systems
                 }
             }
 
-            Logger.Log($"[WORLDGEN] Snow biome complete: {snowTilesConverted} tiles converted, {iciclesPlaced} icicles placed");
+            Logger.Log($"[WORLDGEN] Snow biome complete: {snowTilesConverted} tiles converted, {iciclesPlaced} icicles placed, {treesConverted} trees converted to snow trees");
         }
 
         private void GenerateSwampBiome()
@@ -1341,8 +1446,8 @@ namespace StarshroudHollows.Systems
                 }
             }
 
-            // Place swamp trees (replace existing trees or place new ones)
-            for (int x = swampBiomeStartX; x <= swampBiomeEndX; x += random.Next(8, 15))
+            // Place swamp trees (replace existing trees or place new ones) - every 6-12 blocks for more density
+            for (int x = swampBiomeStartX; x <= swampBiomeEndX; x += random.Next(6, 13))
             {
                 int surfaceY = world.GetSurfaceHeight(x);
                 var groundTile = world.GetTile(x, surfaceY);
@@ -1353,9 +1458,10 @@ namespace StarshroudHollows.Systems
                     for (int checkY = surfaceY - 20; checkY < surfaceY; checkY++)
                     {
                         var checkTile = world.GetTile(x, checkY);
-                        if (checkTile != null && (checkTile.Type == TileType.Wood || checkTile.Type == TileType.Leaves))
+                        if (checkTile != null && checkTile.IsPartOfTree)
                         {
                             world.RemoveTree(x, checkY);
+                            break; // Only need to remove once
                         }
                     }
 
@@ -1375,19 +1481,36 @@ namespace StarshroudHollows.Systems
                 }
             }
 
-            // Add extra water pools in swamp biome (more water than normal)
+            // Add extra water pools in swamp biome (carved into ground, not floating)
             for (int attempt = 0; attempt < 80; attempt++)
             {
                 int x = random.Next(swampBiomeStartX, swampBiomeEndX + 1);
-                int y = random.Next(SURFACE_LEVEL - 20, SURFACE_LEVEL + 50);
-
-                if (CreateSmallUndergroundPool(x, y))
+                int surfaceY = world.GetSurfaceHeight(x);
+                
+                // Create surface water pool carved into ground (like surface water pools)
+                if (CreateSurfaceSwampPool(x, surfaceY))
                 {
                     extraWaterPoolsPlaced++;
                 }
             }
 
-            Logger.Log($"[WORLDGEN] Swamp biome complete: {swampTilesConverted} tiles converted, {swampTreesPlaced} swamp trees placed, {extraWaterPoolsPlaced} extra water pools");
+            // Color all water in swamp biome to murky green
+            int waterColored = 0;
+            for (int x = swampBiomeStartX; x <= swampBiomeEndX; x++)
+            {
+                for (int y = 0; y < SWAMP_BIOME_DEPTH; y++)
+                {
+                    var tile = world.GetTile(x, y);
+                    if (tile != null && tile.Type == TileType.Water)
+                    {
+                        // Set swamp water color (murky green)
+                        tile.WaterColor = new Color(80, 100, 60); // Dark murky green
+                        waterColored++;
+                    }
+                }
+            }
+
+            Logger.Log($"[WORLDGEN] Swamp biome complete: {swampTilesConverted} tiles converted, {swampTreesPlaced} swamp trees placed, {extraWaterPoolsPlaced} extra water pools, {waterColored} water tiles colored");
         }
 
         private void GenerateJungleBiome()
@@ -1446,8 +1569,8 @@ namespace StarshroudHollows.Systems
                 }
             }
 
-            // Place LOTS of jungle trees (very dense forest)
-            for (int x = jungleBiomeStartX; x <= jungleBiomeEndX; x += random.Next(4, 8))
+            // Place LOTS of jungle trees (very dense forest) - every 3-6 blocks
+            for (int x = jungleBiomeStartX; x <= jungleBiomeEndX; x += random.Next(3, 7))
             {
                 int surfaceY = world.GetSurfaceHeight(x);
                 var groundTile = world.GetTile(x, surfaceY);
@@ -1458,10 +1581,10 @@ namespace StarshroudHollows.Systems
                     for (int checkY = surfaceY - 20; checkY < surfaceY; checkY++)
                     {
                         var checkTile = world.GetTile(x, checkY);
-                        if (checkTile != null && (checkTile.Type == TileType.Wood || checkTile.Type == TileType.Leaves ||
-                                                 checkTile.Type == TileType.SwampTree))
+                        if (checkTile != null && checkTile.IsPartOfTree)
                         {
                             world.RemoveTree(x, checkY);
+                            break; // Only need to remove once
                         }
                     }
 
@@ -1548,8 +1671,8 @@ namespace StarshroudHollows.Systems
                 }
             }
 
-            // Place sparse volcanic trees (way less than other biomes)
-            for (int x = volcanicBiomeStartX; x <= volcanicBiomeEndX; x += random.Next(20, 35))
+            // Place sparse volcanic trees (way less than other biomes) - every 25-40 blocks
+            for (int x = volcanicBiomeStartX; x <= volcanicBiomeEndX; x += random.Next(25, 41))
             {
                 int surfaceY = world.GetSurfaceHeight(x);
                 var groundTile = world.GetTile(x, surfaceY);
@@ -1560,10 +1683,10 @@ namespace StarshroudHollows.Systems
                     for (int checkY = surfaceY - 20; checkY < surfaceY; checkY++)
                     {
                         var checkTile = world.GetTile(x, checkY);
-                        if (checkTile != null && (checkTile.Type == TileType.Wood || checkTile.Type == TileType.Leaves ||
-                                                 checkTile.Type == TileType.SwampTree || checkTile.Type == TileType.JungleTree))
+                        if (checkTile != null && checkTile.IsPartOfTree)
                         {
                             world.RemoveTree(x, checkY);
+                            break; // Only need to remove once
                         }
                     }
 
@@ -1631,7 +1754,7 @@ namespace StarshroudHollows.Systems
             }
 
             int trunkHeight = random.Next(6, 11); // Short, burnt-looking trees
-            var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight);
+            var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight, TileType.VolcanicTree);
             
             // Place volcanic tree trunk
             for (int y = 0; y < trunkHeight; y++)
@@ -1773,7 +1896,7 @@ namespace StarshroudHollows.Systems
             }
 
             int trunkHeight = random.Next(12, 18); // Very tall trees (12-18 blocks)
-            var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight);
+            var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight, TileType.JungleTree);
             
             // Place jungle tree trunk
             for (int y = 0; y < trunkHeight; y++)
@@ -1829,7 +1952,7 @@ namespace StarshroudHollows.Systems
             }
 
             int trunkHeight = random.Next(10, 16); // Taller than normal trees
-            var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight);
+            var tree = new StarshroudHollows.World.Tree(baseX, baseY, trunkHeight, TileType.SwampTree);
             
             // Place swamp tree trunk
             for (int y = 0; y < trunkHeight; y++)
@@ -1906,6 +2029,136 @@ namespace StarshroudHollows.Systems
             }
             
             Logger.Log($"[WORLDGEN] Removed {floatingLiquidsRemoved} floating liquid tiles");
+        }
+
+        // NEW: Generate small spider nest biomes underground
+        private void GenerateSpiderBiomes()
+        {
+            int spiderBiomesPlaced = 0;
+            int spiderWebsPlaced = 0;
+            
+            // Generate 5-10 small spider nests in forest biome underground (850+ blocks deep)
+            int numBiomes = random.Next(5, 11);
+            
+            for (int i = 0; i < numBiomes; i++)
+            {
+                // Find location in forest biome (center region), deep underground
+                int centerX = StarshroudHollows.World.World.WORLD_WIDTH / 2;
+                int x = random.Next(centerX - 600, centerX + 600); // Within 600 blocks of center
+                int y = random.Next(850, 1200); // 850-1200 blocks deep
+                
+                // Check if this area is relatively open (cave)
+                var tile = world.GetTile(x, y);
+                if (tile == null || !tile.IsActive)
+                {
+                    // Found a cave - create spider nest here
+                    int nestRadius = random.Next(8, 15); // 8-15 block radius
+                    int webCount = 0;
+                    
+                    for (int dx = -nestRadius; dx <= nestRadius; dx++)
+                    {
+                        for (int dy = -nestRadius; dy <= nestRadius; dy++)
+                        {
+                            // Place webs in a roughly circular pattern
+                            if (dx * dx + dy * dy <= nestRadius * nestRadius)
+                            {
+                                int webX = x + dx;
+                                int webY = y + dy;
+                                
+                                var webTile = world.GetTile(webX, webY);
+                                // Place web if empty air, randomly (60% chance)
+                                if ((webTile == null || !webTile.IsActive) && random.Next(0, 100) < 60)
+                                {
+                                    world.SetTile(webX, webY, new StarshroudHollows.World.Tile(TileType.SpiderWeb));
+                                    webCount++;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (webCount > 0)
+                    {
+                        spiderBiomesPlaced++;
+                        spiderWebsPlaced += webCount;
+                    }
+                }
+            }
+            
+            Logger.Log($"[WORLDGEN] Generated {spiderBiomesPlaced} spider nests with {spiderWebsPlaced} spider webs");
+        }
+
+        // NEW: Generate small worm colony biomes underground
+        private void GenerateWormBiomes()
+        {
+            int wormBiomesPlaced = 0;
+            int burrowsCarved = 0;
+            
+            // Generate 3-7 worm colonies in forest biome underground (850+ blocks deep)
+            int numBiomes = random.Next(3, 8);
+            
+            for (int i = 0; i < numBiomes; i++)
+            {
+                // Find location in forest biome (center region), deep underground
+                int centerX = StarshroudHollows.World.World.WORLD_WIDTH / 2;
+                int x = random.Next(centerX - 600, centerX + 600); // Within 600 blocks of center
+                int y = random.Next(850, 1200); // 850-1200 blocks deep
+                
+                // Carve out worm burrows (worms tunnel through blocks)
+                int colonyRadius = random.Next(12, 20); // 12-20 block radius
+                int burrowCount = 0;
+                
+                // Create several worm tunnels radiating from center
+                int numTunnels = random.Next(4, 8);
+                for (int t = 0; t < numTunnels; t++)
+                {
+                    double angle = (Math.PI * 2 * t) / numTunnels + (random.NextDouble() - 0.5) * 0.5;
+                    int tunnelLength = random.Next(15, 30);
+                    
+                    int currentX = x;
+                    int currentY = y;
+                    
+                    for (int step = 0; step < tunnelLength; step++)
+                    {
+                        // Carve tunnel (6 blocks wide for worm)
+                        int tunnelWidth = 6;
+                        for (int dx = -tunnelWidth / 2; dx <= tunnelWidth / 2; dx++)
+                        {
+                            for (int dy = -1; dy <= 1; dy++)
+                            {
+                                int tunnelX = currentX + dx;
+                                int tunnelY = currentY + dy;
+                                
+                                var tunnelTile = world.GetTile(tunnelX, tunnelY);
+                                if (tunnelTile != null && tunnelTile.IsActive && tunnelTile.Type == TileType.Stone)
+                                {
+                                    world.SetTile(tunnelX, tunnelY, new StarshroudHollows.World.Tile(TileType.Air));
+                                    burrowCount++;
+                                }
+                            }
+                        }
+                        
+                        // Move tunnel forward
+                        angle += (random.NextDouble() - 0.5) * 0.3;
+                        currentX += (int)(Math.Cos(angle) * 2);
+                        currentY += (int)(Math.Sin(angle) * 2);
+                        
+                        // Stop if out of bounds
+                        if (currentX < 50 || currentX >= StarshroudHollows.World.World.WORLD_WIDTH - 50 ||
+                            currentY < 850 || currentY >= 1200)
+                        {
+                            break;
+                        }
+                    }
+                }
+                
+                if (burrowCount > 0)
+                {
+                    wormBiomesPlaced++;
+                    burrowsCarved += burrowCount;
+                }
+            }
+            
+            Logger.Log($"[WORLDGEN] Generated {wormBiomesPlaced} worm colonies with {burrowsCarved} burrow blocks carved");
         }
 
         public Vector2 GetSpawnPosition(int playerPixelHeight)

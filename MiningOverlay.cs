@@ -80,11 +80,28 @@ namespace StarshroudHollows.UI
             float progress = miningSystem.GetMiningProgress();
             int tileSize = StarshroudHollows.World.World.TILE_SIZE;
 
-            // Draw cracks overlay
-            DrawCracks(spriteBatch, pixelTexture, miningTile.Value, progress, tileSize);
-
-            // Draw health bar above block
-            DrawHealthBar(spriteBatch, pixelTexture, miningTile.Value, progress, tileSize);
+            // CRITICAL FIX: Check if we're mining a tree - if so, use tree position for UI
+            Point displayPosition = miningTile.Value;
+            Tree miningTree = world.GetTreeAtPosition(miningTile.Value.X, miningTile.Value.Y);
+            
+            if (miningTree != null)
+            {
+                // We're mining a tree! Position UI at the top of the tree canopy
+                int treeTopY = miningTree.BaseY - miningTree.Height - 4; // Above the canopy
+                displayPosition = new Point(miningTree.BaseX, treeTopY);
+                
+                // Draw cracks at tree base (where you're actually hitting)
+                DrawCracks(spriteBatch, pixelTexture, miningTile.Value, progress, tileSize);
+                
+                // Draw health bar ABOVE the tree
+                DrawHealthBar(spriteBatch, pixelTexture, displayPosition, progress, tileSize);
+            }
+            else
+            {
+                // Normal block mining - draw at block position
+                DrawCracks(spriteBatch, pixelTexture, miningTile.Value, progress, tileSize);
+                DrawHealthBar(spriteBatch, pixelTexture, miningTile.Value, progress, tileSize);
+            }
         }
 
         private void DrawCracks(SpriteBatch spriteBatch, Texture2D pixelTexture, Point tile, float progress, int tileSize)

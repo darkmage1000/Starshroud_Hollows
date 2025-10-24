@@ -13,6 +13,7 @@ namespace StarshroudHollows.Enums
         Platinum,
         Wood,
         Leaves,
+        ForestTree,    // NEW: Forest biome tree sprite (uses "forest tree.png")
         Coal,
         Torch,
         WoodCraftingBench,
@@ -56,6 +57,7 @@ namespace StarshroudHollows.Enums
         SnowWall,
         JungleWall,      // NEW: Jungle wood wall
         SwampWall,       // NEW: Swamp wood wall
-        VolcanicWall     // NEW: Volcanic wood wall
+        VolcanicWall,    // NEW: Volcanic wood wall
+        SpiderWeb        // NEW: Spider web for spider biome (slows player, speeds up spiders)
     }
 }

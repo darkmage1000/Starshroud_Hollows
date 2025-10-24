@@ -51,6 +51,7 @@ namespace StarshroudHollows
         private Systems.Housing.HousingSystem housingSystem;
         private ArmorSystem armorSystem;
         private TrinketManager trinketManager;
+        private BiomeDetector biomeDetector;
         private InventoryUI inventoryUI;
         private PauseMenu pauseMenu;
         private MiningOverlay miningOverlay;
@@ -340,6 +341,12 @@ namespace StarshroudHollows
 
             camera.Position = player.Position;
             var playerCenter = player.GetCenterPosition();
+
+            // Update BiomeDetector to detect current biome
+            if (biomeDetector != null)
+            {
+                biomeDetector.Update(deltaTime, player.Position);
+            }
 
             #region Main Update Logic
             for (int i = 0; i < 10; i++)
@@ -649,6 +656,7 @@ namespace StarshroudHollows
             housingSystem = new Systems.Housing.HousingSystem(world);
             // trinketManager already created before player
             armorSystem = new ArmorSystem(inventory, trinketManager);
+            biomeDetector = new BiomeDetector(world, worldGenerator);
             magicSystem = new MagicSystem(player, projectileSystem, summonSystem, world, camera);
             inventoryUI = new InventoryUI(inventory, miningSystem, armorSystem, trinketManager);
             inventoryUI.Initialize(pixelTexture, font);
@@ -666,8 +674,25 @@ namespace StarshroudHollows
 
         protected override void Draw(GameTime gameTime)
         {
-            // FIXED: Use time-based sky color for day/night cycle
+            // Get base sky color from time system
             Color skyColor = timeSystem != null ? timeSystem.GetSkyColor() : new Color(135, 206, 235);
+            
+            // VOLCANIC BIOME: Override sky color with reddish tint
+            if (worldGenerator != null && player != null)
+            {
+                int playerTileX = (int)(player.Position.X / World.World.TILE_SIZE);
+                int volcanicStart = worldGenerator.GetVolcanicBiomeStartX();
+                int volcanicEnd = worldGenerator.GetVolcanicBiomeEndX();
+                bool inVolcanicBiome = playerTileX >= volcanicStart && playerTileX <= volcanicEnd;
+                
+                if (inVolcanicBiome)
+                {
+                    // Blend sky color with reddish volcanic tint
+                    Color volcanicTint = new Color(180, 60, 40); // Dark red/orange
+                    skyColor = Color.Lerp(skyColor, volcanicTint, 0.6f); // 60% volcanic, 40% normal sky
+                }
+            }
+            
             GraphicsDevice.Clear(skyColor);
 
             if (startMenu.GetState() != MenuState.Playing)
@@ -772,10 +797,17 @@ namespace StarshroudHollows
 
             spriteBatch.Begin();
             
+            // Get current biome for HUD display
+            string currentBiome = "Unknown";
+            if (biomeDetector != null)
+            {
+                currentBiome = biomeDetector.CurrentBiomeName;
+            }
+            
             hud?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height,
                 player.Position, world, isAutoMiningActive, timeSystem.IsRaining,
                 player.Health, player.MaxHealth, player.AirBubbles, player.MaxAirBubbles,
-                null, false, 0, 0, 0, 0, timeSystem, magicSystem, healthPotionCooldown);
+                null, false, 0, 0, 0, 0, timeSystem, magicSystem, healthPotionCooldown, currentBiome);
             inventoryUI?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
             chestUI?.Draw(spriteBatch, pixelTexture, font);
             dialogueUI?.Draw(spriteBatch, pixelTexture, font, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
@@ -976,25 +1008,51 @@ namespace StarshroudHollows
         private void UpdateRainParticles(float deltaTime, int screenWidth, int screenHeight)
         {
             if (player == null || world == null || timeSystem == null) return;
+            
+            // Only show rain when player is above ground (not underground)
             int playerTileX = (int)(player.Position.X / World.World.TILE_SIZE);
             int surfaceTileY = world.GetSurfaceHeight(playerTileX);
-            bool isNearSurface = (player.Position.Y / World.World.TILE_SIZE) < (surfaceTileY + 15);
-            if (!timeSystem.IsRaining || !isNearSurface)
+            int playerTileY = (int)(player.Position.Y / World.World.TILE_SIZE);
+            bool isAboveGround = playerTileY <= surfaceTileY;
+            
+            if (!timeSystem.IsRaining || !isAboveGround)
             {
                 rainParticles.Clear();
                 return;
             }
+            
             const int MAX_RAIN_DROPS = 1000;
             while (rainParticles.Count < MAX_RAIN_DROPS)
             {
                 rainParticles.Add(new Vector2(camera.Position.X + random.Next(-screenWidth, screenWidth * 2), camera.Position.Y + random.Next(-screenHeight, 0)));
             }
+            
+            // Update rain particles and stop them at ground level
             for (int i = rainParticles.Count - 1; i >= 0; i--)
             {
-                rainParticles[i] += new Vector2(500f, 800f) * deltaTime;
-                if (rainParticles[i].Y > camera.Position.Y + screenHeight + 100f)
+                Vector2 oldPos = rainParticles[i];
+                Vector2 newPos = oldPos + new Vector2(500f, 800f) * deltaTime;
+                
+                // Check if raindrop would hit ground
+                int dropTileX = (int)(newPos.X / World.World.TILE_SIZE);
+                int dropTileY = (int)(newPos.Y / World.World.TILE_SIZE);
+                int groundLevel = world.GetSurfaceHeight(dropTileX);
+                
+                // Stop rain at ground level (surface tiles)
+                if (dropTileY >= groundLevel)
                 {
+                    // Respawn at top
                     rainParticles[i] = new Vector2(camera.Position.X + random.Next(-screenWidth, screenWidth * 2), camera.Position.Y - 100f);
+                }
+                else if (newPos.Y > camera.Position.Y + screenHeight + 100f)
+                {
+                    // Off screen - respawn at top
+                    rainParticles[i] = new Vector2(camera.Position.X + random.Next(-screenWidth, screenWidth * 2), camera.Position.Y - 100f);
+                }
+                else
+                {
+                    // Normal movement
+                    rainParticles[i] = newPos;
                 }
             }
         }
@@ -1002,37 +1060,56 @@ namespace StarshroudHollows
         private void UpdateSnowParticles(float deltaTime, int screenWidth, int screenHeight)
         {
             if (player == null || worldGenerator == null || world == null) return;
+            
+            // Check if in snow biome
             int playerTileX = (int)(player.Position.X / World.World.TILE_SIZE);
             int snowStart = worldGenerator.GetSnowBiomeStartX();
             int snowEnd = worldGenerator.GetSnowBiomeEndX();
             bool inSnowBiome = playerTileX >= snowStart && playerTileX <= snowEnd;
+            
+            // Only show snow when player is above ground
             int surfaceTileY = world.GetSurfaceHeight(playerTileX);
-            bool isNearSurface = (player.Position.Y / World.World.TILE_SIZE) < (surfaceTileY + 15);
-            if (!inSnowBiome || !isNearSurface)
+            int playerTileY = (int)(player.Position.Y / World.World.TILE_SIZE);
+            bool isAboveGround = playerTileY <= surfaceTileY;
+            
+            if (!inSnowBiome || !isAboveGround)
             {
                 snowParticles.Clear();
                 return;
             }
+            
             const int MAX_SNOW_FLAKES = 1500;
             while (snowParticles.Count < MAX_SNOW_FLAKES)
             {
                 snowParticles.Add(new Vector2(camera.Position.X + random.Next(-screenWidth, screenWidth * 2), camera.Position.Y + random.Next(-screenHeight, 0)));
             }
+            
+            // Update snow particles with drift and stop at ground
             for (int i = snowParticles.Count - 1; i >= 0; i--)
             {
                 Vector2 velocity = new Vector2((float)Math.Sin(snowParticles[i].Y * 0.01f) * 50f, 200f) * deltaTime;
                 Vector2 newPosition = snowParticles[i] + velocity;
-                if (world.IsSolidAtPosition((int)(newPosition.X / 32), (int)(newPosition.Y / 32)))
+                
+                // Check if snowflake would hit ground
+                int snowTileX = (int)(newPosition.X / World.World.TILE_SIZE);
+                int snowTileY = (int)(newPosition.Y / World.World.TILE_SIZE);
+                int groundLevel = world.GetSurfaceHeight(snowTileX);
+                
+                // Stop snow at ground level or if hitting solid block
+                if (snowTileY >= groundLevel || world.IsSolidAtPosition((int)(newPosition.X / 32), (int)(newPosition.Y / 32)))
                 {
+                    // Respawn at top
+                    snowParticles[i] = new Vector2(camera.Position.X + random.Next(-screenWidth, screenWidth * 2), camera.Position.Y - 100);
+                }
+                else if (newPosition.Y > camera.Position.Y + screenHeight + 100)
+                {
+                    // Off screen - respawn at top
                     snowParticles[i] = new Vector2(camera.Position.X + random.Next(-screenWidth, screenWidth * 2), camera.Position.Y - 100);
                 }
                 else
                 {
+                    // Normal movement with drift
                     snowParticles[i] = newPosition;
-                    if (snowParticles[i].Y > camera.Position.Y + screenHeight + 100)
-                    {
-                        snowParticles[i] = new Vector2(camera.Position.X + random.Next(-screenWidth, screenWidth * 2), camera.Position.Y - 100);
-                    }
                 }
             }
         }
@@ -1090,7 +1167,7 @@ namespace StarshroudHollows
             timeSystem = null; worldGenerator = null; chestSystem = null; inventoryUI = null; pauseMenu = null;
             saveMenu = null; miningOverlay = null; summonSystem = null; hud = null; chestUI = null; liquidSystem = null; 
             dialogueUI = null; housingSystem = null; armorSystem = null; bossSystem = null; portalSystem = null; combatSystem = null; 
-            enemySpawner = null; magicSystem = null; projectileSystem = null;
+            enemySpawner = null; magicSystem = null; projectileSystem = null; biomeDetector = null;
             
             // Clear particle lists
             rainParticles?.Clear();
@@ -1328,8 +1405,7 @@ namespace StarshroudHollows
                 { "snowgrassblock", TileType.SnowGrass },
                 { "ice block", TileType.Ice },
                 { "icicle", TileType.Icicle },
-                // Forest tree (main tree sprite)
-                { "tree", TileType.Wood },
+                // Forest tree (main tree sprite) - REMOVED, loaded separately below
                 // Placeable/Functional
                 { "torch", TileType.Torch }, 
                 { "saplingplanteddirt", TileType.Sapling }, 
@@ -1357,7 +1433,7 @@ namespace StarshroudHollows
             // TREE TRUNKS - Each biome has its own tree sprite
             var treeSprites = new Dictionary<string, TileType>
             {
-                { "forest tree", TileType.Wood },
+                { "forest tree", TileType.ForestTree },  // FIXED: Use ForestTree instead of Wood
                 { "snowtree", TileType.SnowTree },
                 { "jungletree", TileType.JungleTree },
                 { "swamptree", TileType.SwampTree },
@@ -1379,6 +1455,10 @@ namespace StarshroudHollows
             }
             
             // WOOD BLOCKS - Each biome's wood has its own sprite (for placement in world)
+            // NOTE: These are NOT loaded into world.LoadTileSprite because that's used for trees!
+            // Wood blocks use the colored pixel fallback in World.cs Draw() method
+            // If you want textured wood blocks, you'd need separate TileType enum values
+            /*
             var woodBlockSprites = new Dictionary<string, TileType>
             {
                 { "foresttreewood", TileType.Wood },
@@ -1401,6 +1481,7 @@ namespace StarshroudHollows
                     Logger.Log($"[ERROR] Failed to load {woodSprite.Key}: {ex.Message}");
                 }
             }
+            */
             
             // WALL SPRITES - Each wall type needs its own TileType
             var wallSprites = new Dictionary<string, TileType>

@@ -1,2 +1,2 @@
-﻿using var game = new Claude4_5Terraria.Game1();
+﻿using var game = new StarshroudHollows.Game1();
 game.Run();

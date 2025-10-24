@@ -26,7 +26,7 @@ namespace StarshroudHollows.World
         private int chunksWide;
         private int chunksHigh;
 
-        private List<Tree> trees;
+        public List<Tree> trees; // Made public for biome tree conversion
         private Dictionary<Point, Tree> tileToTreeMap;
         private Dictionary<Point, Tile> modifiedTiles;
         private List<Sapling> saplings;
@@ -129,6 +129,19 @@ namespace StarshroudHollows.World
                     Logger.Log($"[WORLD] Warning: overlapping tree tile at {pos}");
             }
         }
+        
+        // NEW: Find tree at world position (checks sprite bounds, not just tile positions)
+        public Tree GetTreeAtPosition(int tileX, int tileY)
+        {
+            foreach (Tree tree in trees)
+            {
+                if (tree.IsWithinSpriteBounds(tileX, tileY))
+                {
+                    return tree;
+                }
+            }
+            return null;
+        }
 
         public void RemoveTree(int tileX, int tileY)
         {
@@ -200,7 +213,7 @@ namespace StarshroudHollows.World
             Logger.Log($"[WORLD] Sapling grew into tree at ({x}, {y}), ground below is {groundTile?.Type}");
 
             int trunkHeight = random.Next(8, 15);
-            var tree = new Tree(x, y + 1, trunkHeight);
+            var tree = new Tree(x, y + 1, trunkHeight, TileType.Wood);
 
             for (int dy = 0; dy < trunkHeight; dy++)
             {
@@ -565,6 +578,86 @@ namespace StarshroudHollows.World
         {
             return exploredTiles.Contains(new Point(x, y));
         }
+        
+        private void DrawTrees(SpriteBatch spriteBatch, Camera camera, LightingSystem lightingSystem, Rectangle visibleArea)
+        {
+            // Track which trees we've already drawn to avoid duplicates
+            HashSet<Tree> drawnTrees = new HashSet<Tree>();
+            
+            // Get visible tile range
+            int startTileX = Math.Max(0, visibleArea.Left / TILE_SIZE);
+            int endTileX = Math.Min(WORLD_WIDTH - 1, visibleArea.Right / TILE_SIZE);
+            int startTileY = Math.Max(0, visibleArea.Top / TILE_SIZE);
+            int endTileY = Math.Min(WORLD_HEIGHT - 1, visibleArea.Bottom / TILE_SIZE);
+            
+            // Find all trees in visible area
+            foreach (var tree in trees)
+            {
+                // Check if tree base is in visible area (with generous padding for tall trees)
+                if (tree.BaseX >= startTileX - 10 && tree.BaseX <= endTileX + 10 &&
+                    tree.BaseY >= startTileY - 25 && tree.BaseY <= endTileY + 5)
+                {
+                    if (!drawnTrees.Contains(tree))
+                    {
+                        DrawFullTreeSprite(spriteBatch, tree, lightingSystem);
+                        drawnTrees.Add(tree);
+                    }
+                }
+            }
+        }
+        
+        private void DrawFullTreeSprite(SpriteBatch spriteBatch, Tree tree, LightingSystem lightingSystem)
+        {
+            // Get the tree sprite based on tree type
+            if (!tileSprites.ContainsKey(tree.TreeType))
+            {
+                Logger.Log($"[WORLD] ERROR: No sprite loaded for tree type {tree.TreeType}");
+                return; // No sprite loaded for this tree type
+            }
+            
+            Texture2D treeSprite = tileSprites[tree.TreeType];
+            
+            // UPDATED: Calculate proper scale for the larger sprites
+            // Target height: make trees roughly proportional to trunk height
+            // Average tree trunk is 8-15 tiles tall, sprites are 560-800px tall
+            // We want trees to be about 10-20 tiles tall on screen (320-640px)
+            
+            float targetHeightInPixels = tree.Height * TILE_SIZE * 1.5f; // Trees are 1.5x their trunk height
+            float baseScale = targetHeightInPixels / treeSprite.Height;
+            
+            // Apply the tree's random scale variation (0.8-1.2) on top of the base scale
+            float finalScale = baseScale * tree.Scale;
+            
+            // Calculate position - center the sprite on the tree base
+            int treeCenterX = tree.BaseX * TILE_SIZE;
+            int treeBottomY = tree.BaseY * TILE_SIZE;
+            
+            // Calculate scaled dimensions
+            int spriteWidth = (int)(treeSprite.Width * finalScale);
+            int spriteHeight = (int)(treeSprite.Height * finalScale);
+            
+            // Position the tree sprite (center horizontally, align bottom to base)
+            Vector2 position = new Vector2(
+                treeCenterX - spriteWidth / 2,
+                treeBottomY - spriteHeight
+            );
+            
+            // Get average light level at tree position for lighting
+            float lightLevel = lightingSystem.GetLightLevel(tree.BaseX, tree.BaseY - tree.Height / 2);
+            
+            // Draw the tree sprite
+            spriteBatch.Draw(
+                treeSprite,
+                position,
+                null,
+                Color.White * lightLevel, // Apply lighting
+                0f,
+                Vector2.Zero,
+                finalScale,
+                SpriteEffects.None,
+                0f
+            );
+        }
 
         public void Draw(SpriteBatch spriteBatch, Camera camera, Texture2D pixelTexture, LightingSystem lightingSystem, MiningSystem miningSystem, bool debugMode = false)
         {
@@ -656,15 +749,15 @@ namespace StarshroudHollows.World
                 }
             }
 
-            // Draw tiles
+            // Draw tiles (but skip tree parts - they'll be drawn as full sprites)
             for (int x = startTileX; x <= endTileX; x++)
             {
                 for (int y = startTileY; y <= endTileY; y++)
                 {
                     Tile tile = GetTile(x, y);
 
-                    // Skip if the tile is pure air
-                    if (tile == null || tile.Type == TileType.Air)
+                    // Skip if the tile is pure air OR part of a tree (trees drawn separately)
+                    if (tile == null || tile.Type == TileType.Air || tile.IsPartOfTree)
                         continue;
 
                     Rectangle destRect = new Rectangle(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
@@ -855,6 +948,9 @@ namespace StarshroudHollows.World
                     }
                 }
             }
+            
+            // Draw trees as full sprites on top of everything else
+            DrawTrees(spriteBatch, camera, lightingSystem, visibleArea);
         }
 
         public Color GetTileColor(TileType type)
