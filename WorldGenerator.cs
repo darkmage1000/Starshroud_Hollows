@@ -129,8 +129,8 @@ namespace StarshroudHollows.Systems
                 // CRITICAL NEW STEP: Stabilize all liquids
                 float stabilizeStart = 0.85f;
                 float stabilizeEnd = 0.90f;
-                OnProgressUpdate?.Invoke(stabilizeStart, "Stabilizing liquid flow...");
-                world.StabilizeLiquids(stabilizeStart, stabilizeEnd, OnProgressUpdate);
+                //OnProgressUpdate?.Invoke(stabilizeStart, "Stabilizing liquid flow...");
+               // world.StabilizeLiquids(stabilizeStart, stabilizeEnd, OnProgressUpdate);
 
                 // Final steps
                 // CRITICAL FIX: Generate biomes BEFORE trees so tree placement knows what biome it's in
@@ -683,8 +683,8 @@ namespace StarshroudHollows.Systems
         {
             int lavaPoolsPlaced = 0;
 
-            // Generate CONTAINED lava pools at deep depths (1500-2500)
-            for (int attempt = 0; attempt < 100; attempt++)
+            // ✅ INCREASED: Generate CONTAINED lava pools at deep depths (1500-2500) - 200 attempts instead of 100
+            for (int attempt = 0; attempt < 200; attempt++)
             {
                 int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(1500, Math.Min(2500, StarshroudHollows.World.World.WORLD_HEIGHT - 200));
@@ -773,17 +773,19 @@ namespace StarshroudHollows.Systems
 
             return lavaPlaced;
         }
-        
-        // NEW: Create CONTAINED swamp water pools 
+
+        // REPLACED: Now builds a RECTANGULAR pool with a flat bottom
         private bool CreateSurfaceSwampPool(int centerX, int surfaceY)
         {
             int poolWidth = random.Next(6, 12);
-            int poolDepth = random.Next(2, 4);
+            int poolDepth = random.Next(2, 4); // This is now the constant depth
             bool waterPlaced = false;
 
-            // Build stone walls
+            // 1. Build dirt walls (Sides, Bottom, and Surface Lip)
             for (int dx = -poolWidth / 2 - 1; dx <= poolWidth / 2 + 1; dx++)
             {
+                // REMOVED edgeDepth logic
+
                 for (int dy = 0; dy <= poolDepth + 1; dy++)
                 {
                     int poolX = centerX + dx;
@@ -793,25 +795,33 @@ namespace StarshroudHollows.Systems
                     {
                         world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Dirt));
                     }
+                    // Build the surface "lip"
+                    else if (dy == 0)
+                    {
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Dirt));
+                    }
                 }
             }
 
-            // Clear interior
+            // 2. Clear interior
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
-                for (int dy = 1; dy <= poolDepth; dy++)
+                // REMOVED edgeDepth logic
+
+                for (int dy = 0; dy <= poolDepth; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
-
                     world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
                 }
             }
 
-            // Fill with water
+            // 3. Fill with water
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
-                for (int dy = 1; dy <= poolDepth; dy++)
+                // REMOVED edgeDepth logic
+
+                for (int dy = 0; dy <= poolDepth; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
@@ -826,8 +836,6 @@ namespace StarshroudHollows.Systems
 
             return waterPlaced;
         }
-
-
 
         private void GenerateWater()
         {
@@ -860,8 +868,8 @@ namespace StarshroudHollows.Systems
                 }
             }
 
-            // 2. Generate small underground pools (depth 300-1000) - CONTAINED
-            for (int attempt = 0; attempt < 150; attempt++)
+            // ✅ INCREASED: 2. Generate small underground pools (depth 300-1000) - 250 attempts instead of 150
+            for (int attempt = 0; attempt < 250; attempt++)
             {
                 int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(300, 1000);
@@ -872,8 +880,8 @@ namespace StarshroudHollows.Systems
                 }
             }
 
-            // 3. Generate medium underground pools (depth 800-1800) - CONTAINED
-            for (int attempt = 0; attempt < 80; attempt++)
+            // ✅ INCREASED: 3. Generate medium underground pools (depth 800-1800) - 120 attempts instead of 80
+            for (int attempt = 0; attempt < 120; attempt++)
             {
                 int x = random.Next(100, StarshroudHollows.World.World.WORLD_WIDTH - 100);
                 int y = random.Next(800, 1800);
@@ -884,8 +892,8 @@ namespace StarshroudHollows.Systems
                 }
             }
 
-            // 4. Generate large underground pools/lakes (depth 1200-2200) - CONTAINED
-            for (int attempt = 0; attempt < 30; attempt++)
+            // ✅ INCREASED: 4. Generate large underground pools/lakes (depth 1200-2200) - 50 attempts instead of 30
+            for (int attempt = 0; attempt < 50; attempt++)
             {
                 int x = random.Next(150, StarshroudHollows.World.World.WORLD_WIDTH - 150);
                 int y = random.Next(1200, 2200);
@@ -899,63 +907,56 @@ namespace StarshroudHollows.Systems
             Logger.Log($"[WORLDGEN] Generated {surfacePoolsPlaced} surface pools, {smallUndergroundPoolsPlaced} small underground pools, {mediumUndergroundPoolsPlaced} medium pools, {largeUndergroundPoolsPlaced} large pools (ALL CONTAINED)");
         }
 
-        // CONTAINED surface water pool - carved into ground with walls - NO FLOW NEEDED
+        // REPLACED: Now builds a RECTANGULAR pool with a flat bottom
         private bool CreateContainedSurfaceWaterPool(int centerX, int surfaceY)
         {
             int poolWidth = random.Next(8, 16);
-            int poolDepth = random.Next(3, 6);
+            int poolDepth = random.Next(3, 6); // This is now the constant depth
             bool waterPlaced = false;
 
-            // Build container walls and bottom BELOW surface
+            // 1. Build container walls (Sides, Bottom, and Surface Lip)
             for (int dx = -poolWidth / 2 - 1; dx <= poolWidth / 2 + 1; dx++)
             {
-                int edgeDepth = poolDepth;
-                if (Math.Abs(dx) > poolWidth / 3)
-                {
-                    edgeDepth = poolDepth / 2;
-                }
+                // REMOVED edgeDepth logic
 
-                for (int dy = 1; dy <= edgeDepth + 1; dy++) // Start at dy=1 (below surface)
+                // Loop starts from dy = 0 (surface)
+                for (int dy = 0; dy <= poolDepth + 1; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
 
-                    // Build walls on sides and bottom
-                    if (dx == -poolWidth / 2 - 1 || dx == poolWidth / 2 + 1 || dy == edgeDepth + 1)
+                    // Build walls on sides (dx == ...) and bottom (dy == poolDepth + 1)
+                    if (dx == -poolWidth / 2 - 1 || dx == poolWidth / 2 + 1 || dy == poolDepth + 1)
+                    {
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Stone));
+                    }
+                    // Build the surface "lip"
+                    else if (dy == 0)
                     {
                         world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Stone));
                     }
                 }
             }
 
-            // Clear interior space BELOW surface
+            // 2. Clear interior
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
-                int edgeDepth = poolDepth;
-                if (Math.Abs(dx) > poolWidth / 3)
-                {
-                    edgeDepth = poolDepth / 2;
-                }
+                // REMOVED edgeDepth logic
 
-                for (int dy = 1; dy <= edgeDepth; dy++) // Start at dy=1 (below surface)
+                for (int dy = 0; dy <= poolDepth; dy++) // Start at dy=0
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
-
                     world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
                 }
             }
 
-            // Fill with water DIRECTLY into carved space (no flow needed)
+            // 3. Fill with water
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
-                int edgeDepth = poolDepth;
-                if (Math.Abs(dx) > poolWidth / 3)
-                {
-                    edgeDepth = poolDepth / 2;
-                }
+                // REMOVED edgeDepth logic
 
-                for (int dy = 1; dy <= edgeDepth; dy++) // Start at dy=1 (below surface)
+                for (int dy = 0; dy <= poolDepth; dy++) // Start at dy=0
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
@@ -970,12 +971,13 @@ namespace StarshroudHollows.Systems
             return waterPlaced;
         }
 
-        // CONTAINED small underground pool - fills floor of cave directly
+        // ✅ FIXED: Pool walls now extend from floor level (dy = 0) all the way down
         private bool CreateContainedSmallUndergroundPool(int centerX, int centerY)
         {
             int floorY = -1;
             bool foundCave = false;
 
+            // Find a cave floor
             for (int checkY = centerY; checkY < Math.Min(centerY + 50, StarshroudHollows.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
@@ -983,7 +985,7 @@ namespace StarshroudHollows.Systems
 
                 if ((tile == null || !tile.IsActive) && tileBelow != null && tileBelow.IsActive)
                 {
-                    floorY = checkY;
+                    floorY = checkY; // This is the air block right above the floor
                     foundCave = true;
                     break;
                 }
@@ -995,10 +997,43 @@ namespace StarshroudHollows.Systems
             int poolDepth = random.Next(2, 3);
             bool waterPlaced = false;
 
-            // Fill DIRECTLY into floor space (upward from floor)
+            // 1. Build container (Sides and Bottom) - FIXED: walls now extend to opening level
+            for (int dx = -poolWidth / 2 - 1; dx <= poolWidth / 2 + 1; dx++)
+            {
+                for (int dy = 0; dy <= poolDepth + 1; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = floorY + dy;
+                    
+                    // Build side walls (left and right edges) and bottom
+                    // Skip the top interior (dy == 0 and inside the pool) to keep it open
+                    bool isSideWall = (dx == -poolWidth / 2 - 1 || dx == poolWidth / 2 + 1);
+                    bool isBottom = (dy == poolDepth + 1);
+                    
+                    if (isSideWall || isBottom)
+                    {
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Stone));
+                    }
+                }
+            }
+
+            // 2. Clear interior (including the air block we found)
+            // Starts at dy = 0
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
-                for (int dy = -poolDepth; dy < 0; dy++)
+                for (int dy = 0; dy <= poolDepth; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = floorY + dy;
+                    world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
+                }
+            }
+
+            // 3. Fill with water
+            // Starts at dy = 0
+            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            {
+                for (int dy = 0; dy <= poolDepth; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = floorY + dy;
@@ -1013,12 +1048,13 @@ namespace StarshroudHollows.Systems
             return waterPlaced;
         }
 
-        // CONTAINED medium underground pool - fills floor of cave directly
+        // ✅ FIXED: Pool walls now extend from floor level (dy = 0) all the way down
         private bool CreateContainedMediumUndergroundPool(int centerX, int centerY)
         {
             int floorY = -1;
             bool foundCave = false;
 
+            // Find a cave floor
             for (int checkY = centerY; checkY < Math.Min(centerY + 50, StarshroudHollows.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
@@ -1038,10 +1074,40 @@ namespace StarshroudHollows.Systems
             int poolDepth = random.Next(4, 6);
             bool waterPlaced = false;
 
-            // Fill DIRECTLY into floor space (upward from floor)
+            // 1. Build container (Sides and Bottom) - FIXED: walls now extend to opening level
+            for (int dx = -poolWidth / 2 - 1; dx <= poolWidth / 2 + 1; dx++)
+            {
+                for (int dy = 0; dy <= poolDepth + 1; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = floorY + dy;
+                    
+                    // Build side walls (left and right edges) and bottom
+                    bool isSideWall = (dx == -poolWidth / 2 - 1 || dx == poolWidth / 2 + 1);
+                    bool isBottom = (dy == poolDepth + 1);
+                    
+                    if (isSideWall || isBottom)
+                    {
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Stone));
+                    }
+                }
+            }
+
+            // 2. Clear interior
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
-                for (int dy = -poolDepth; dy < 0; dy++)
+                for (int dy = 0; dy <= poolDepth; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = floorY + dy;
+                    world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
+                }
+            }
+
+            // 3. Fill with water
+            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            {
+                for (int dy = 0; dy <= poolDepth; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = floorY + dy;
@@ -1056,12 +1122,13 @@ namespace StarshroudHollows.Systems
             return waterPlaced;
         }
 
-        // CONTAINED large underground pool - fills floor of cave directly
+        // ✅ FIXED: Pool walls now extend from floor level (dy = 0) all the way down
         private bool CreateContainedLargeUndergroundPool(int centerX, int centerY)
         {
             int floorY = -1;
             bool foundCave = false;
 
+            // Find a cave floor
             for (int checkY = centerY; checkY < Math.Min(centerY + 60, StarshroudHollows.World.World.WORLD_HEIGHT - 1); checkY++)
             {
                 var tile = world.GetTile(centerX, checkY);
@@ -1081,13 +1148,49 @@ namespace StarshroudHollows.Systems
             int poolDepth = random.Next(8, 12);
             bool waterPlaced = false;
 
-            // Fill DIRECTLY into floor space (upward from floor) with depth variation for edges
+            // 1. Build container (Sides and Bottom) - FIXED: walls now extend to opening level
+            for (int dx = -poolWidth / 2 - 1; dx <= poolWidth / 2 + 1; dx++)
+            {
+                float edgeFactor = 1.0f - (Math.Abs(dx) / (float)(poolWidth / 2));
+                int localDepth = (int)(poolDepth * (0.5f + edgeFactor * 0.5f));
+
+                for (int dy = 0; dy <= localDepth + 1; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = floorY + dy;
+                    
+                    // Build side walls (left and right edges) and bottom
+                    bool isSideWall = (dx == -poolWidth / 2 - 1 || dx == poolWidth / 2 + 1);
+                    bool isBottom = (dy == localDepth + 1);
+                    
+                    if (isSideWall || isBottom)
+                    {
+                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Stone));
+                    }
+                }
+            }
+
+            // 2. Clear interior
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
                 float edgeFactor = 1.0f - (Math.Abs(dx) / (float)(poolWidth / 2));
                 int localDepth = (int)(poolDepth * (0.5f + edgeFactor * 0.5f));
 
-                for (int dy = -localDepth; dy < 0; dy++)
+                for (int dy = 0; dy <= localDepth; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = floorY + dy;
+                    world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
+                }
+            }
+
+            // 3. Fill with water
+            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            {
+                float edgeFactor = 1.0f - (Math.Abs(dx) / (float)(poolWidth / 2));
+                int localDepth = (int)(poolDepth * (0.5f + edgeFactor * 0.5f));
+
+                for (int dy = 0; dy <= localDepth; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = floorY + dy;
@@ -1792,43 +1895,66 @@ namespace StarshroudHollows.Systems
             world.AddTree(tree);
         }
 
+        // REPLACED: This version builds container on sides and bottom, leaving the top open
         private bool CreateSurfaceLavaPool(int centerX, int surfaceY)
         {
             int poolWidth = random.Next(3, 7);
-            int poolDepth = random.Next(1, 3); // FIXED: Shallower pools (1-2 blocks deep)
+            int poolDepth = random.Next(1, 3); // Shallow pools
             bool lavaPlaced = false;
 
-            // CRITICAL FIX: Start at surface level (dy = 0) instead of below (dy = 1)
-            // This makes lava pools visible at the surface
-            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            // 1. Build stone container walls (Sides and Bottom ONLY)
+            // This loop starts at dy = 1 (below the surface)
+            for (int dx = -poolWidth / 2 - 1; dx <= poolWidth / 2 + 1; dx++)
             {
-                for (int dy = 0; dy <= poolDepth; dy++) // FIXED: Start at 0, not 1
+                for (int dy = 1; dy <= poolDepth + 1; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
 
+                    // Build walls on sides (dx == ...) and bottom (dy == poolDepth + 1)
+                    if (dx == -poolWidth / 2 - 1 || dx == poolWidth / 2 + 1 || dy == poolDepth + 1)
+                    {
+                        // Only build walls if it's air (don't overwrite existing ground)
+                        var tile = world.GetTile(poolX, poolY);
+                        if (tile == null || !tile.IsActive)
+                        {
+                            world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Stone));
+                        }
+                    }
+                }
+            }
+
+            // 2. Clear interior (including the surface level)
+            // This loop starts at dy = 0 (at the surface)
+            for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
+            {
+                for (int dy = 0; dy <= poolDepth; dy++)
+                {
+                    int poolX = centerX + dx;
+                    int poolY = surfaceY + dy;
+
+                    // Clear any grass/dirt that might be here
                     var tile = world.GetTile(poolX, poolY);
-                    if (tile != null && tile.IsActive)
+                    if (tile == null || tile.IsActive)
                     {
                         world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Air));
                     }
                 }
             }
 
-            // Fill with lava AT and slightly below surface
+            // 3. Fill with lava (including the surface level)
+            // This loop starts at dy = 0 (at the surface)
             for (int dx = -poolWidth / 2; dx <= poolWidth / 2; dx++)
             {
-                for (int dy = 0; dy <= poolDepth; dy++) // FIXED: Start at 0, not 1
+                for (int dy = 0; dy <= poolDepth; dy++)
                 {
                     int poolX = centerX + dx;
                     int poolY = surfaceY + dy;
 
-                    var tile = world.GetTile(poolX, poolY);
-                    if (tile == null || !tile.IsActive)
-                    {
-                        world.SetTile(poolX, poolY, new StarshroudHollows.World.Tile(TileType.Lava));
-                        lavaPlaced = true;
-                    }
+                    var lavaTile = new StarshroudHollows.World.Tile(TileType.Lava);
+                    lavaTile.LiquidVolume = 1.0f; // Full volume
+                    world.SetTile(poolX, poolY, lavaTile);
+                    lavaPlaced = true;
                 }
             }
 

@@ -1,4 +1,4 @@
-﻿using StarshroudHollows.Entities;
+using StarshroudHollows.Entities;
 using StarshroudHollows.Enums;
 using StarshroudHollows.World;
 using Microsoft.Xna.Framework;
@@ -15,6 +15,7 @@ namespace StarshroudHollows.Systems
         private StarshroudHollows.World.World world;
         private Inventory inventory;
         private TrinketManager trinketManager;
+        private LiquidSystem liquidSystem;
         private const int MINING_RANGE = 4;
         private const int PLACEMENT_RANGE = 4;
 
@@ -50,6 +51,7 @@ namespace StarshroudHollows.Systems
             this.world = world;
             this.inventory = inventory;
             this.trinketManager = trinketManager;
+            this.liquidSystem = world.GetLiquidSystem();
             targetedTile = null;
             miningProgress = 0f;
             currentlyMiningTile = null;
@@ -384,6 +386,9 @@ namespace StarshroudHollows.Systems
                                     OnChestPlaced?.Invoke(new Point(placeX, placeY), itemType);
                                 }
                                 currentSlot.Count--;
+                                
+                                // Trigger liquid flow when block is placed
+                                liquidSystem?.TriggerLocalFlow(placeX, placeY);
                             }
                             placementCooldown = PLACEMENT_DELAY;
                         }
@@ -781,11 +786,17 @@ namespace StarshroudHollows.Systems
                     OnChestMined?.Invoke(new Point(x, y), tileType);
                     // CRITICAL FIX: Remove the chest tile from the world!
                     world.SetTile(x, y, new Tile(TileType.Air));
+                    // CRITICAL: Trigger liquid flow when chest is broken
+                    liquidSystem?.TriggerLocalFlow(x, y);
                     return;
                 }
                 world.SetTile(x, y, new Tile(TileType.Air));
                 droppedItemType = (tileType == TileType.Grass) ? ItemType.Dirt : ItemTypeExtensions.FromTileType(tileType);
             }
+            
+            // CRITICAL: Trigger liquid flow IMMEDIATELY after block is broken - this is the KEY FIX!
+            liquidSystem?.TriggerLocalFlow(x, y);
+            
             breakSound?.Play(volume: gameSoundVolume, pitch: 0.0f, pan: 0.0f);
             Vector2 dropPosition = new Vector2(x * StarshroudHollows.World.World.TILE_SIZE + 8, y * StarshroudHollows.World.World.TILE_SIZE + 8);
             for (int i = 0; i < dropCount; i++) droppedItems.Add(new DroppedItem(dropPosition + new Vector2((float)(random.NextDouble() - 0.5) * 16, (float)(random.NextDouble() - 0.5) * 16), droppedItemType));
@@ -868,4 +879,3 @@ namespace StarshroudHollows.Systems
         }
     }
 }
-

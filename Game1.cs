@@ -328,7 +328,9 @@ namespace StarshroudHollows
             if (timeSystem != null) timeSystem.Update(deltaTime);
             UpdateRainParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
             UpdateSnowParticles(deltaTime, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
-            liquidSystem?.UpdateFlow();
+            
+            // Update liquid system with player position for regional updates
+            liquidSystem?.UpdateFlow(player.Position, deltaTime);
 
             Vector2 oldPlayerPos = player.Position;
             player.Update(gameTime);
@@ -668,7 +670,14 @@ namespace StarshroudHollows
             // NOTE: pauseMenu and saveMenu will be initialized on main thread after generation completes
             // They need HUD which requires GraphicsDevice
             miningOverlay = new MiningOverlay(world, miningSystem, chestSystem);
-            if (liquidSystem != null) { for (int i = 0; i < 5000; i++) liquidSystem.UpdateFlow(); }
+            
+            // Water stabilization during startup
+            if (liquidSystem != null) 
+            { 
+                for (int i = 0; i < 5000; i++) liquidSystem.UpdateFlow();
+                Logger.Log("[GAME] Water stabilization complete");
+            }
+            
             worldGenerated = true;
         }
 

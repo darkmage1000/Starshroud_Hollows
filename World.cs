@@ -79,6 +79,12 @@ namespace StarshroudHollows.World
         {
             liquidSystemReference = liquidSystem;
         }
+        
+        // NEW: Getter for LiquidSystem reference
+        public LiquidSystem GetLiquidSystem()
+        {
+            return liquidSystemReference;
+        }
 
         // NEW: Setter for player reference (used by Game1 on load/generation)
         public void SetPlayer(P.Player player) // CORRECTED using alias P
